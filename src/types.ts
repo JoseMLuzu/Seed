@@ -22,4 +22,13 @@ export interface SeedNote {
   growthStage: 'seed' | 'sprout' | 'bloom' | 'withered';
   dueDate?: number;
   connections?: string[]; // IDs of related notes
+  lastWateredAt?: number;
+  lastWateringNote?: string;
+  wateringIntervalDays?: number;
+  paused?: boolean;
+  inbox?: boolean;
+  seedType?: 'idea' | 'project' | 'goal' | 'learning';
+  reflection?: string;
+  focusedMinutes?: number;
+  harvestedAt?: number;
 }
