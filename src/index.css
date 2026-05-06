@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -6,69 +7,149 @@
 }
 
 @keyframes sway {
-  0%, 100% { transform: rotate(-2deg); }
-  50% { transform: rotate(2deg); }
+  0%, 100% { transform: rotate(-3deg) translateY(0); }
+  50% { transform: rotate(3deg) translateY(-2px); }
 }
 
 .sway {
-  animation: sway 3s ease-in-out infinite;
+  animation: sway 3.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  transform-origin: 50% 100%;
+}
+
+.seed-card {
+  border-radius: 28px;
+  transform: translateZ(0);
+}
+
+.seed-card-sheen {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.78), transparent 24%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.42), transparent 42%);
+  opacity: 0.76;
+  pointer-events: none;
+}
+
+.app-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--sage) 30%, transparent) transparent;
+}
+
+.app-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--sage) 24%, transparent);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+:where(button, input, textarea, select, a):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--sage) 55%, white);
+  outline-offset: 3px;
 }
 
 @layer base {
   :root {
-    /* Natural Tones Theme (Default) */
-    --bg-app: #f9f7f2;
-    --sidebar-bg: #f4f1ea;
-    --card-bg: #ffffff;
-    --sage: #7d8461;
-    --earth: #5c4b3f;
-    --seed: #d4a373;
-    --ink: #2f3e33;
+    --bg-app: #f7f3e8;
+    --sidebar-bg: #eee7d8;
+    --card-bg: rgba(255, 252, 245, 0.84);
+    --surface-soft: rgba(255, 252, 245, 0.58);
+    --surface-strong: rgba(255, 255, 255, 0.9);
+    --surface-hover: rgba(255, 255, 255, 0.72);
+    --sage: #6f7d4f;
+    --earth: #5a4635;
+    --seed: #c98f58;
+    --ink: #2f3b2f;
+    --sky-1: #f7f3e8;
+    --sky-2: #efe5cf;
+    --glow: rgba(201, 143, 88, 0.18);
+    --shadow-color: rgba(77, 61, 43, 0.12);
     
     --seed-primary: var(--sage);
     --seed-accent: var(--seed);
     --text-main: var(--ink);
     --text-muted: #6b7280;
-    --border: rgba(0, 0, 0, 0.06);
+    --border: rgba(78, 63, 45, 0.1);
   }
 
   [data-theme="forest"] {
-    --bg-app: #064e3b;
-    --sidebar-bg: #043d2f;
-    --card-bg: #065f46;
-    --seed-primary: #ecfdf5;
-    --seed-accent: #10b981;
-    --text-main: #f9fafb;
-    --text-muted: #d1d5db;
-    --border: #047857;
+    --bg-app: #102a22;
+    --sidebar-bg: #0b211a;
+    --card-bg: rgba(22, 65, 49, 0.82);
+    --surface-soft: rgba(18, 54, 41, 0.58);
+    --surface-strong: rgba(35, 85, 65, 0.9);
+    --surface-hover: rgba(42, 105, 77, 0.72);
+    --sage: #a7d08c;
+    --earth: #e6f1d9;
+    --seed: #d6a85f;
+    --ink: #f4faed;
+    --sky-1: #102a22;
+    --sky-2: #1e4a35;
+    --glow: rgba(94, 179, 122, 0.2);
+    --shadow-color: rgba(0, 0, 0, 0.22);
+    --seed-primary: #a7d08c;
+    --seed-accent: #d6a85f;
+    --text-main: #f4faed;
+    --text-muted: #c3d7c3;
+    --border: rgba(201, 232, 188, 0.16);
   }
 
   [data-theme="bloom"] {
-    --bg-app: #fff1f2;
-    --sidebar-bg: #ffe4e6;
-    --card-bg: #ffffff;
-    --seed-primary: #be123c;
-    --seed-accent: #fb7185;
-    --text-main: #1f2937;
-    --text-muted: #4b5563;
-    --border: #ffe4e6;
+    --bg-app: #fff4f6;
+    --sidebar-bg: #ffe7ec;
+    --card-bg: rgba(255, 255, 255, 0.86);
+    --surface-soft: rgba(255, 239, 244, 0.68);
+    --surface-strong: rgba(255, 255, 255, 0.94);
+    --surface-hover: rgba(255, 255, 255, 0.78);
+    --sage: #7c8f4f;
+    --earth: #64344c;
+    --seed: #d94f75;
+    --ink: #3f2432;
+    --sky-1: #fff4f6;
+    --sky-2: #ffe1d4;
+    --glow: rgba(217, 79, 117, 0.18);
+    --shadow-color: rgba(105, 50, 74, 0.12);
+    --seed-primary: #7c8f4f;
+    --seed-accent: #d94f75;
+    --text-main: #3f2432;
+    --text-muted: #7a5b68;
+    --border: rgba(217, 79, 117, 0.14);
   }
 
   [data-theme="night"] {
-    --bg-app: #0a0a0a;
-    --sidebar-bg: #141414;
-    --card-bg: #1a1a1a;
-    --seed-primary: #ffffff;
-    --seed-accent: #a855f7;
-    --text-main: #f3f4f6;
-    --text-muted: #9ca3af;
-    --border: #262626;
+    --bg-app: #090f1a;
+    --sidebar-bg: #0d1420;
+    --card-bg: rgba(20, 30, 46, 0.86);
+    --surface-soft: rgba(16, 25, 39, 0.64);
+    --surface-strong: rgba(29, 42, 62, 0.92);
+    --surface-hover: rgba(40, 58, 83, 0.74);
+    --sage: #9cc9ff;
+    --earth: #e8edf7;
+    --seed: #c7a5ff;
+    --ink: #f4f7fb;
+    --sky-1: #090f1a;
+    --sky-2: #162137;
+    --glow: rgba(156, 201, 255, 0.18);
+    --shadow-color: rgba(0, 0, 0, 0.32);
+    --seed-primary: #9cc9ff;
+    --seed-accent: #c7a5ff;
+    --text-main: #f4f7fb;
+    --text-muted: #aebbd0;
+    --border: rgba(174, 187, 208, 0.16);
   }
 
   body {
-    background-color: var(--bg-app);
+    background:
+      radial-gradient(circle at 82% 12%, var(--glow), transparent 28%),
+      linear-gradient(145deg, var(--sky-1), var(--sky-2));
     color: var(--text-main);
     transition: background-color 0.3s ease, color 0.3s ease;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   body::before {
@@ -79,19 +160,17 @@
     width: 100%;
     height: 100%;
     background-image: url("https://www.transparenttextures.com/patterns/felt.png");
-    opacity: 0.03;
+    opacity: 0.025;
     pointer-events: none;
     z-index: 9999;
   }
 
-  @keyframes sway {
-    0%, 100% { transform: rotate(-5deg) translateY(0); }
-    50% { transform: rotate(5deg) translateY(-2px); }
-  }
-
-  .sway {
-    animation: sway 3s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.001ms !important;
+    }
   }
 }
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&display=swap');
