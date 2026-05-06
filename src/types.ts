@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type Theme = 'earth' | 'forest' | 'bloom' | 'night';
+export type Theme = 'earth' | 'forest' | 'bloom' | 'night' | 'jungle' | 'alien' | 'desert' | 'arctic';
 
 export interface Task {
   id: string;
