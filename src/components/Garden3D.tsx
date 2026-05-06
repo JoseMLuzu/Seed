@@ -32,7 +32,7 @@ type GardenPalette = {
   sparkles: string;
   connection: string;
   moon: string;
-  treeStyle: 'broadleaf' | 'pine' | 'cherry' | 'moon';
+  treeStyle: 'broadleaf' | 'pine' | 'cherry' | 'moon' | 'palm' | 'mushroom' | 'cactus' | 'ice';
 };
 
 const GARDEN_PALETTES: Record<Theme, GardenPalette> = {
@@ -64,28 +64,28 @@ const GARDEN_PALETTES: Record<Theme, GardenPalette> = {
   },
   forest: {
     label: 'Bosque',
-    skyDay: '#7fc8f8',
-    skyNight: '#08140f',
-    planet: '#255b3c',
-    planetNight: '#0f2a20',
-    planetOverlay: '#3b7d52',
-    patchColors: ['#2f6f45', '#1f5a3a', '#4c8d58', '#6f8f49'],
-    water: '#3b8aa0',
-    waterNight: '#163f4a',
-    rock: '#5f6b5d',
-    trunk: '#4f3a2b',
-    trunkLight: '#6b4b34',
-    seed: '#6d5a3f',
-    seedHover: '#987a51',
-    leaf: '#2f8a4e',
-    leafAlt: '#58a85f',
-    leafDark: '#185f39',
-    fruit: ['#d9a441', '#b95b35', '#d6c85f'],
-    withered: '#54473c',
-    atmosphere: '#7ad19a',
-    sparkles: '#c8ffd6',
-    connection: '#7ad19a',
-    moon: '#cfd8c8',
+    skyDay: '#8fb3c2',
+    skyNight: '#071116',
+    planet: '#1c3f3a',
+    planetNight: '#0a1f22',
+    planetOverlay: '#355a4b',
+    patchColors: ['#254f42', '#183d37', '#42614a', '#65764f'],
+    water: '#4f8da2',
+    waterNight: '#163543',
+    rock: '#67716a',
+    trunk: '#3f3228',
+    trunkLight: '#584638',
+    seed: '#5c503f',
+    seedHover: '#837255',
+    leaf: '#3f7254',
+    leafAlt: '#78935c',
+    leafDark: '#1d4a3a',
+    fruit: ['#b99a4e', '#8f5e3d', '#c7b66b'],
+    withered: '#504841',
+    atmosphere: '#7fa58c',
+    sparkles: '#d7ead4',
+    connection: '#9fbf88',
+    moon: '#cfd8cf',
     treeStyle: 'pine',
   },
   bloom: {
@@ -139,6 +139,110 @@ const GARDEN_PALETTES: Record<Theme, GardenPalette> = {
     connection: '#8cbcff',
     moon: '#d9dded',
     treeStyle: 'moon',
+  },
+  jungle: {
+    label: 'Jungla',
+    skyDay: '#72e6b2',
+    skyNight: '#031a12',
+    planet: '#12a15b',
+    planetNight: '#073b2a',
+    planetOverlay: '#b7f35a',
+    patchColors: ['#18b86a', '#8bd943', '#0d7f53', '#ffd166'],
+    water: '#28d8c2',
+    waterNight: '#0c6b65',
+    rock: '#526f58',
+    trunk: '#5a3d25',
+    trunkLight: '#7a5734',
+    seed: '#8e673c',
+    seedHover: '#c08d50',
+    leaf: '#1fcf68',
+    leafAlt: '#b7f35a',
+    leafDark: '#087a4f',
+    fruit: ['#ffb703', '#ff5a3d', '#b7f35a'],
+    withered: '#5b5140',
+    atmosphere: '#8effa8',
+    sparkles: '#fff7a8',
+    connection: '#ffd166',
+    moon: '#dce8c8',
+    treeStyle: 'palm',
+  },
+  alien: {
+    label: 'Alien',
+    skyDay: '#b39cff',
+    skyNight: '#0a0718',
+    planet: '#513a86',
+    planetNight: '#1d1538',
+    planetOverlay: '#65e0b2',
+    patchColors: ['#6d4bb3', '#36c9a7', '#9d4edd', '#3b82f6'],
+    water: '#72f5d1',
+    waterNight: '#155e68',
+    rock: '#635184',
+    trunk: '#3b275a',
+    trunkLight: '#5c3f86',
+    seed: '#8b5cf6',
+    seedHover: '#c084fc',
+    leaf: '#72f5d1',
+    leafAlt: '#d46cff',
+    leafDark: '#38bdf8',
+    fruit: ['#f0abfc', '#67e8f9', '#a7f3d0'],
+    withered: '#514166',
+    atmosphere: '#a78bfa',
+    sparkles: '#d9f99d',
+    connection: '#79f2c0',
+    moon: '#e9d5ff',
+    treeStyle: 'mushroom',
+  },
+  desert: {
+    label: 'Desierto',
+    skyDay: '#f6c177',
+    skyNight: '#1a1110',
+    planet: '#c98946',
+    planetNight: '#4c2f1e',
+    planetOverlay: '#e8b86d',
+    patchColors: ['#d79b55', '#b97838', '#e6c06f', '#a76f3f'],
+    water: '#5aa6b0',
+    waterNight: '#224c55',
+    rock: '#9b7653',
+    trunk: '#6d4a2f',
+    trunkLight: '#8b623d',
+    seed: '#9c6a3f',
+    seedHover: '#c89056',
+    leaf: '#6f8b52',
+    leafAlt: '#9caf5f',
+    leafDark: '#4f6f3d',
+    fruit: ['#ef7d45', '#f59e0b', '#eab308'],
+    withered: '#7b6048',
+    atmosphere: '#ffd08a',
+    sparkles: '#fff1b8',
+    connection: '#f0b75a',
+    moon: '#ead7b5',
+    treeStyle: 'cactus',
+  },
+  arctic: {
+    label: 'Ártico',
+    skyDay: '#bfefff',
+    skyNight: '#061626',
+    planet: '#d7f3f8',
+    planetNight: '#14334c',
+    planetOverlay: '#8bd3e6',
+    patchColors: ['#eefcff', '#b8e6f2', '#d6f5ff', '#a7d8ea'],
+    water: '#78c6df',
+    waterNight: '#1b5873',
+    rock: '#87a9b8',
+    trunk: '#6b8794',
+    trunkLight: '#93b7c8',
+    seed: '#7ab9d6',
+    seedHover: '#aee8ff',
+    leaf: '#7bc7df',
+    leafAlt: '#dff9ff',
+    leafDark: '#4f9bbb',
+    fruit: ['#a5f3fc', '#e0f2fe', '#bae6fd'],
+    withered: '#7d9099',
+    atmosphere: '#c9f3ff',
+    sparkles: '#ffffff',
+    connection: '#9adff0',
+    moon: '#f3fbff',
+    treeStyle: 'ice',
   },
 };
 const BRANCHES = [
@@ -269,6 +373,75 @@ function SproutTreeModel({ progress, palette }: { progress: number; palette: Gar
     );
   }
 
+  if (palette.treeStyle === 'palm') {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} rotation={[0.08, 0, 0.08]} castShadow>
+          <cylinderGeometry args={[0.055, 0.09, height, 8]} />
+          <meshStandardMaterial color={palette.trunk} roughness={0.9} />
+        </mesh>
+        {[0, 1, 2, 3].map((leaf) => {
+          const angle = leaf * Math.PI / 2;
+          return (
+            <mesh key={leaf} position={[Math.cos(angle) * 0.22, height + 0.16, Math.sin(angle) * 0.22]} rotation={[0.2, -angle, leaf % 2 ? -0.7 : 0.7]} scale={[0.95, 0.24, 0.46]} castShadow>
+              <sphereGeometry args={[0.26, 16, 10]} />
+              <meshStandardMaterial color={leaf % 2 ? palette.leafAlt : palette.leaf} roughness={0.78} />
+            </mesh>
+          );
+        })}
+      </group>
+    );
+  }
+
+  if (palette.treeStyle === 'mushroom') {
+    return (
+      <group>
+        <mesh position={[0, height * 0.34, 0]} scale={[0.65, 1, 0.65]} castShadow>
+          <capsuleGeometry args={[0.12, height * 0.55, 6, 12]} />
+          <meshStandardMaterial color={palette.trunkLight} emissive={palette.trunkLight} emissiveIntensity={0.12} roughness={0.7} />
+        </mesh>
+        <mesh position={[0, height + 0.06, 0]} scale={[leafScale * 1.1, leafScale * 0.42, leafScale * 1.1]} castShadow>
+          <sphereGeometry args={[0.42, 20, 12]} />
+          <meshStandardMaterial color={palette.leafAlt} emissive={palette.leafAlt} emissiveIntensity={0.22} roughness={0.62} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (palette.treeStyle === 'cactus') {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow>
+          <capsuleGeometry args={[0.13, height, 6, 12]} />
+          <meshStandardMaterial color={palette.leafDark} roughness={0.86} />
+        </mesh>
+        <mesh position={[0.22, height * 0.62, 0]} rotation={[0, 0, -0.65]} castShadow>
+          <capsuleGeometry args={[0.07, height * 0.34, 6, 10]} />
+          <meshStandardMaterial color={palette.leaf} roughness={0.86} />
+        </mesh>
+        <mesh position={[-0.2, height * 0.46, 0]} rotation={[0, 0, 0.68]} castShadow>
+          <capsuleGeometry args={[0.06, height * 0.28, 6, 10]} />
+          <meshStandardMaterial color={palette.leafAlt} roughness={0.86} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (palette.treeStyle === 'ice') {
+    return (
+      <group>
+        <mesh position={[0, height * 0.5, 0]} rotation={[0.1, 0.2, 0]} scale={[0.45, 1.05, 0.45]} castShadow>
+          <octahedronGeometry args={[0.42, 1]} />
+          <meshStandardMaterial color={palette.leafAlt} emissive={palette.leaf} emissiveIntensity={0.2} roughness={0.28} metalness={0.08} transparent opacity={0.9} />
+        </mesh>
+        <mesh position={[0.22, height * 0.36, 0.06]} rotation={[0.4, 0, -0.55]} scale={[0.24, 0.62, 0.24]} castShadow>
+          <octahedronGeometry args={[0.35, 1]} />
+          <meshStandardMaterial color={palette.leaf} emissive={palette.leaf} emissiveIntensity={0.16} roughness={0.32} transparent opacity={0.82} />
+        </mesh>
+      </group>
+    );
+  }
+
   return (
     <group>
       <mesh position={[0, height / 2, 0]} castShadow>
@@ -380,6 +553,103 @@ function BloomTreeModel({ seed, palette }: { seed: number; palette: GardenPalett
             <mesh key={glow} position={[Math.cos(angle) * 0.64, 1.85 + (glow % 3) * 0.28, Math.sin(angle) * 0.64]}>
               <sphereGeometry args={[0.07, 10, 10]} />
               <meshStandardMaterial color={palette.fruit[glow % palette.fruit.length]} emissive={palette.fruit[glow % palette.fruit.length]} emissiveIntensity={0.55} roughness={0.4} />
+            </mesh>
+          );
+        })}
+      </group>
+    );
+  }
+
+  if (palette.treeStyle === 'palm') {
+    return (
+      <group scale={[0.9, 0.9, 0.9]}>
+        <mesh position={[0, 1.08, 0]} rotation={[0.12, 0, 0.08]} castShadow>
+          <cylinderGeometry args={[0.12, 0.24, 2.16, 9]} />
+          <meshStandardMaterial color={palette.trunk} roughness={0.92} />
+        </mesh>
+        {[0, 1, 2, 3, 4, 5].map((leaf) => {
+          const angle = leaf * Math.PI / 3 + seed * 0.01;
+          return (
+            <mesh key={leaf} position={[Math.cos(angle) * 0.48, 2.34, Math.sin(angle) * 0.48]} rotation={[0.25, -angle, leaf % 2 ? -0.75 : 0.75]} scale={[1.55, 0.28, 0.62]} castShadow>
+              <sphereGeometry args={[0.34, 18, 10]} />
+              <meshStandardMaterial color={[palette.leaf, palette.leafAlt, palette.leafDark][leaf % 3]} roughness={0.78} />
+            </mesh>
+          );
+        })}
+        {[0, 1, 2].map((fruit) => {
+          const angle = fruit * 2.1 + seed * 0.02;
+          return (
+            <mesh key={fruit} position={[Math.cos(angle) * 0.22, 2.05, Math.sin(angle) * 0.22]} castShadow>
+              <sphereGeometry args={[0.1, 12, 12]} />
+              <meshStandardMaterial color={palette.fruit[fruit % palette.fruit.length]} roughness={0.55} />
+            </mesh>
+          );
+        })}
+      </group>
+    );
+  }
+
+  if (palette.treeStyle === 'mushroom') {
+    return (
+      <group scale={[0.95, 0.95, 0.95]}>
+        {[0, 1, 2].map((cap) => {
+          const angle = cap * 2.2 + seed * 0.01;
+          const size = 1 - cap * 0.22;
+          return (
+            <group key={cap} position={[Math.cos(angle) * cap * 0.28, cap * 0.18, Math.sin(angle) * cap * 0.28]} scale={[size, size, size]}>
+              <mesh position={[0, 0.78, 0]} scale={[0.72, 1.25, 0.72]} castShadow>
+                <capsuleGeometry args={[0.18, 0.92, 8, 14]} />
+                <meshStandardMaterial color={palette.trunkLight} emissive={palette.trunkLight} emissiveIntensity={0.16} roughness={0.7} />
+              </mesh>
+              <mesh position={[0, 1.52, 0]} scale={[1.32, 0.5, 1.32]} castShadow>
+                <sphereGeometry args={[0.58, 24, 14]} />
+                <meshStandardMaterial color={cap % 2 ? palette.leaf : palette.leafAlt} emissive={cap % 2 ? palette.leaf : palette.leafAlt} emissiveIntensity={0.28} roughness={0.54} />
+              </mesh>
+            </group>
+          );
+        })}
+      </group>
+    );
+  }
+
+  if (palette.treeStyle === 'cactus') {
+    return (
+      <group scale={[0.95, 0.95, 0.95]}>
+        <mesh position={[0, 1.05, 0]} castShadow>
+          <capsuleGeometry args={[0.28, 1.72, 8, 16]} />
+          <meshStandardMaterial color={palette.leafDark} roughness={0.86} />
+        </mesh>
+        {[
+          { x: 0.42, y: 1.28, r: -0.72 },
+          { x: -0.4, y: 0.94, r: 0.72 },
+        ].map((arm, index) => (
+          <mesh key={index} position={[arm.x, arm.y, 0]} rotation={[0, 0, arm.r]} castShadow>
+            <capsuleGeometry args={[0.13, 0.82, 8, 14]} />
+            <meshStandardMaterial color={index ? palette.leafAlt : palette.leaf} roughness={0.86} />
+          </mesh>
+        ))}
+        {[0, 1, 2, 3].map((flower) => {
+          const angle = flower * 1.55 + seed * 0.02;
+          return (
+            <mesh key={flower} position={[Math.cos(angle) * 0.18, 1.95 + (flower % 2) * 0.12, Math.sin(angle) * 0.18]} scale={[0.18, 0.08, 0.18]}>
+              <sphereGeometry args={[1, 12, 8]} />
+              <meshStandardMaterial color={palette.fruit[flower % palette.fruit.length]} roughness={0.6} />
+            </mesh>
+          );
+        })}
+      </group>
+    );
+  }
+
+  if (palette.treeStyle === 'ice') {
+    return (
+      <group scale={[0.95, 0.95, 0.95]}>
+        {[0, 1, 2, 3].map((crystal) => {
+          const angle = crystal * 1.4 + seed * 0.01;
+          return (
+            <mesh key={crystal} position={[Math.cos(angle) * crystal * 0.12, 0.78 + crystal * 0.26, Math.sin(angle) * crystal * 0.12]} rotation={[0.2, angle, 0.15]} scale={[0.55 - crystal * 0.06, 1.25 - crystal * 0.12, 0.55 - crystal * 0.06]} castShadow>
+              <octahedronGeometry args={[0.72, 1]} />
+              <meshStandardMaterial color={[palette.leafAlt, palette.leaf, '#ffffff'][crystal % 3]} emissive={palette.leaf} emissiveIntensity={0.18} roughness={0.22} metalness={0.08} transparent opacity={0.84} />
             </mesh>
           );
         })}
