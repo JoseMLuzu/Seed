@@ -1,21 +1,768 @@
-import { useRef, useMemo, useState, Suspense } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Float, Text, ContactShadows, Environment, PerspectiveCamera, Center, Line, Sparkles, Stars } from '@react-three/drei';
+import { useRef, useMemo, useState, Suspense, useEffect } from 'react';
+import type { MutableRefObject } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { OrbitControls, Environment, Line, Sparkles, Stars } from '@react-three/drei';
 import * as THREE from 'three';
-import { SeedNote } from '../types';
+import { SeedNote, Theme } from '../types';
+import { daysSince, wateringDue } from '../seedLogic';
 
 const PLANET_RADIUS = 15;
+type GardenFilter = 'all' | 'water' | 'progress' | 'harvest';
+type GardenPalette = {
+  label: string;
+  skyDay: string;
+  skyNight: string;
+  planet: string;
+  planetNight: string;
+  planetOverlay: string;
+  patchColors: string[];
+  water: string;
+  waterNight: string;
+  rock: string;
+  trunk: string;
+  trunkLight: string;
+  seed: string;
+  seedHover: string;
+  leaf: string;
+  leafAlt: string;
+  leafDark: string;
+  fruit: string[];
+  withered: string;
+  atmosphere: string;
+  sparkles: string;
+  connection: string;
+  moon: string;
+  treeStyle: 'broadleaf' | 'pine' | 'cherry' | 'moon';
+};
 
-function Plant3D({ note, position, onClick }: { note: SeedNote; position: [number, number, number]; onClick: () => void }) {
+const GARDEN_PALETTES: Record<Theme, GardenPalette> = {
+  earth: {
+    label: 'Pradera',
+    skyDay: '#8fd3ff',
+    skyNight: '#10150f',
+    planet: '#6b9f4f',
+    planetNight: '#263b25',
+    planetOverlay: '#b5c879',
+    patchColors: ['#8eb65f', '#b7a46a', '#6f9e52', '#c4b071'],
+    water: '#69b6d7',
+    waterNight: '#285d73',
+    rock: '#827866',
+    trunk: '#79533c',
+    trunkLight: '#8a6447',
+    seed: '#8d6e52',
+    seedHover: '#b48a63',
+    leaf: '#6faa4f',
+    leafAlt: '#8fc76a',
+    leafDark: '#487b3d',
+    fruit: ['#e36f3f', '#d95545', '#f0b742'],
+    withered: '#6f5a4f',
+    atmosphere: '#c8efb0',
+    sparkles: '#fff8d8',
+    connection: '#9fd27a',
+    moon: '#d8d2bf',
+    treeStyle: 'broadleaf',
+  },
+  forest: {
+    label: 'Bosque',
+    skyDay: '#7fc8f8',
+    skyNight: '#08140f',
+    planet: '#255b3c',
+    planetNight: '#0f2a20',
+    planetOverlay: '#3b7d52',
+    patchColors: ['#2f6f45', '#1f5a3a', '#4c8d58', '#6f8f49'],
+    water: '#3b8aa0',
+    waterNight: '#163f4a',
+    rock: '#5f6b5d',
+    trunk: '#4f3a2b',
+    trunkLight: '#6b4b34',
+    seed: '#6d5a3f',
+    seedHover: '#987a51',
+    leaf: '#2f8a4e',
+    leafAlt: '#58a85f',
+    leafDark: '#185f39',
+    fruit: ['#d9a441', '#b95b35', '#d6c85f'],
+    withered: '#54473c',
+    atmosphere: '#7ad19a',
+    sparkles: '#c8ffd6',
+    connection: '#7ad19a',
+    moon: '#cfd8c8',
+    treeStyle: 'pine',
+  },
+  bloom: {
+    label: 'Floración',
+    skyDay: '#a9ddff',
+    skyNight: '#1b101a',
+    planet: '#8eaf55',
+    planetNight: '#3b2a3e',
+    planetOverlay: '#f0a9bc',
+    patchColors: ['#f2a7bd', '#d96a8c', '#a7be64', '#ffd1a6'],
+    water: '#8bbfe3',
+    waterNight: '#4b5e83',
+    rock: '#b58993',
+    trunk: '#7a4d45',
+    trunkLight: '#98675c',
+    seed: '#9a6552',
+    seedHover: '#c88474',
+    leaf: '#7fae4f',
+    leafAlt: '#f08aad',
+    leafDark: '#5f8d43',
+    fruit: ['#f45b8c', '#ff9fb8', '#ffd166'],
+    withered: '#8a6468',
+    atmosphere: '#ffd1df',
+    sparkles: '#ffd6e6',
+    connection: '#f08aad',
+    moon: '#f2d9df',
+    treeStyle: 'cherry',
+  },
+  night: {
+    label: 'Nocturno',
+    skyDay: '#7ea7d8',
+    skyNight: '#050814',
+    planet: '#1c3651',
+    planetNight: '#0d1d34',
+    planetOverlay: '#2a5278',
+    patchColors: ['#203f62', '#315d6f', '#2e4f7d', '#3a6670'],
+    water: '#355f9e',
+    waterNight: '#142a54',
+    rock: '#596179',
+    trunk: '#3b3140',
+    trunkLight: '#5b4964',
+    seed: '#6c5d8f',
+    seedHover: '#9a82d8',
+    leaf: '#6fa8dc',
+    leafAlt: '#9b8cff',
+    leafDark: '#385f9a',
+    fruit: ['#a78bfa', '#60a5fa', '#f0abfc'],
+    withered: '#514a61',
+    atmosphere: '#6da8ff',
+    sparkles: '#d8e8ff',
+    connection: '#8cbcff',
+    moon: '#d9dded',
+    treeStyle: 'moon',
+  },
+};
+const BRANCHES = [
+  { position: [0.18, 1.05, 0] as [number, number, number], rotation: [0, 0, -0.82] as [number, number, number], length: 0.72, radius: 0.035 },
+  { position: [-0.2, 1.34, 0.05] as [number, number, number], rotation: [0.18, 0.25, 0.88] as [number, number, number], length: 0.76, radius: 0.032 },
+  { position: [0.1, 1.62, -0.12] as [number, number, number], rotation: [-0.18, -0.55, -0.64] as [number, number, number], length: 0.58, radius: 0.026 },
+];
+const CANOPY_CLUSTERS = [
+  { position: [0, 2.38, 0] as [number, number, number], scale: [1.05, 0.86, 1.02] as [number, number, number], color: '#2f7d32' },
+  { position: [-0.46, 2.05, 0.06] as [number, number, number], scale: [0.76, 0.66, 0.7] as [number, number, number], color: '#3f9a45' },
+  { position: [0.48, 2.08, -0.04] as [number, number, number], scale: [0.78, 0.68, 0.72] as [number, number, number], color: '#277034' },
+  { position: [0.08, 1.84, 0.42] as [number, number, number], scale: [0.68, 0.56, 0.64] as [number, number, number], color: '#56a85b' },
+  { position: [-0.08, 1.78, -0.42] as [number, number, number], scale: [0.62, 0.52, 0.58] as [number, number, number], color: '#2d8737' },
+];
+const PLANET_PATCHES = [
+  { lat: 22, lon: 18, radius: 2.6, color: '#6faa56', stretch: 1.45, twist: 0.4 },
+  { lat: -18, lon: 72, radius: 2.1, color: '#8ba85d', stretch: 1.25, twist: -0.8 },
+  { lat: 38, lon: 148, radius: 1.8, color: '#4f8f45', stretch: 1.7, twist: 0.2 },
+  { lat: -42, lon: 210, radius: 2.4, color: '#9a8b5e', stretch: 1.35, twist: 1.1 },
+  { lat: 8, lon: 286, radius: 2.8, color: '#5c9b50', stretch: 1.55, twist: -0.2 },
+  { lat: 54, lon: 316, radius: 1.5, color: '#91b36b', stretch: 1.1, twist: 0.7 },
+  { lat: -58, lon: 36, radius: 1.6, color: '#b39b67', stretch: 1.4, twist: -1.0 },
+];
+const PLANET_LAKES = [
+  { lat: 3, lon: 112, radius: 1.35, stretch: 1.85, twist: 0.2 },
+  { lat: -31, lon: 328, radius: 1.05, stretch: 1.45, twist: -0.6 },
+  { lat: 47, lon: 246, radius: 0.9, stretch: 1.3, twist: 0.9 },
+];
+const PLANET_ROCKS = [
+  { lat: 17, lon: 240, scale: 0.34 },
+  { lat: -24, lon: 156, scale: 0.26 },
+  { lat: 62, lon: 80, scale: 0.22 },
+  { lat: -48, lon: 92, scale: 0.3 },
+  { lat: 28, lon: 332, scale: 0.24 },
+  { lat: -8, lon: 28, scale: 0.28 },
+];
+const CLOUD_PATCHES = [
+  { lat: 36, lon: 58, radius: 1.55, stretch: 2.3, twist: 0.6 },
+  { lat: -6, lon: 190, radius: 1.9, stretch: 2.7, twist: -0.4 },
+  { lat: -42, lon: 274, radius: 1.25, stretch: 2.1, twist: 0.8 },
+];
+
+function getSurfaceTransform(lat: number, lon: number, radius = PLANET_RADIUS) {
+  const phi = THREE.MathUtils.degToRad(90 - lat);
+  const theta = THREE.MathUtils.degToRad(lon);
+  const normal = new THREE.Vector3(
+    Math.sin(phi) * Math.cos(theta),
+    Math.cos(phi),
+    Math.sin(phi) * Math.sin(theta),
+  ).normalize();
+  const position = normal.clone().multiplyScalar(radius);
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+
+  return { position, quaternion };
+}
+
+function TreeBranch({ position, rotation, length, radius, color = '#6d4c41' }: {
+  position: [number, number, number];
+  rotation: [number, number, number];
+  length: number;
+  radius: number;
+  color?: string;
+}) {
+  return (
+    <mesh position={position} rotation={rotation} castShadow>
+      <cylinderGeometry args={[radius * 0.55, radius, length, 8]} />
+      <meshStandardMaterial color={color} roughness={0.92} />
+    </mesh>
+  );
+}
+
+function SeedModel({ hovered, palette }: { hovered: boolean; palette: GardenPalette }) {
+  return (
+    <group>
+      <mesh position={[0, 0.11, 0]} scale={[1.15, 0.76, 0.92]} castShadow>
+        <sphereGeometry args={[0.22, 24, 16]} />
+        <meshStandardMaterial color={hovered ? palette.seedHover : palette.seed} roughness={0.82} />
+      </mesh>
+      <mesh position={[0.08, 0.2, 0.14]} rotation={[0.75, 0.2, -0.4]}>
+        <capsuleGeometry args={[0.025, 0.16, 4, 8]} />
+        <meshStandardMaterial color={palette.trunkLight} roughness={0.7} />
+      </mesh>
+    </group>
+  );
+}
+
+function SproutTreeModel({ progress, palette }: { progress: number; palette: GardenPalette }) {
+  const height = 0.62 + progress * 0.014;
+  const leafScale = 0.72 + progress * 0.006;
+
+  if (palette.treeStyle === 'pine') {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow>
+          <cylinderGeometry args={[0.045, 0.075, height, 8]} />
+          <meshStandardMaterial color={palette.trunk} roughness={0.9} />
+        </mesh>
+        {[0, 1, 2].map((tier) => (
+          <mesh key={tier} position={[0, height * 0.55 + tier * 0.28, 0]} rotation={[0, tier * 0.4, 0]} castShadow>
+            <coneGeometry args={[0.38 - tier * 0.08, 0.46, 8]} />
+            <meshStandardMaterial color={[palette.leafDark, palette.leaf, palette.leafAlt][tier]} roughness={0.84} flatShading />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
+  if (palette.treeStyle === 'cherry') {
+    return (
+      <group>
+        <mesh position={[0, height / 2, 0]} castShadow>
+          <cylinderGeometry args={[0.05, 0.08, height, 10]} />
+          <meshStandardMaterial color={palette.trunk} roughness={0.9} />
+        </mesh>
+        <mesh position={[0, height + 0.1, 0]} scale={[leafScale, leafScale * 0.64, leafScale]} castShadow>
+          <dodecahedronGeometry args={[0.34, 0]} />
+          <meshStandardMaterial color={palette.leafAlt} roughness={0.76} />
+        </mesh>
+        <mesh position={[0.24, height * 0.72, 0]} rotation={[0.2, 0, -0.65]} scale={[0.72, 0.32, 0.52]} castShadow>
+          <sphereGeometry args={[0.2, 12, 8]} />
+          <meshStandardMaterial color={palette.fruit[0]} roughness={0.78} />
+        </mesh>
+        <mesh position={[-0.24, height * 0.62, 0]} rotation={[0.2, 0, 0.65]} scale={[0.72, 0.32, 0.52]} castShadow>
+          <sphereGeometry args={[0.2, 12, 8]} />
+          <meshStandardMaterial color={palette.fruit[1]} roughness={0.78} />
+        </mesh>
+      </group>
+    );
+  }
+
+  return (
+    <group>
+      <mesh position={[0, height / 2, 0]} castShadow>
+        <cylinderGeometry args={[0.055, 0.08, height, 10]} />
+        <meshStandardMaterial color={palette.trunk} roughness={0.9} />
+      </mesh>
+      <mesh position={[0, height + 0.08, 0]} scale={[leafScale, leafScale * 0.72, leafScale]} castShadow>
+        <dodecahedronGeometry args={[0.32, 0]} />
+        <meshStandardMaterial color={palette.leafAlt} roughness={0.78} />
+      </mesh>
+      {[
+        { x: 0.22, y: height * 0.72, z: 0.02, rz: -0.68, color: palette.leafAlt },
+        { x: -0.24, y: height * 0.58, z: -0.02, rz: 0.72, color: palette.leaf },
+      ].map((leaf) => (
+        <mesh key={leaf.x} position={[leaf.x, leaf.y, leaf.z]} rotation={[0.2, 0, leaf.rz]} scale={[0.9, 0.38, 0.6]} castShadow>
+          <sphereGeometry args={[0.22, 16, 10]} />
+          <meshStandardMaterial color={leaf.color} roughness={0.82} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function BloomTreeModel({ seed, palette }: { seed: number; palette: GardenPalette }) {
+  const fruitColor = palette.fruit[seed % palette.fruit.length];
+
+  if (palette.treeStyle === 'pine') {
+    return (
+      <group scale={[0.92, 0.92, 0.92]}>
+        <mesh position={[0, 0.95, 0]} castShadow>
+          <cylinderGeometry args={[0.12, 0.24, 1.9, 10]} />
+          <meshStandardMaterial color={palette.trunk} roughness={0.95} />
+        </mesh>
+        {[
+          { y: 1.35, r: 1.28, h: 1.25, color: palette.leafDark },
+          { y: 2.0, r: 1.05, h: 1.18, color: palette.leaf },
+          { y: 2.62, r: 0.78, h: 1.05, color: palette.leafAlt },
+          { y: 3.14, r: 0.48, h: 0.78, color: palette.leaf },
+        ].map((tier, index) => (
+          <mesh key={index} position={[0, tier.y, 0]} rotation={[0, seed * 0.01 + index * 0.25, 0]} castShadow>
+            <coneGeometry args={[tier.r, tier.h, 9]} />
+            <meshStandardMaterial color={tier.color} roughness={0.86} flatShading />
+          </mesh>
+        ))}
+        {[0, 1, 2, 3].map((cone) => {
+          const angle = cone * 1.7 + seed * 0.03;
+          return (
+            <mesh key={cone} position={[Math.cos(angle) * 0.45, 1.75 + cone * 0.22, Math.sin(angle) * 0.45]} rotation={[0.4, angle, 0.2]} castShadow>
+              <coneGeometry args={[0.08, 0.18, 7]} />
+              <meshStandardMaterial color={palette.fruit[cone % palette.fruit.length]} roughness={0.9} />
+            </mesh>
+          );
+        })}
+      </group>
+    );
+  }
+
+  if (palette.treeStyle === 'cherry') {
+    return (
+      <group scale={[0.9, 0.9, 0.9]}>
+        <mesh position={[0, 0.9, 0]} rotation={[0.08, 0, -0.06]} castShadow>
+          <cylinderGeometry args={[0.11, 0.23, 1.8, 12]} />
+          <meshStandardMaterial color={palette.trunk} roughness={0.94} />
+        </mesh>
+        {BRANCHES.map((branch, index) => (
+          <TreeBranch key={index} {...branch} color={palette.trunkLight} />
+        ))}
+        {[
+          { position: [0, 2.34, 0] as [number, number, number], scale: [1.08, 0.78, 1.02] as [number, number, number], color: palette.leafAlt },
+          { position: [-0.55, 2.04, 0.04] as [number, number, number], scale: [0.82, 0.62, 0.76] as [number, number, number], color: palette.fruit[0] },
+          { position: [0.54, 2.08, -0.08] as [number, number, number], scale: [0.82, 0.62, 0.76] as [number, number, number], color: palette.fruit[1] },
+          { position: [0.08, 1.82, 0.46] as [number, number, number], scale: [0.68, 0.5, 0.64] as [number, number, number], color: '#ffd1df' },
+          { position: [-0.08, 1.78, -0.46] as [number, number, number], scale: [0.64, 0.48, 0.58] as [number, number, number], color: palette.leafAlt },
+        ].map((cluster, index) => (
+          <mesh key={index} position={cluster.position} scale={cluster.scale} rotation={[0.1 * index, seed * 0.02 + index, 0.08 * index]} castShadow>
+            <dodecahedronGeometry args={[0.78, 1]} />
+            <meshStandardMaterial color={cluster.color} roughness={0.72} />
+          </mesh>
+        ))}
+        {[0, 1, 2, 3, 4, 5, 6].map((petal) => {
+          const angle = petal * 0.9 + seed * 0.04;
+          return (
+            <mesh key={petal} position={[Math.cos(angle) * 0.75, 1.65 + (petal % 4) * 0.22, Math.sin(angle) * 0.62]} scale={[0.16, 0.07, 0.12]} rotation={[0.3, angle, 0.2]}>
+              <sphereGeometry args={[1, 12, 8]} />
+              <meshStandardMaterial color={palette.fruit[petal % palette.fruit.length]} roughness={0.7} />
+            </mesh>
+          );
+        })}
+      </group>
+    );
+  }
+
+  if (palette.treeStyle === 'moon') {
+    return (
+      <group scale={[0.9, 0.9, 0.9]}>
+        <mesh position={[0, 0.9, 0]} castShadow>
+          <cylinderGeometry args={[0.1, 0.2, 1.8, 8]} />
+          <meshStandardMaterial color={palette.trunk} roughness={0.82} metalness={0.08} />
+        </mesh>
+        {[0, 1, 2].map((tier) => (
+          <mesh key={tier} position={[0, 1.55 + tier * 0.55, 0]} rotation={[0.15 * tier, seed * 0.02 + tier * 0.6, 0.1]} scale={[1 - tier * 0.18, 0.78 - tier * 0.08, 1 - tier * 0.18]} castShadow>
+            <octahedronGeometry args={[0.9, 1]} />
+            <meshStandardMaterial color={[palette.leafDark, palette.leaf, palette.leafAlt][tier]} emissive={[palette.leafDark, palette.leaf, palette.leafAlt][tier]} emissiveIntensity={0.18} roughness={0.55} />
+          </mesh>
+        ))}
+        {[0, 1, 2, 3, 4].map((glow) => {
+          const angle = glow * 1.25 + seed * 0.03;
+          return (
+            <mesh key={glow} position={[Math.cos(angle) * 0.64, 1.85 + (glow % 3) * 0.28, Math.sin(angle) * 0.64]}>
+              <sphereGeometry args={[0.07, 10, 10]} />
+              <meshStandardMaterial color={palette.fruit[glow % palette.fruit.length]} emissive={palette.fruit[glow % palette.fruit.length]} emissiveIntensity={0.55} roughness={0.4} />
+            </mesh>
+          );
+        })}
+      </group>
+    );
+  }
+
+  return (
+    <group scale={[0.9, 0.9, 0.9]}>
+      <mesh position={[0, 0.85, 0]} castShadow>
+        <cylinderGeometry args={[0.14, 0.24, 1.7, 12]} />
+        <meshStandardMaterial color={palette.trunk} roughness={0.94} />
+      </mesh>
+      <mesh position={[0.02, 1.72, 0]} castShadow>
+        <cylinderGeometry args={[0.08, 0.15, 1.2, 10]} />
+        <meshStandardMaterial color={palette.trunkLight} roughness={0.94} />
+      </mesh>
+
+      {BRANCHES.map((branch, index) => (
+        <TreeBranch key={index} {...branch} color={palette.trunk} />
+      ))}
+
+      {CANOPY_CLUSTERS.map((cluster, index) => (
+        <mesh
+          key={index}
+          position={cluster.position}
+          scale={cluster.scale}
+          rotation={[0.18 * index, seed * 0.02 + index * 0.7, 0.08 * index]}
+          castShadow
+        >
+          <dodecahedronGeometry args={[0.78, 1]} />
+          <meshStandardMaterial color={[palette.leaf, palette.leafAlt, palette.leafDark][index % 3]} roughness={0.76} />
+        </mesh>
+      ))}
+
+      {[0, 1, 2, 3, 4, 5].map((fruit) => {
+        const angle = fruit * 1.16 + seed * 0.04;
+        const radius = 0.48 + (fruit % 2) * 0.18;
+        return (
+          <mesh
+            key={fruit}
+            position={[Math.cos(angle) * radius, 1.9 + (fruit % 3) * 0.18, Math.sin(angle) * radius]}
+            castShadow
+          >
+            <sphereGeometry args={[0.085, 12, 12]} />
+            <meshStandardMaterial color={fruitColor} emissive={fruitColor} emissiveIntensity={0.12} roughness={0.55} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+function WitheredTreeModel({ palette }: { palette: GardenPalette }) {
+  return (
+    <group rotation={[0.18, 0, 0.38]}>
+      <mesh position={[0, 0.65, 0]} rotation={[0.15, 0, -0.12]} castShadow>
+        <cylinderGeometry args={[0.045, 0.13, 1.3, 8]} />
+        <meshStandardMaterial color={palette.withered} roughness={1} />
+      </mesh>
+      <TreeBranch position={[0.18, 1.05, 0]} rotation={[0.08, 0, -0.96]} length={0.62} radius={0.024} color={palette.trunk} />
+      <TreeBranch position={[-0.2, 0.9, -0.04]} rotation={[-0.15, 0.2, 0.92]} length={0.5} radius={0.02} color={palette.trunk} />
+      <mesh position={[0.44, 1.25, 0.02]} rotation={[0.4, 0, -0.3]} scale={[0.42, 0.12, 0.26]}>
+        <sphereGeometry args={[0.18, 12, 8]} />
+        <meshStandardMaterial color={palette.withered} roughness={1} />
+      </mesh>
+      <mesh position={[-0.18, 0.04, 0.22]} rotation={[0.2, 0.3, -0.9]} scale={[0.5, 0.08, 0.28]}>
+        <sphereGeometry args={[0.22, 12, 8]} />
+        <meshStandardMaterial color={palette.withered} roughness={1} />
+      </mesh>
+    </group>
+  );
+}
+
+function SurfacePatch({
+  lat,
+  lon,
+  radius,
+  color,
+  stretch = 1,
+  twist = 0,
+  opacity = 1,
+  altitude = 0.035,
+}: {
+  lat: number;
+  lon: number;
+  radius: number;
+  color: string;
+  stretch?: number;
+  twist?: number;
+  opacity?: number;
+  altitude?: number;
+}) {
+  const { position, quaternion } = useMemo(() => getSurfaceTransform(lat, lon, PLANET_RADIUS + altitude), [lat, lon, altitude]);
+
+  return (
+    <group position={position} quaternion={quaternion}>
+      <mesh rotation={[0, 0, twist]} scale={[radius * stretch, radius, 1]}>
+        <circleGeometry args={[1, 28]} />
+        <meshStandardMaterial color={color} roughness={0.88} transparent={opacity < 1} opacity={opacity} depthWrite={opacity === 1} />
+      </mesh>
+    </group>
+  );
+}
+
+function SurfaceRock({ lat, lon, scale, color }: { lat: number; lon: number; scale: number; color: string }) {
+  const { position, quaternion } = useMemo(() => getSurfaceTransform(lat, lon, PLANET_RADIUS + 0.14), [lat, lon]);
+
+  return (
+    <group position={position} quaternion={quaternion}>
+      <mesh scale={[scale * 1.2, scale * 0.7, scale]} castShadow>
+        <dodecahedronGeometry args={[1, 0]} />
+        <meshStandardMaterial color={color} roughness={0.96} />
+      </mesh>
+    </group>
+  );
+}
+
+function PlanetSurface({ isDay, palette }: { isDay: boolean; palette: GardenPalette }) {
+  return (
+    <>
+      <mesh receiveShadow castShadow>
+        <icosahedronGeometry args={[PLANET_RADIUS, 5]} />
+        <meshStandardMaterial 
+          color={isDay ? palette.planet : palette.planetNight} 
+          emissive={isDay ? palette.planet : palette.planetNight} 
+          emissiveIntensity={isDay ? 0.18 : 0.58}
+          roughness={0.92} 
+          metalness={0.02}
+          flatShading
+        />
+      </mesh>
+
+      <mesh scale={[1.004, 1.004, 1.004]} receiveShadow>
+        <icosahedronGeometry args={[PLANET_RADIUS, 4]} />
+        <meshStandardMaterial
+          color={palette.planetOverlay}
+          transparent
+          opacity={isDay ? 0.18 : 0.12}
+          roughness={1}
+          depthWrite={false}
+          flatShading
+        />
+      </mesh>
+
+      {PLANET_PATCHES.map((patch, index) => (
+        <SurfacePatch
+          key={`${patch.lat}-${patch.lon}`}
+          lat={patch.lat}
+          lon={patch.lon}
+          radius={patch.radius}
+          color={isDay ? palette.patchColors[index % palette.patchColors.length] : palette.planetNight}
+          stretch={patch.stretch}
+          twist={patch.twist}
+        />
+      ))}
+
+      {PLANET_LAKES.map((lake) => (
+        <SurfacePatch
+          key={`${lake.lat}-${lake.lon}`}
+          lat={lake.lat}
+          lon={lake.lon}
+          radius={lake.radius}
+          color={isDay ? palette.water : palette.waterNight}
+          stretch={lake.stretch}
+          twist={lake.twist}
+          opacity={0.86}
+          altitude={0.055}
+        />
+      ))}
+
+      {PLANET_ROCKS.map((rock) => (
+        <SurfaceRock key={`${rock.lat}-${rock.lon}`} lat={rock.lat} lon={rock.lon} scale={rock.scale} color={palette.rock} />
+      ))}
+
+      {CLOUD_PATCHES.map((cloud) => (
+        <SurfacePatch
+          key={`${cloud.lat}-${cloud.lon}`}
+          lat={cloud.lat}
+          lon={cloud.lon}
+          radius={cloud.radius}
+          color="#ffffff"
+          stretch={cloud.stretch}
+          twist={cloud.twist}
+          opacity={isDay ? 0.2 : 0.12}
+          altitude={0.42}
+        />
+      ))}
+    </>
+  );
+}
+
+function CompanionMoon({ palette }: { palette: GardenPalette }) {
+  const moonRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (moonRef.current) {
+      moonRef.current.rotation.y = state.clock.elapsedTime * 0.05;
+      moonRef.current.position.y = 16 + Math.sin(state.clock.elapsedTime * 0.22) * 0.35;
+    }
+  });
+
+  return (
+    <group ref={moonRef} position={[-34, 16, -44]}>
+      <mesh castShadow receiveShadow>
+        <sphereGeometry args={[4.2, 48, 48]} />
+        <meshStandardMaterial
+          color={palette.moon}
+          emissive={palette.moon}
+          emissiveIntensity={0.16}
+          roughness={0.95}
+        />
+      </mesh>
+
+      {[
+        { position: [1.6, 1.1, 3.7] as [number, number, number], scale: [0.82, 0.42, 0.16] as [number, number, number], rotation: [0.1, -0.18, 0.5] as [number, number, number] },
+        { position: [-1.3, -0.7, 3.9] as [number, number, number], scale: [0.58, 0.34, 0.12] as [number, number, number], rotation: [0.04, 0.12, -0.4] as [number, number, number] },
+        { position: [0.2, -1.9, 3.6] as [number, number, number], scale: [0.44, 0.26, 0.1] as [number, number, number], rotation: [0.12, -0.08, 0.2] as [number, number, number] },
+        { position: [-2.2, 1.5, 3.2] as [number, number, number], scale: [0.38, 0.24, 0.08] as [number, number, number], rotation: [0.2, 0.2, -0.1] as [number, number, number] },
+      ].map((crater, index) => (
+        <mesh
+          key={index}
+          position={crater.position}
+          rotation={crater.rotation}
+          scale={crater.scale}
+        >
+          <sphereGeometry args={[1, 20, 12]} />
+          <meshStandardMaterial color="#aaa28e" roughness={1} />
+        </mesh>
+      ))}
+
+      <mesh scale={[1.08, 1.08, 1.08]}>
+        <sphereGeometry args={[4.2, 48, 48]} />
+        <meshStandardMaterial
+          color="#f5eed8"
+          transparent
+          opacity={0.12}
+          side={THREE.BackSide}
+          depthWrite={false}
+        />
+      </mesh>
+
+      <pointLight color="#d8f3ff" intensity={1.2} distance={80} />
+    </group>
+  );
+}
+
+function DaySun({ raining }: { raining: boolean }) {
+  const sunRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (sunRef.current) {
+      const t = state.clock.elapsedTime;
+      const pulse = 1 + Math.sin(t * 0.6) * 0.025;
+      sunRef.current.scale.set(pulse, pulse, pulse);
+      sunRef.current.rotation.z = t * 0.04;
+    }
+  });
+
+  return (
+    <group ref={sunRef} position={[38, 30, -42]}>
+      <mesh>
+        <sphereGeometry args={[5.4, 48, 48]} />
+        <meshStandardMaterial
+          color={raining ? '#ffe1a6' : '#ffd166'}
+          emissive={raining ? '#ffc86b' : '#ffb703'}
+          emissiveIntensity={raining ? 0.55 : 1.2}
+          roughness={0.45}
+        />
+      </mesh>
+      <mesh scale={[1.55, 1.55, 1.55]}>
+        <sphereGeometry args={[5.4, 48, 48]} />
+        <meshStandardMaterial
+          color="#fff3b0"
+          transparent
+          opacity={raining ? 0.08 : 0.16}
+          side={THREE.BackSide}
+          depthWrite={false}
+        />
+      </mesh>
+      <pointLight color="#ffdca3" intensity={raining ? 0.85 : 1.8} distance={120} />
+    </group>
+  );
+}
+
+function RainClouds({ palette }: { palette: GardenPalette }) {
+  const cloudRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (cloudRef.current) {
+      cloudRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.18) * 0.08;
+      cloudRef.current.position.y = 24 + Math.sin(state.clock.elapsedTime * 0.35) * 0.35;
+    }
+  });
+
+  return (
+    <group ref={cloudRef} position={[0, 24, -8]}>
+      {[
+        { position: [-9, 0, 0] as [number, number, number], scale: [5.2, 1.45, 2.1] as [number, number, number] },
+        { position: [-4.5, 1, 1.2] as [number, number, number], scale: [4.8, 1.8, 2.4] as [number, number, number] },
+        { position: [1.5, 0.35, 0] as [number, number, number], scale: [5.8, 1.55, 2.2] as [number, number, number] },
+        { position: [7, 0.8, 1.1] as [number, number, number], scale: [4.4, 1.35, 2] as [number, number, number] },
+      ].map((cloud, index) => (
+        <mesh key={index} position={cloud.position} scale={cloud.scale}>
+          <sphereGeometry args={[1, 24, 16]} />
+          <meshStandardMaterial color={palette.skyNight} transparent opacity={0.28} roughness={0.9} depthWrite={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function RainField({ palette, compact }: { palette: GardenPalette; compact: boolean }) {
+  const rainRef = useRef<THREE.Group>(null);
+  const drops = useMemo(() => {
+    return Array.from({ length: compact ? 70 : 130 }, (_, index) => {
+      const angle = index * 2.399963;
+      const radius = 14 + ((index * 17) % 24);
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      const y = -5 + ((index * 19) % 42);
+      const length = 0.8 + ((index * 7) % 8) * 0.08;
+      return { x, y, z, length };
+    });
+  }, [compact]);
+
+  useFrame((state) => {
+    if (rainRef.current) {
+      const fall = (state.clock.elapsedTime * 8) % 18;
+      rainRef.current.position.y = -fall;
+    }
+  });
+
+  return (
+    <group ref={rainRef}>
+      {drops.map((drop, index) => (
+        <Line
+          key={index}
+          points={[
+            [drop.x, drop.y, drop.z],
+            [drop.x - 0.22, drop.y - drop.length, drop.z + 0.12],
+          ]}
+          color={palette.water}
+          opacity={0.34}
+          transparent
+          lineWidth={1.2}
+        />
+      ))}
+    </group>
+  );
+}
+
+function Plant3D({
+  note,
+  position,
+  palette,
+  selected,
+  needsWater,
+  nourished,
+  routeActive,
+  dimmed,
+  onClick,
+}: {
+  note: SeedNote;
+  position: [number, number, number];
+  palette: GardenPalette;
+  selected: boolean;
+  needsWater: boolean;
+  nourished: boolean;
+  routeActive: boolean;
+  dimmed: boolean;
+  onClick: () => void;
+}) {
   const [hovered, setHovered] = useState(false);
   const meshRef = useRef<THREE.Group>(null);
-  const groupRef = useRef<THREE.Group>(null);
+  const haloRef = useRef<THREE.Mesh>(null);
   const { growthStage, isGrowth, tasks } = note;
 
-  // Stagger entrance state
   const [spawned, setSpawned] = useState(false);
-  useMemo(() => {
-    setTimeout(() => setSpawned(true), 100 + (note.id.length % 10) * 50);
+  useEffect(() => {
+    setSpawned(false);
+    const timer = window.setTimeout(() => setSpawned(true), 100 + (note.id.length % 10) * 50);
+    return () => window.clearTimeout(timer);
   }, [note.id]);
 
   const progress = useMemo(() => {
@@ -32,98 +779,58 @@ function Plant3D({ note, position, onClick }: { note: SeedNote; position: [numbe
     return q;
   }, [position]);
 
-  const targetScale = useMemo(() => (spawned ? (hovered ? 1.5 : 1) : 0), [spawned, hovered]);
+  const targetScale = useMemo(() => {
+    if (!spawned) return 0;
+    if (nourished) return 1.72;
+    if (selected) return 1.58;
+    if (hovered) return 1.42;
+    if (routeActive) return 1.26;
+    if (dimmed) return 0.72;
+    return 1;
+  }, [spawned, hovered, selected, routeActive, dimmed, nourished]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (meshRef.current) {
-      // Smooth scale transition
-      const s = THREE.MathUtils.lerp(meshRef.current.scale.x, targetScale, 0.1);
+      const scaleDamping = 1 - Math.exp(-delta * 9);
+      const s = THREE.MathUtils.lerp(meshRef.current.scale.x, targetScale, scaleDamping);
       meshRef.current.scale.set(s, s, s);
       
       if (growthStage !== 'withered') {
         const t = state.clock.elapsedTime + (note.id.length % 10);
-        // Floating effect
         const offset = Math.sin(t * 1.5) * 0.15 + Math.cos(t * 0.8) * 0.05;
         meshRef.current.position.y = offset;
         
-        // Subtle rotation oscillation
         meshRef.current.rotation.z = Math.sin(t * 0.5) * 0.1;
         meshRef.current.rotation.x = Math.cos(t * 0.4) * 0.1;
+      }
+    }
+
+    if (haloRef.current) {
+      const t = state.clock.elapsedTime + note.id.length;
+      const pulse = nourished ? 1.25 + Math.sin(t * 5) * 0.16 : selected ? 1.12 : 1 + Math.sin(t * 2.6) * 0.1;
+      haloRef.current.scale.set(pulse, pulse, pulse);
+      if (haloRef.current.material instanceof THREE.MeshStandardMaterial) {
+        haloRef.current.material.opacity = nourished ? 0.92 : selected ? 0.82 : 0.42 + Math.sin(t * 2.6) * 0.14;
       }
     }
   });
 
   const renderModel = () => {
+    const seedValue = note.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
     if (growthStage === 'bloom') {
-      return (
-        <group scale={[0.8, 0.8, 0.8]}>
-          <mesh position={[0, 1, 0]} castShadow>
-            <cylinderGeometry args={[0.15, 0.25, 2, 8]} />
-            <meshStandardMaterial color="#5d4037" />
-          </mesh>
-          <group position={[0, 3, 0]}>
-            <mesh position={[0, 0, 0]} castShadow>
-              <coneGeometry args={[1.2, 3.5, 8]} />
-              <meshStandardMaterial color="#1b5e20" />
-            </mesh>
-            <mesh position={[0, -1, 0]} castShadow>
-              <coneGeometry args={[1.4, 3, 8]} />
-              <meshStandardMaterial color="#2e7d32" />
-            </mesh>
-          </group>
-          {/* Fruit/Harvested indicators */}
-          {[...Array(5)].map((_, i) => (
-             <mesh key={i} position={[Math.sin(i) * 0.8, 2.5 + Math.cos(i) * 0.5, Math.cos(i * 2) * 0.8]}>
-               <sphereGeometry args={[0.1, 8, 8]} />
-               <meshStandardMaterial color="#f44336" emissive="#f44336" emissiveIntensity={0.2} />
-             </mesh>
-          ))}
-        </group>
-      );
+      return <BloomTreeModel seed={seedValue} palette={palette} />;
     }
 
     if (growthStage === 'withered') {
-      return (
-        <group rotation={[1.2, 0, 0.3]}>
-          <mesh position={[0, 0.5, 0]}>
-            <cylinderGeometry args={[0.03, 0.06, 1.2, 6]} />
-            <meshStandardMaterial color="#8d6e63" metalness={0} roughness={1} />
-          </mesh>
-          <mesh position={[-0.3, 0.8, 0]} rotation={[0, 0, 1]}>
-            <capsuleGeometry args={[0.08, 0.3, 2, 6]} />
-            <meshStandardMaterial color="#795548" />
-          </mesh>
-        </group>
-      );
+      return <WitheredTreeModel palette={palette} />;
     }
 
     if (isGrowth) {
-      const height = 0.5 + (progress * 0.012);
-      return (
-        <group>
-          <mesh position={[0, height / 2, 0]}>
-            <cylinderGeometry args={[0.04, 0.06, height, 8]} />
-            <meshStandardMaterial color="#81c784" />
-          </mesh>
-          <mesh position={[0.2, height, 0]} rotation={[0.4, 0, -0.6]}>
-            <capsuleGeometry args={[0.1, 0.3, 4, 8]} />
-            <meshStandardMaterial color="#66bb6a" />
-          </mesh>
-          <mesh position={[-0.2, height - 0.2, 0]} rotation={[-0.4, 0, 0.6]}>
-            <capsuleGeometry args={[0.1, 0.3, 4, 8]} />
-            <meshStandardMaterial color="#66bb6a" />
-          </mesh>
-        </group>
-      );
+      return <SproutTreeModel progress={progress} palette={palette} />;
     }
 
-    // Seed
-    return (
-      <mesh position={[0, 0.15, 0]}>
-        <sphereGeometry args={[0.18, 16, 16]} />
-        <meshStandardMaterial color={hovered ? "#a1887f" : "#8d6e63"} roughness={0.8} />
-      </mesh>
-    );
+    return <SeedModel hovered={hovered} palette={palette} />;
   };
 
   return (
@@ -134,6 +841,28 @@ function Plant3D({ note, position, onClick }: { note: SeedNote; position: [numbe
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
     >
+      {(needsWater || selected || routeActive || nourished) && (
+        <mesh ref={haloRef} rotation={[Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+          <torusGeometry args={[nourished ? 0.82 : selected ? 0.7 : routeActive ? 0.62 : 0.52, nourished ? 0.035 : 0.025, 8, 48]} />
+          <meshStandardMaterial
+            color={nourished ? palette.water : selected ? '#ffffff' : routeActive ? palette.sparkles : palette.connection}
+            emissive={nourished ? palette.water : selected ? '#ffffff' : routeActive ? palette.sparkles : palette.connection}
+            emissiveIntensity={nourished ? 1.1 : selected ? 0.8 : 0.45}
+            transparent
+            opacity={0.54}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+      {nourished && (
+        <Sparkles count={18} scale={2.4} size={4} speed={1.8} opacity={0.85} color={palette.water} />
+      )}
+      {needsWater && (
+        <mesh position={[0, 0.72, 0]} scale={[0.16, 0.16, 0.16]}>
+          <sphereGeometry args={[1, 16, 16]} />
+          <meshStandardMaterial color={palette.water} emissive={palette.water} emissiveIntensity={0.45} roughness={0.35} />
+        </mesh>
+      )}
       <group ref={meshRef}>
         {renderModel()}
       </group>
@@ -141,7 +870,8 @@ function Plant3D({ note, position, onClick }: { note: SeedNote; position: [numbe
   );
 }
 
-function ConnectionLine({ start, end }: { start: [number, number, number]; end: [number, number, number] }) {
+function ConnectionLine({ start, end, color }: { start: [number, number, number]; end: [number, number, number]; color: string }) {
+  const pulseRef = useRef<THREE.Group>(null);
   const points = useMemo(() => {
     const startVec = new THREE.Vector3(...start);
     const endVec = new THREE.Vector3(...end);
@@ -155,13 +885,24 @@ function ConnectionLine({ start, end }: { start: [number, number, number]; end: 
     const curve = new THREE.QuadraticBezierCurve3(startVec, midPoint, endVec);
     return curve.getPoints(20);
   }, [start, end]);
+
+  useFrame((state) => {
+    if (pulseRef.current) {
+      const pulse = 0.5 + Math.sin(state.clock.elapsedTime * 1.6) * 0.5;
+      pulseRef.current.children.forEach((child) => {
+        if (child instanceof THREE.Line && child.material instanceof THREE.LineBasicMaterial) {
+          child.material.opacity = 0.12 + pulse * 0.18;
+        }
+      });
+    }
+  });
   
   return (
-    <group>
+    <group ref={pulseRef}>
       <Line
         points={points}
-        color="#81c784"
-        opacity={0.4}
+        color={color}
+        opacity={0.32}
         transparent
         lineWidth={1.5}
       />
@@ -176,7 +917,7 @@ function ConnectionLine({ start, end }: { start: [number, number, number]; end: 
   );
 }
 
-function Atmosphere({ isDay }: { isDay: boolean }) {
+function Atmosphere({ isDay, palette }: { isDay: boolean; palette: GardenPalette }) {
   const atmosphereRef = useRef<THREE.Mesh>(null);
 
   useFrame((state) => {
@@ -195,23 +936,215 @@ function Atmosphere({ isDay }: { isDay: boolean }) {
     <mesh ref={atmosphereRef}>
       <sphereGeometry args={[PLANET_RADIUS + 1, 64, 64]} />
       <meshStandardMaterial 
-        color={isDay ? "#81c784" : "#40916c"} 
+        color={palette.atmosphere} 
         transparent 
-        opacity={0.3} 
+        opacity={0.26} 
         side={THREE.BackSide} 
       />
     </mesh>
   );
 }
 
-export default function Garden3D({ notes, onSelectNote }: { notes: SeedNote[]; onSelectNote: (id: string) => void }) {
-  const isDay = useMemo(() => {
-    const hour = new Date().getHours();
-    return hour >= 6 && hour < 19;
+function PlanetSystem({
+  plants,
+  connections,
+  isDay,
+  palette,
+  selectedId,
+  routeIds,
+  recentlyWateredId,
+  compact,
+  controlsRef,
+  onSelectNote,
+}: {
+  plants: { note: SeedNote; position: [number, number, number] }[];
+  connections: { start: [number, number, number]; end: [number, number, number]; id: string }[];
+  isDay: boolean;
+  palette: GardenPalette;
+  selectedId: string | null;
+  routeIds: string[];
+  recentlyWateredId?: string | null;
+  compact: boolean;
+  controlsRef: MutableRefObject<any>;
+  onSelectNote: (id: string) => void;
+}) {
+  const planetRef = useRef<THREE.Group>(null);
+  const { camera } = useThree();
+  const selectedPlant = useMemo(() => plants.find(plant => plant.note.id === selectedId), [plants, selectedId]);
+
+  useFrame((state, delta) => {
+    if (planetRef.current) {
+      if (!selectedId) {
+        planetRef.current.rotation.y += delta * 0.025;
+        planetRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.45) * 0.015;
+        if (controlsRef.current && controlsRef.current.target.lengthSq() > 0.01) {
+          const damping = 1 - Math.exp(-delta * 2.4);
+          controlsRef.current.target.lerp(new THREE.Vector3(0, 0, 0), damping);
+          controlsRef.current.update();
+        }
+      }
+
+      if (selectedPlant) {
+        const worldTarget = planetRef.current.localToWorld(new THREE.Vector3(...selectedPlant.position));
+        const normal = worldTarget.clone().normalize();
+        const cameraTarget = worldTarget.clone().add(normal.multiplyScalar(compact ? 19 : 17)).add(new THREE.Vector3(0, compact ? 3 : 4, 0));
+        const damping = 1 - Math.exp(-delta * 3.5);
+
+        camera.position.lerp(cameraTarget, damping);
+        if (controlsRef.current) {
+          controlsRef.current.target.lerp(worldTarget, damping);
+          controlsRef.current.update();
+        } else {
+          camera.lookAt(worldTarget);
+        }
+      }
+    }
+  });
+
+  return (
+    <group ref={planetRef}>
+      <PlanetSurface isDay={isDay} palette={palette} />
+      
+      <Atmosphere isDay={isDay} palette={palette} />
+
+      <Sparkles 
+        count={compact ? (isDay ? 45 : 120) : (isDay ? 100 : 300)} 
+        scale={PLANET_RADIUS * 3.5} 
+        size={5} 
+        speed={0.4} 
+        opacity={0.6} 
+        color={palette.sparkles} 
+      />
+
+      {connections.map((connection) => (
+        <ConnectionLine
+          key={connection.id}
+          start={connection.start}
+          end={connection.end}
+          color={palette.connection}
+        />
+      ))}
+      
+      {plants.map(({ note, position }) => (
+        <Plant3D 
+          key={note.id} 
+          note={note} 
+          position={position} 
+          palette={palette}
+          selected={selectedId === note.id}
+          needsWater={wateringDue(note) && note.growthStage !== 'bloom' && !note.paused}
+          nourished={recentlyWateredId === note.id}
+          routeActive={routeIds.includes(note.id)}
+          dimmed={routeIds.length > 0 && !routeIds.includes(note.id)}
+          onClick={() => onSelectNote(note.id)} 
+        />
+      ))}
+    </group>
+  );
+}
+
+function progressFor(note: SeedNote) {
+  if (!note.tasks.length) return 0;
+  return Math.round((note.tasks.filter(task => task.completed).length / note.tasks.length) * 100);
+}
+
+function nextOpenTask(note: SeedNote) {
+  return note.tasks.find(task => !task.completed)?.text || 'Define el siguiente paso';
+}
+
+function formatDue(date?: number) {
+  if (!date) return 'Sin fecha';
+  return new Date(date).toLocaleDateString('es', { day: 'numeric', month: 'short' });
+}
+
+export default function Garden3D({
+  notes,
+  theme,
+  onSelectNote,
+  onReviewNote,
+  onFocusNote,
+  recentlyWateredId,
+}: {
+  notes: SeedNote[];
+  theme: Theme;
+  onSelectNote: (id: string) => void;
+  onReviewNote?: (id: string) => void;
+  onFocusNote?: (id: string) => void;
+  recentlyWateredId?: string | null;
+}) {
+  const palette = GARDEN_PALETTES[theme];
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<GardenFilter>('all');
+  const [routeIds, setRouteIds] = useState<string[]>([]);
+  const [compact3D, setCompact3D] = useState(() => typeof window !== 'undefined' && window.innerWidth < 760);
+  const controlsRef = useRef<any>(null);
+
+  useEffect(() => {
+    const update = () => setCompact3D(window.innerWidth < 760);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
   }, []);
 
+  const isDay = useMemo(() => {
+    if (theme === 'night') return false;
+    const hour = new Date().getHours();
+    return hour >= 6 && hour < 19;
+  }, [theme]);
+
+  const stats = useMemo(() => ({
+    water: notes.filter(note => wateringDue(note) && note.growthStage !== 'bloom' && !note.paused).length,
+    progress: notes.filter(note => note.isGrowth && note.growthStage !== 'bloom' && !note.paused).length,
+    harvest: notes.filter(note => note.growthStage === 'bloom').length,
+  }), [notes]);
+
+  const isRaining = stats.water >= 3 || (stats.progress >= 4 && stats.water / stats.progress >= 0.45);
+  const skyColor = isDay ? (isRaining ? '#6fa6c9' : palette.skyDay) : palette.skyNight;
+  const weatherCopy = isRaining
+    ? 'Lluvia suave: revisa solo lo esencial'
+    : isDay
+      ? 'Sol activo: buen momento para avanzar'
+      : 'Noche tranquila: enfoca sin ruido';
+
+  const visibleNotes = useMemo(() => {
+    return notes.filter((note) => {
+      if (filter === 'water') return wateringDue(note) && note.growthStage !== 'bloom' && !note.paused;
+      if (filter === 'progress') return note.isGrowth && note.growthStage !== 'bloom' && !note.paused;
+      if (filter === 'harvest') return note.growthStage === 'bloom';
+      return true;
+    });
+  }, [filter, notes]);
+
+  const routeCandidates = useMemo(() => {
+    const picked: SeedNote[] = [];
+    const add = (note?: SeedNote) => {
+      if (note && !picked.some(item => item.id === note.id)) picked.push(note);
+    };
+
+    add(notes.find(note => wateringDue(note) && note.growthStage !== 'bloom' && !note.paused));
+    add(notes.find(note => note.isGrowth && note.growthStage !== 'bloom' && !note.paused && note.tasks.some(task => !task.completed)));
+    add([...notes]
+      .filter(note => note.dueDate && note.growthStage !== 'bloom' && !note.paused)
+      .sort((a, b) => (a.dueDate || 0) - (b.dueDate || 0))[0]);
+
+    if (isRaining) {
+      const rainyEssentials = [...notes]
+        .filter(note => wateringDue(note) && note.growthStage !== 'bloom' && !note.paused)
+        .sort((a, b) => daysSince(b.lastWateredAt || b.createdAt) - daysSince(a.lastWateredAt || a.createdAt));
+      return rainyEssentials.slice(0, 3);
+    }
+
+    return picked.slice(0, 3);
+  }, [isRaining, notes]);
+
+  const selectedNote = useMemo(() => notes.find(note => note.id === selectedId) || null, [notes, selectedId]);
+
+  useEffect(() => {
+    if (selectedId && !notes.some(note => note.id === selectedId)) setSelectedId(null);
+  }, [notes, selectedId]);
+
   const plants = useMemo(() => {
-    return notes.map((note) => {
+    return visibleNotes.map((note) => {
       // Spherical distribution
       const seed = note.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
       const phi = Math.acos(-1 + (2 * (seed % 100)) / 100);
@@ -223,65 +1156,67 @@ export default function Garden3D({ notes, onSelectNote }: { notes: SeedNote[]; o
       
       return { note, position: [x, y, z] as [number, number, number] };
     });
-  }, [notes]);
+  }, [visibleNotes]);
+
+  const connections = useMemo(() => {
+    const byId = new Map(plants.map((plant) => [plant.note.id, plant.position]));
+    return plants.flatMap(({ note, position }) => {
+      return (note.connections || [])
+        .map((targetId) => {
+          const targetPosition = byId.get(targetId);
+          return targetPosition ? { start: position, end: targetPosition, id: `${note.id}-${targetId}` } : null;
+        })
+        .filter((connection): connection is { start: [number, number, number]; end: [number, number, number]; id: string } => Boolean(connection));
+    });
+  }, [plants]);
 
   return (
-    <div className={`w-full h-[75vh] rounded-[3rem] overflow-hidden shadow-2xl relative border-[12px] border-white/10 backdrop-blur-md transition-colors duration-1000 ${isDay ? 'bg-[#caf0f8]' : 'bg-[#0a0a0a]'}`}>
+    <div className="w-full h-[68vh] min-h-[520px] sm:h-[75vh] rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-2xl relative border-[8px] sm:border-[12px] border-white/10 backdrop-blur-md transition-colors duration-1000">
       <Canvas shadows camera={{ position: [40, 30, 40], fov: 45 }}>
-        <color attach="background" args={[isDay ? '#caf0f8' : '#050505']} />
+        <color attach="background" args={[skyColor]} />
         
-        <ambientLight intensity={isDay ? 1.2 : 0.8} />
-        <pointLight position={[50, 50, 50]} intensity={2} castShadow />
-        <directionalLight position={[-50, 50, -50]} intensity={1.5} color={isDay ? "#ffffff" : "#48cae4"} />
-        <hemisphereLight intensity={1} color="#ffffff" groundColor="#000000" />
+        <ambientLight intensity={isDay ? (isRaining ? 1 : 1.28) : 0.8} />
+        <pointLight position={[50, 50, 50]} intensity={isRaining ? 1.25 : 2} castShadow />
+        <directionalLight position={[-50, 50, -50]} intensity={isRaining ? 0.95 : 1.5} color={isDay ? "#fff1c7" : "#48cae4"} />
+        <hemisphereLight intensity={1} color={isRaining ? "#cfefff" : "#ffffff"} groundColor="#000000" />
         
-        {!isDay && <Stars radius={150} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />}
+        {isDay && <DaySun raining={isRaining} />}
+        {!isDay && (
+          <>
+            <Stars radius={150} depth={50} count={compact3D ? 1800 : 5000} factor={4} saturation={0} fade speed={1} />
+            <CompanionMoon palette={palette} />
+          </>
+        )}
+        {isRaining && (
+          <>
+            <RainClouds palette={palette} />
+            <RainField palette={palette} compact={compact3D} />
+          </>
+        )}
         
-        <group>
-          {/* Planet Core */}
-          <mesh receiveShadow castShadow>
-            <sphereGeometry args={[PLANET_RADIUS, 64, 64]} />
-            <meshStandardMaterial 
-              color={isDay ? "#4caf50" : "#1b4332"} 
-              emissive={isDay ? "#2e7d32" : "#1b4332"} 
-              emissiveIntensity={isDay ? 0.3 : 0.8}
-              roughness={0.7} 
-              metalness={0.1} 
-            />
-          </mesh>
-          
-          {/* Atmosphere Glow */}
-          <Atmosphere isDay={isDay} />
-
-          <Sparkles 
-            count={isDay ? 100 : 300} 
-            scale={PLANET_RADIUS * 3.5} 
-            size={5} 
-            speed={0.4} 
-            opacity={0.6} 
-            color="#ffffff" 
-          />
-          
-          {/* Neural Seeds (Plants/Trees) */}
-          {plants.map(({ note, position }) => (
-            <Plant3D 
-              key={note.id} 
-              note={note} 
-              position={position} 
-              onClick={() => onSelectNote(note.id)} 
-            />
-          ))}
-        </group>
+        <PlanetSystem
+          plants={plants}
+          connections={connections}
+          isDay={isDay}
+          palette={palette}
+          selectedId={selectedId}
+          routeIds={routeIds}
+          recentlyWateredId={recentlyWateredId}
+          compact={compact3D}
+          controlsRef={controlsRef}
+          onSelectNote={(id) => setSelectedId(id)}
+        />
 
         <Suspense fallback={null}>
           <Environment preset={isDay ? "park" : "city"} />
         </Suspense>
 
         <OrbitControls 
+          ref={controlsRef}
           enablePan={false} 
           enableZoom={true} 
           enableRotate={true}
-          autoRotate
+          autoRotate={!selectedId}
           autoRotateSpeed={0.5}
           minDistance={25}
           maxDistance={90}
@@ -289,24 +1224,131 @@ export default function Garden3D({ notes, onSelectNote }: { notes: SeedNote[]; o
         />
       </Canvas>
       
-      <div className="absolute top-12 left-12 pointer-events-none">
+      <div className="absolute top-5 left-5 sm:top-10 sm:left-10 pointer-events-none max-w-[55%]">
         <div className="flex items-center gap-3 mb-2">
-          <div className="w-3 h-3 rounded-full bg-blue-400 shadow-[0_0_12px_rgba(96,165,250,0.6)] animate-pulse" />
-          <p className="text-[11px] font-black uppercase tracking-[0.4em] text-blue-200/40">Galaxy Garden</p>
+          <div className={`w-3 h-3 rounded-full ${isRaining ? 'bg-sky-300 shadow-[0_0_12px_rgba(125,211,252,0.7)]' : 'bg-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.7)]'} animate-pulse`} />
+          <p className="text-[11px] font-black uppercase tracking-[0.4em] text-white/45">Galaxy Garden</p>
         </div>
-        <h4 className="text-5xl font-serif text-white tracking-tight leading-none drop-shadow-xl">Planeta<br/><span className="text-green-400/50 italic">Cerebro</span></h4>
+        <h4 className="text-3xl sm:text-5xl font-serif text-white tracking-tight leading-none drop-shadow-xl">
+          {palette.label}<br/><span className={`${isRaining ? 'text-sky-200/70' : 'text-yellow-200/70'} italic`}>{isRaining ? 'Lluvia' : 'Vivo'}</span>
+        </h4>
+        <p className="mt-3 hidden max-w-xs text-xs font-semibold leading-relaxed text-white/65 drop-shadow sm:block">{weatherCopy}</p>
       </div>
 
-      <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-8 bg-white/10 backdrop-blur-2xl px-10 py-5 rounded-[2rem] border border-white/20 shadow-2xl pointer-events-none text-white/80">
-        <div className="flex flex-col items-center">
-          <span className="text-[9px] font-black uppercase tracking-widest mb-1 opacity-50">Exploración</span>
-          <span className="text-[10px] font-bold">ÓRBITA 360°</span>
+      <div className="absolute top-5 right-5 sm:top-10 sm:right-10 grid grid-cols-3 gap-2 text-white">
+        {[
+          { label: 'Riego', value: stats.water },
+          { label: 'Activas', value: stats.progress },
+          { label: 'Cosechas', value: stats.harvest },
+        ].map(item => (
+          <div key={item.label} className="rounded-2xl border border-white/15 bg-black/20 backdrop-blur-xl px-3 py-2 text-center shadow-xl">
+            <p className="text-lg font-black leading-none">{item.value}</p>
+            <p className="mt-1 text-[8px] font-black uppercase tracking-[0.22em] text-white/55">{item.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="absolute left-4 right-4 bottom-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-[1.75rem] border border-white/20 bg-black/25 p-2 shadow-2xl backdrop-blur-2xl text-white">
+        <div className="grid grid-cols-4 gap-1">
+          {[
+            { id: 'all', label: 'Todo' },
+            { id: 'water', label: 'Riego' },
+            { id: 'progress', label: 'Activas' },
+            { id: 'harvest', label: 'Cosechas' },
+          ].map(item => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setFilter(item.id as GardenFilter);
+                setRouteIds([]);
+              }}
+              className={`rounded-2xl px-3 py-3 text-[10px] font-black uppercase tracking-[0.18em] transition ${filter === item.id ? 'bg-white text-slate-950' : 'text-white/65 hover:bg-white/10 hover:text-white'}`}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
-        <div className="w-px h-8 bg-white/20" />
-        <div className="flex flex-col items-center">
-          <span className="text-[9px] font-black uppercase tracking-widest mb-1 opacity-50">Enfoque</span>
-          <span className="text-[10px] font-bold">CLICK EN IDEA</span>
+        <button
+          type="button"
+          onClick={() => {
+            setFilter('all');
+            setRouteIds(routeIds.length ? [] : routeCandidates.map(note => note.id));
+          }}
+          disabled={routeCandidates.length === 0}
+          className={`rounded-2xl px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] transition ${routeIds.length ? 'bg-[var(--accent)] text-white' : 'bg-white/10 text-white hover:bg-white/18'} disabled:opacity-40 disabled:cursor-not-allowed`}
+        >
+          {isRaining ? 'Ruta suave' : 'Ruta de hoy'}
+        </button>
+      </div>
+
+      {selectedNote && (
+        <div className="absolute left-4 right-4 bottom-28 sm:left-auto sm:right-8 sm:top-28 sm:bottom-auto sm:w-80 rounded-[2rem] border border-white/20 bg-white/92 p-5 shadow-2xl backdrop-blur-2xl text-[var(--earth)]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[var(--text-muted)]">
+                {wateringDue(selectedNote) ? 'Necesita revisión' : selectedNote.growthStage === 'bloom' ? 'Cosechada' : 'En crecimiento'}
+              </p>
+              <h5 className="mt-2 text-2xl font-serif font-bold leading-tight">{selectedNote.title}</h5>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedId(null)}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--paper-soft)] text-lg font-black text-[var(--text-muted)]"
+              aria-label="Cerrar detalle"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-2xl bg-[var(--paper-soft)] px-2 py-3">
+              <p className="text-lg font-black">{progressFor(selectedNote)}%</p>
+              <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Avance</p>
+            </div>
+            <div className="rounded-2xl bg-[var(--paper-soft)] px-2 py-3">
+              <p className="text-lg font-black">{selectedNote.tasks.filter(task => !task.completed).length}</p>
+              <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Pasos</p>
+            </div>
+            <div className="rounded-2xl bg-[var(--paper-soft)] px-2 py-3">
+              <p className="text-sm font-black leading-5">{formatDue(selectedNote.dueDate)}</p>
+              <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Fecha</p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-[var(--soil)]/10 bg-white/70 p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--text-muted)]">Siguiente paso</p>
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--earth)]">{nextOpenTask(selectedNote)}</p>
+          </div>
+
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => onSelectNote(selectedNote.id)}
+              className="rounded-2xl bg-[var(--earth)] px-3 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white"
+            >
+              Abrir
+            </button>
+            <button
+              type="button"
+              onClick={() => onReviewNote?.(selectedNote.id)}
+              className="rounded-2xl bg-[var(--sage)] px-3 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white"
+            >
+              Revisar
+            </button>
+            <button
+              type="button"
+              onClick={() => onFocusNote?.(selectedNote.id)}
+              className="rounded-2xl bg-[var(--accent)] px-3 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white"
+            >
+              Enfocar
+            </button>
+          </div>
         </div>
+      )}
+
+      <div className="absolute left-5 bottom-24 hidden text-[10px] font-bold uppercase tracking-[0.22em] text-white/45 sm:block">
+        {isRaining ? 'La lluvia no riega sola: reduce el ruido y prioriza revisiones' : 'Arrastra para explorar · toca una planta para actuar'}
       </div>
     </div>
   );
