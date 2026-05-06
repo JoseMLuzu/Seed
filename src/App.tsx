@@ -51,7 +51,8 @@ import {
   Inbox,
   Target,
   Download,
-  Sparkles
+  Sparkles,
+  User
 } from 'lucide-react';
 import { Theme, SeedNote } from './types';
 import { addFocusMinutes, cultivateInboxNote as cultivateNote, DAY_MS, daysSince, toggleTaskForNote, wateringDue, waterNote as waterSeedNote } from './seedLogic';
@@ -59,11 +60,21 @@ import { loadNotesFromDb, migrateLocalNotesToDb, saveNotesToDb } from './storage
 
 const Garden3D = lazy(() => import('./components/Garden3D'));
 
+type AccountProfile = {
+  name: string;
+  email: string;
+  role: string;
+};
+
 const THEMES: { id: Theme; label: string; icon: string }[] = [
   { id: 'earth', label: 'Pradera', icon: '🌾' },
   { id: 'forest', label: 'Bosque', icon: '🌲' },
   { id: 'bloom', label: 'Floración', icon: '🌸' },
   { id: 'night', label: 'Nocturno', icon: '🌙' },
+  { id: 'jungle', label: 'Jungla', icon: '🌴' },
+  { id: 'alien', label: 'Alien', icon: '🪐' },
+  { id: 'desert', label: 'Desierto', icon: '🌵' },
+  { id: 'arctic', label: 'Ártico', icon: '❄️' },
 ];
 
 const SEED_TYPES: { id: NonNullable<SeedNote['seedType']>; label: string; task: string }[] = [
@@ -197,6 +208,13 @@ function getWorkflowStep(notes: SeedNote[], wateredToday: boolean) {
   if (notes.some(note => !note.inbox && !note.paused && note.isGrowth && note.growthStage !== 'bloom' && note.tasks.some(task => !task.completed))) return 'focus';
   if (notes.some(note => note.growthStage === 'bloom' && !note.reflection)) return 'harvest';
   return 'plant';
+}
+
+function getAccountInitials(name: string, email: string) {
+  const source = name.trim() || email.trim() || 'Jardinero Digital';
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
 function CalendarView({ 
@@ -406,7 +424,7 @@ function TodayView({
           <button
             onClick={onQuickCapture}
             disabled={!quickNote.trim()}
-            className="bg-[var(--sage)] disabled:opacity-40 text-white rounded-2xl px-5 py-3 font-black flex items-center justify-center gap-2 shadow-lg shadow-[var(--sage)]/20 active:scale-95 transition-all"
+            className="bg-[var(--sage)] disabled:opacity-40 text-white rounded-2xl px-5 py-3 font-black flex items-center justify-center gap-2 shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
           >
             <Plus size={18} /> Plantar
           </button>
@@ -437,7 +455,7 @@ function TodayView({
             <button
               key={step.id}
               onClick={() => onNavigate(step.view)}
-              className={`rounded-2xl border p-3 text-left transition-all ${workflowStep === step.id ? 'bg-[var(--sage)] text-white border-[var(--sage)] shadow-lg shadow-[var(--sage)]/20' : 'bg-[var(--surface-strong)] text-[var(--earth)] border-[var(--border)] hover:bg-[var(--surface-hover)]'}`}
+              className={`rounded-2xl border p-3 text-left soft-interaction ${workflowStep === step.id ? 'bg-[var(--sage)] text-white border-[var(--sage)] shadow-lg shadow-[var(--sage)]/20' : 'bg-[var(--surface-strong)] text-[var(--earth)] border-[var(--border)] hover:bg-[var(--surface-hover)]'}`}
             >
               <div className="flex items-center justify-between gap-2">
                 <step.icon size={17} />
@@ -473,7 +491,7 @@ function TodayView({
           <button
             onClick={() => firstWatering ? onOpenWatering(firstWatering.id) : undefined}
             disabled={!firstWatering || wateredToday}
-            className="rounded-2xl bg-[var(--sage)] disabled:bg-[var(--surface-strong)] disabled:text-[var(--text-muted)] text-white px-5 py-3 font-black shadow-lg shadow-[var(--sage)]/20 active:scale-95 transition-all"
+            className="rounded-2xl bg-[var(--sage)] disabled:bg-[var(--surface-strong)] disabled:text-[var(--text-muted)] text-white px-5 py-3 font-black shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
           >
             {wateredToday ? 'Hecho por hoy' : firstWatering ? 'Regar ahora' : 'Sin riego pendiente'}
           </button>
@@ -493,7 +511,7 @@ function TodayView({
               <button
                 key={note.id}
                 onClick={() => onOpenWatering(note.id)}
-                className="w-full text-left rounded-2xl bg-[var(--bg-app)] hover:bg-[var(--surface-strong)] border border-[var(--border)] p-4 transition-all group"
+                className="w-full text-left rounded-2xl bg-[var(--bg-app)] hover:bg-[var(--surface-strong)] border border-[var(--border)] p-4 soft-interaction group"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -505,7 +523,7 @@ function TodayView({
                       <p className="text-xs text-[var(--text-muted)] mt-2 line-clamp-1">{note.lastWateringNote}</p>
                     )}
                   </div>
-                  <span className="h-9 w-9 rounded-full bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                  <span className="h-9 w-9 rounded-full bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center shadow-sm transition-colors group-hover:bg-[var(--surface-hover)]">
                     <Droplets size={17} />
                   </span>
                 </div>
@@ -534,7 +552,7 @@ function TodayView({
                   </div>
                   <button
                     onClick={() => onToggleTask(note.id, task.id)}
-                    className="text-xs font-black text-white bg-[var(--sage)] px-3 py-2 rounded-xl active:scale-95 transition-transform"
+                    className="text-xs font-black text-white bg-[var(--sage)] px-3 py-2 rounded-xl active:translate-y-px soft-interaction"
                   >
                     Hecho
                   </button>
@@ -670,7 +688,7 @@ function HarvestView({ notes, onSelectNote }: { notes: SeedNote[]; onSelectNote:
             <p className="text-sm text-[var(--text-muted)] mt-2">Completa los pasos de una idea para guardarla aquí.</p>
           </div>
         ) : harvests.map(note => (
-          <button key={note.id} onClick={() => onSelectNote(note.id)} className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-5 text-left shadow-sm hover:shadow-xl transition-all">
+          <button key={note.id} onClick={() => onSelectNote(note.id)} className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-5 text-left shadow-sm hover:shadow-md soft-interaction">
             <p className="text-[10px] font-black uppercase tracking-widest text-green-600 mb-2">Cosechada</p>
             <h4 className="font-serif text-2xl font-black text-[var(--earth)]">{note.title}</h4>
             <p className="text-sm text-[var(--text-muted)] mt-2 line-clamp-2">{note.reflection || note.content}</p>
@@ -1163,6 +1181,13 @@ export default function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('seed-notifications') === 'true');
   const [defaultWateringInterval, setDefaultWateringInterval] = useState(() => Number(localStorage.getItem('seed-default-watering') || 1));
   const [reminderHour, setReminderHour] = useState(() => Number(localStorage.getItem('seed-reminder-hour') || 9));
+  const [account, setAccount] = useState<AccountProfile>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('seed-account') || '{"name":"Jardinero Digital","email":"jose@garden.com","role":"Cuidador de ideas"}');
+    } catch {
+      return { name: 'Jardinero Digital', email: 'jose@garden.com', role: 'Cuidador de ideas' };
+    }
+  });
   const [harvestNoteId, setHarvestNoteId] = useState<string | null>(null);
   const [recentlyWateredId, setRecentlyWateredId] = useState<string | null>(null);
   const [wateringRitual, setWateringRitual] = useState<{ lastDate: string; streak: number }>(() => {
@@ -1174,6 +1199,7 @@ export default function App() {
   });
   const todayKey = format(Date.now(), 'yyyy-MM-dd');
   const wateredToday = wateringRitual.lastDate === todayKey;
+  const accountInitials = getAccountInitials(account.name, account.email);
 
   // Persistence
   useEffect(() => {
@@ -1211,6 +1237,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('seed-reminder-hour', String(reminderHour));
   }, [reminderHour]);
+
+  useEffect(() => {
+    localStorage.setItem('seed-account', JSON.stringify(account));
+  }, [account]);
 
   useEffect(() => {
     localStorage.setItem('seed-watering-ritual', JSON.stringify(wateringRitual));
@@ -1615,9 +1645,8 @@ export default function App() {
       {/* Sidebar Navigation */}
       <aside className="w-full md:w-72 max-h-[46vh] md:max-h-none bg-[var(--sidebar-bg)]/80 backdrop-blur-xl border-b md:border-b-0 md:border-r border-[var(--border)] p-4 md:p-8 flex flex-col shrink-0 overflow-y-auto app-scrollbar z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.02)_inset]">
         <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          whileHover={{ scale: 1.05 }}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
           className="flex items-center gap-4 mb-6 md:mb-12 group cursor-pointer"
         >
           <div className="relative">
@@ -1644,12 +1673,10 @@ export default function App() {
               { id: '3D', label: 'Ecosistema 3D', icon: Box },
               { id: 'calendar', label: 'Ciclo Vital', icon: CalendarIcon },
             ].map((item) => (
-              <motion.button 
+              <button 
                 key={item.id}
-                whileHover={{ x: 4 }}
-                whileTap={{ scale: 0.98 }}
                 onClick={() => setView(item.id as any)}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all relative group ${
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl soft-interaction relative group ${
                   view === item.id 
                     ? 'bg-[var(--surface-strong)] shadow-xl shadow-black/5 text-[var(--sage)] ring-1 ring-black/5' 
                     : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'
@@ -1663,7 +1690,7 @@ export default function App() {
                 )}
                 <item.icon size={18} className={view === item.id ? 'text-[var(--sage)]' : 'text-[var(--earth)] opacity-70'} />
                 <span className="font-bold tracking-tight text-sm">{item.label}</span>
-              </motion.button>
+              </button>
             ))}
           </div>
         </div>
@@ -1671,45 +1698,41 @@ export default function App() {
         <div className="space-y-4 mb-8 md:mb-12">
           <p className="text-[10px] uppercase font-black text-[var(--seed-accent)] px-4 mb-2 tracking-[0.25em] opacity-50">Filtros</p>
           <div className="space-y-1">
-            <motion.button 
-              whileHover={{ x: 4 }}
+            <button 
               onClick={() => { setFilterStage('all'); setSelectedNoteId(null); setView('garden'); }}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all ${filterStage === 'all' && view === 'garden' ? 'bg-[var(--surface-strong)] shadow-sm text-[var(--sage)] ring-1 ring-black/5' : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl soft-interaction ${filterStage === 'all' && view === 'garden' ? 'bg-[var(--surface-strong)] shadow-sm text-[var(--sage)] ring-1 ring-black/5' : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'}`}
             >
               <Palette size={18} className="opacity-70" />
               <span className="font-bold tracking-tight text-sm">Colección Total</span>
-            </motion.button>
+            </button>
             
             {[
               { id: 'seed', label: 'Semillas', color: 'var(--seed-accent)' },
               { id: 'sprout', label: 'Brotes', color: 'var(--sage)' },
               { id: 'bloom', label: 'Cosechas', color: 'var(--earth)' },
             ].map((stage) => (
-              <motion.button 
+              <button 
                 key={stage.id}
-                whileHover={{ x: 4 }}
                 onClick={() => { setFilterStage(stage.id as any); setSelectedNoteId(null); }}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all ${filterStage === stage.id ? 'bg-[var(--surface-strong)] shadow-sm text-[var(--sage)] ring-1 ring-black/5' : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'}`}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl soft-interaction ${filterStage === stage.id ? 'bg-[var(--surface-strong)] shadow-sm text-[var(--sage)] ring-1 ring-black/5' : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'}`}
               >
                 <div 
                   className="w-2.5 h-2.5 rounded-full shadow-inner" 
                   style={{ backgroundColor: stage.color }} 
                 />
                 <span className="font-bold tracking-tight text-sm">{stage.label}</span>
-              </motion.button>
+              </button>
             ))}
           </div>
         </div>
 
-        <motion.button 
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+        <button 
           onClick={() => setIsAdding(true)}
-          className="mb-12 bg-[var(--sage)] hover:bg-[var(--ink)] text-white w-full py-4.5 rounded-[2rem] font-black shadow-2xl shadow-[var(--sage)]/30 transition-all items-center justify-center gap-3 hidden md:flex active:shadow-inner"
+          className="mb-12 bg-[var(--sage)] hover:bg-[var(--ink)] text-white w-full py-4.5 rounded-[2rem] font-black shadow-2xl shadow-[var(--sage)]/30 soft-interaction items-center justify-center gap-3 hidden md:flex active:translate-y-px active:shadow-inner"
         >
           <Plus size={20} strokeWidth={3} />
           <span className="tracking-tight">Plantar Idea</span>
-        </motion.button>
+        </button>
 
         {upcomingDeadlines.length > 0 && (
           <div className="mb-12">
@@ -1718,11 +1741,10 @@ export default function App() {
             </p>
             <div className="space-y-3">
               {upcomingDeadlines.map(note => (
-                <motion.button 
+                <button 
                   key={note.id}
-                  whileHover={{ y: -2, scale: 1.02 }}
                   onClick={() => setSelectedNoteId(note.id)}
-                  className="w-full text-left p-4 rounded-3xl bg-[var(--surface-soft)] hover:bg-[var(--surface-strong)] shadow-sm hover:shadow-xl hover:shadow-black/5 transition-all group border border-[var(--border)]"
+                  className="w-full text-left p-4 rounded-3xl bg-[var(--surface-soft)] hover:bg-[var(--surface-strong)] shadow-sm hover:shadow-md hover:shadow-black/5 soft-interaction group border border-[var(--border)]"
                 >
                   <p className="text-xs font-serif font-black text-[var(--earth)] truncate group-hover:text-[var(--sage)] transition-colors">{note.title}</p>
                   <div className="flex items-center gap-2 mt-2">
@@ -1737,39 +1759,20 @@ export default function App() {
                       {new Date(note.dueDate!).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                     </span>
                   </div>
-                </motion.button>
+                </button>
               ))}
             </div>
           </div>
         )}
 
         <div className="mt-auto space-y-6">
-          <div className="p-4 bg-[var(--surface-soft)] rounded-3xl border border-[var(--border)]">
-            <p className="text-[9px] uppercase font-black text-[var(--seed-accent)] mb-4 tracking-[0.25em] opacity-60 px-1">Ecosistemas</p>
-            <div className="flex justify-between items-center bg-black/5 p-1 rounded-2xl">
-              {THEMES.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setTheme(t.id)}
-                  className={`relative p-2.5 rounded-xl transition-all flex-1 flex justify-center ${theme === t.id ? 'bg-[var(--surface-strong)] shadow-sm ring-1 ring-black/5' : 'hover:scale-110'}`}
-                  title={t.label}
-                >
-                  <span className="text-lg leading-none">{t.icon}</span>
-                  {theme === t.id && (
-                    <motion.div layoutId="theme-active" className="absolute -bottom-1 w-1 h-1 bg-[var(--sage)] rounded-full" />
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="flex items-center gap-4 px-2 py-4 border-t border-[var(--border)]">
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[var(--sage)] to-[var(--seed-accent)] flex items-center justify-center text-white font-serif font-bold italic shadow-lg ring-2 ring-[var(--surface-strong)]">
-              JD
+              {accountInitials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-black text-[var(--earth)] truncate">Jardinero Digital</p>
-              <p className="text-[10px] font-medium text-[var(--text-muted)] truncate">jose@garden.com</p>
+              <p className="text-sm font-black text-[var(--earth)] truncate">{account.name || 'Jardinero Digital'}</p>
+              <p className="text-[10px] font-medium text-[var(--text-muted)] truncate">{account.email || 'Sin correo'}</p>
             </div>
             <button
               onClick={() => setShowSettings(true)}
@@ -1961,7 +1964,7 @@ export default function App() {
                         <button
                           onClick={addNote}
                           disabled={!newNote.content.trim()}
-                          className="bg-[var(--sage)] text-white px-8 py-3 rounded-xl font-bold disabled:opacity-50 hover:brightness-105 transition-all shadow-md active:scale-95"
+                          className="bg-[var(--sage)] text-white px-8 py-3 rounded-xl font-bold disabled:opacity-50 hover:brightness-105 soft-interaction shadow-md active:translate-y-px"
                         >
                           Plantar idea
                         </button>
@@ -1981,18 +1984,18 @@ export default function App() {
 
                       return (
                       <motion.div
-                        layout
                         key={note.id}
-                        initial={{ opacity: 0, y: 18, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 12, scale: 0.98 }}
-                        whileHover={{ y: -6, scale: 1.01 }}
-                        whileTap={{ scale: 0.99 }}
+                        initial={{ opacity: 0, y: 14 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        whileHover={{ y: -4 }}
+                        whileTap={{ y: -1 }}
+                        transition={{ type: 'tween', duration: 0.18 }}
                         onClick={() => setSelectedNoteId(note.id)}
-                        className={`seed-card bg-[var(--surface-strong)] border transition-all group relative cursor-pointer overflow-hidden ${
+                        className={`seed-card bg-[var(--surface-strong)] border group relative cursor-pointer overflow-hidden ${
                           selectedNoteId === note.id 
-                            ? 'border-[var(--sage)] shadow-2xl ring-2 ring-[var(--sage)]/40' 
-                            : 'border-[var(--border)] shadow-[0_12px_40px_rgb(47,62,51,0.08)] hover:border-[var(--seed)]/60 hover:shadow-[0_22px_70px_rgb(47,62,51,0.14)]'
+                            ? 'border-[var(--sage)] shadow-xl ring-2 ring-[var(--sage)]/35' 
+                            : 'border-[var(--border)] shadow-[0_12px_34px_rgb(47,62,51,0.08)] hover:border-[var(--seed)]/55 hover:shadow-[0_18px_52px_rgb(47,62,51,0.12)]'
                         }`}
                       >
                         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent opacity-80" />
@@ -2009,8 +2012,8 @@ export default function App() {
                           
                           <motion.div
                             className="relative z-10"
-                            animate={{ y: note.growthStage === 'withered' ? 0 : [0, -3, 0] }}
-                            transition={{ duration: 4.4, repeat: Infinity, ease: "easeInOut" }}
+                            animate={{ y: note.growthStage === 'withered' ? 0 : [0, -2, 0] }}
+                            transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
                           >
                             <PlantIllustration 
                               stage={note.growthStage} 
@@ -2032,7 +2035,7 @@ export default function App() {
                             </div>
                             <button 
                               onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
-                              className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-red-500 transition-all p-2 bg-[var(--surface-soft)] rounded-full"
+                              className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 text-[var(--text-muted)] hover:text-red-500 soft-interaction p-2 bg-[var(--surface-soft)] rounded-full"
                               aria-label={`Eliminar ${note.title}`}
                             >
                               <Trash2 size={16} />
@@ -2101,7 +2104,7 @@ export default function App() {
                                   event.stopPropagation();
                                   runCardAction(note, guidance.kind);
                                 }}
-                                className={`h-9 rounded-full px-3 flex items-center gap-1.5 justify-center text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 ${guidance.actionTone}`}
+                                className={`h-9 rounded-full px-3 flex items-center gap-1.5 justify-center text-[10px] font-black uppercase tracking-widest soft-interaction shadow-sm active:translate-y-px ${guidance.actionTone}`}
                                 title={guidance.title}
                               >
                                 {guidance.kind === 'water' ? <Droplets size={15} /> :
@@ -2111,7 +2114,7 @@ export default function App() {
                                  <ArrowRight size={15} />}
                                 <span>{guidance.action}</span>
                               </button>
-                              <ArrowRight size={16} className="text-[var(--sage)] opacity-0 -translate-x-2 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
+                              <ArrowRight size={16} className="text-[var(--sage)] opacity-0 transition-opacity group-hover:opacity-100" />
                             </div>
                           </div>
                         </div>
@@ -2178,14 +2181,14 @@ export default function App() {
                     : 'Escribe una idea que no quieres perder. No tiene que estar perfecta.'}
                 </p>
                 <motion.button 
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                  whileHover={{ y: -2 }}
+                  whileTap={{ y: 0 }}
                   onClick={() => {
                     setSearch('');
                     setFilterStage('all');
                     setIsAdding(true);
                   }}
-                  className="mt-10 bg-[var(--sage)] text-white px-10 py-4 rounded-2xl font-bold shadow-xl shadow-[var(--sage)]/20 transition-all hover:brightness-110"
+                  className="mt-10 bg-[var(--sage)] text-white px-10 py-4 rounded-2xl font-bold shadow-xl shadow-[var(--sage)]/20 soft-interaction hover:brightness-110"
                 >
                   Plantar mi primera semilla
                 </motion.button>
@@ -2238,7 +2241,7 @@ export default function App() {
                   {selectedNote.inbox ? (
                     <button
                       onClick={() => cultivateInboxNote(selectedNote.id)}
-                      className="col-span-2 rounded-2xl bg-[var(--sage)] text-white px-4 py-3 flex items-center justify-center gap-2 text-xs font-black hover:brightness-105 transition-all"
+                    className="col-span-2 rounded-2xl bg-[var(--sage)] text-white px-4 py-3 flex items-center justify-center gap-2 text-xs font-black hover:brightness-105 soft-interaction"
                     >
                       <Sprout size={16} /> Mover al jardín
                     </button>
@@ -2400,7 +2403,7 @@ export default function App() {
                       onClick={() => growNote(selectedNote.id)}
                       className={`${
                         selectedNote.growthStage === 'withered' ? 'bg-red-500' : 'bg-[var(--sage)]'
-                      } text-white w-full py-4 rounded-xl font-bold shadow-md hover:brightness-105 transition-all flex items-center justify-center gap-2`}
+                      } text-white w-full py-4 rounded-xl font-bold shadow-md hover:brightness-105 soft-interaction flex items-center justify-center gap-2`}
                     >
                       <span>{selectedNote.growthStage === 'withered' ? 'Revivir y Cultivar' : 'Cultivar Idea'}</span>
                       <Sprout size={18} />
@@ -2541,7 +2544,7 @@ export default function App() {
                   <div className="grid grid-cols-1 gap-3 mt-5">
                     <button
                       onClick={() => waterNote(note.id, wateringNote.trim() || 'Riego rápido: sigue viva')}
-                      className="w-full rounded-2xl bg-[var(--sage)] text-white px-4 py-3 font-black flex items-center justify-center gap-2 shadow-lg shadow-[var(--sage)]/20 active:scale-95 transition-transform"
+                      className="w-full rounded-2xl bg-[var(--sage)] text-white px-4 py-3 font-black flex items-center justify-center gap-2 shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
                     >
                       <Droplets size={17} /> Sigue viva
                     </button>
@@ -2608,7 +2611,7 @@ export default function App() {
                 >
                   <div className="h-36 rounded-[2rem] bg-gradient-to-b from-green-100 via-pink-50 to-white border border-green-100 flex items-center justify-center relative overflow-hidden mb-5">
                     <div className="seed-card-sheen" />
-                    <motion.div animate={{ y: [0, -5, 0], scale: [1, 1.04, 1] }} transition={{ duration: 2.6, repeat: Infinity }}>
+                    <motion.div animate={{ y: [0, -4, 0] }} transition={{ duration: 2.8, repeat: Infinity }}>
                       <PlantIllustration stage="bloom" progress={100} isGrowth />
                     </motion.div>
                   </div>
@@ -2660,10 +2663,10 @@ export default function App() {
                 initial={{ opacity: 0, y: 24, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 16, scale: 0.98 }}
-                className="w-full max-w-xl rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] shadow-2xl p-6"
+                className="w-full max-w-xl max-h-[88vh] rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] shadow-2xl p-0 overflow-hidden flex flex-col"
                 onClick={(event) => event.stopPropagation()}
               >
-                <div className="flex items-start justify-between gap-4 mb-6">
+                <div className="flex items-start justify-between gap-4 p-5 sm:p-6 border-b border-[var(--border)] shrink-0">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Ajustes</p>
                     <h3 className="text-3xl font-serif font-black text-[var(--earth)] mt-1">Tu jardín</h3>
@@ -2673,10 +2676,66 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="space-y-5">
+                <div className="space-y-5 p-5 sm:p-6 overflow-y-auto app-scrollbar">
+                  <section className="rounded-[2rem] bg-[var(--bg-app)] border border-[var(--border)] p-4">
+                    <div className="flex items-start gap-4">
+                      <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-[var(--sage)] to-[var(--seed-accent)] text-white flex items-center justify-center font-serif text-xl font-black shadow-lg shadow-[var(--sage)]/15">
+                        {accountInitials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)] mb-3">Cuenta local</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <label className="block">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Nombre</span>
+                            <input
+                              value={account.name}
+                              onChange={(event) => setAccount(current => ({ ...current, name: event.target.value }))}
+                              className="mt-1 w-full rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                              placeholder="Tu nombre"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Correo</span>
+                            <input
+                              type="email"
+                              value={account.email}
+                              onChange={(event) => setAccount(current => ({ ...current, email: event.target.value }))}
+                              className="mt-1 w-full rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                              placeholder="tu@email.com"
+                            />
+                          </label>
+                          <label className="block sm:col-span-2">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Rol</span>
+                            <input
+                              value={account.role}
+                              onChange={(event) => setAccount(current => ({ ...current, role: event.target.value }))}
+                              className="mt-1 w-full rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                              placeholder="Ej. Creador, estudiante, fundador..."
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                      {[
+                        { label: 'Ideas', value: notes.length },
+                        { label: 'Racha', value: wateringRitual.streak },
+                        { label: 'Min', value: notes.reduce((sum, note) => sum + (note.focusedMinutes || 0), 0) },
+                      ].map(item => (
+                        <div key={item.label} className="rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-3">
+                          <p className="text-2xl font-serif font-black text-[var(--earth)]">{item.value}</p>
+                          <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-xs font-semibold text-[var(--text-muted)]">
+                      Esta cuenta vive en este dispositivo. Para sincronizar entre usuarios o equipos hará falta añadir autenticación y backend más adelante.
+                    </p>
+                  </section>
+
                   <section>
                     <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)] mb-3">Ecosistema</p>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {THEMES.map(item => (
                         <button
                           key={item.id}
@@ -2825,7 +2884,7 @@ export default function App() {
                       setView('today');
                       setIsAdding(false);
                     }}
-                    className="rounded-2xl bg-[var(--sage)] text-white py-4 px-5 font-black shadow-lg shadow-[var(--sage)]/20 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                    className="rounded-2xl bg-[var(--sage)] text-white py-4 px-5 font-black shadow-lg shadow-[var(--sage)]/20 flex items-center justify-center gap-2 active:translate-y-px soft-interaction"
                   >
                     <Leaf size={18} /> Plantar primera idea
                   </button>
@@ -2847,11 +2906,11 @@ export default function App() {
         {/* Floating Action Button */}
         {!isAdding && !selectedNoteId && (
           <motion.button
-            whileTap={{ scale: 0.9 }}
+            whileTap={{ y: 1 }}
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             onClick={() => setIsAdding(true)}
-            className="fixed bottom-8 right-8 w-14 h-14 bg-[var(--sage)] text-white rounded-full shadow-2xl flex items-center justify-center z-50 overflow-hidden hover:scale-110 active:scale-95 transition-all"
+            className="fixed bottom-8 right-8 w-14 h-14 bg-[var(--sage)] text-white rounded-full shadow-2xl flex items-center justify-center z-50 overflow-hidden hover:shadow-[0_18px_45px_rgba(47,62,51,0.28)] soft-interaction"
           >
             <Leaf size={28} />
           </motion.button>
