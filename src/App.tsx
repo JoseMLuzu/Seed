@@ -1490,8 +1490,9 @@ function HeroGardenScene() {
 
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden bg-[#f7faf6]">
-      <div className="absolute inset-x-0 top-0 h-[42%] bg-[#eaf6ff]" />
-      <div className="absolute inset-x-0 bottom-0 h-[58%] bg-[#f7faf6]" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,#eaf6ff_0%,#eef8fb_28%,#f6faf5_56%,#f8faf7_100%)]" />
+      <div className="absolute inset-y-0 left-0 w-[72%] bg-[linear-gradient(90deg,rgba(248,250,247,0.94)_0%,rgba(248,250,247,0.76)_48%,rgba(248,250,247,0)_100%)]" />
+      <div className="absolute inset-x-0 top-[30%] h-[24rem] bg-[linear-gradient(180deg,rgba(234,246,255,0)_0%,rgba(248,250,247,0.82)_55%,rgba(248,250,247,0)_100%)]" />
       <div className="absolute right-[9%] top-20 h-24 w-24 rounded-full bg-[#ffd56b] shadow-[0_0_90px_rgba(255,213,107,0.42)]" />
       <motion.div
         animate={{ y: [0, -10, 0] }}
