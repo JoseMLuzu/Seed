@@ -1545,7 +1545,17 @@ function LandingPage({
     { icon: Target, title: 'Menos distracción, más avance', text: 'Cuando quieras trabajar, eliges una idea y la app te deja con lo justo: foco, pasos y una sensación clara de progreso.' },
     { icon: Box, title: 'Un planeta para cada parte de ti', text: 'Trabajo, estudio, vida personal o proyectos creativos pueden vivir separados, cada uno con su propio jardín.' },
   ];
-  const ecosystem = ['Pradera', 'Bosque', 'Floración', 'Nocturno', 'Jungla', 'Alien', 'Desierto', 'Ártico'];
+  const ecosystems = [
+    { name: 'Pradera', mood: 'Claro, fresco y tranquilo', sky: '#dff2ff', planet: '#93bd6b', land: '#cfe7a7', accent: '#f5d36c', plant: 'Pasto suave' },
+    { name: 'Bosque', mood: 'Profundo, calmado y enfocado', sky: '#dce9ef', planet: '#5f7f55', land: '#2f5b3e', accent: '#b8d69c', plant: 'Pinos pequeños' },
+    { name: 'Floración', mood: 'Creativo, amable y luminoso', sky: '#ffeaf1', planet: '#f0b6c8', land: '#83b86b', accent: '#fff0a8', plant: 'Cerezos rosados' },
+    { name: 'Nocturno', mood: 'Silencioso, íntimo y mental', sky: '#172338', planet: '#526a84', land: '#9fb6d8', accent: '#f7e9a0', plant: 'Brotes lunares' },
+    { name: 'Jungla', mood: 'Vivo, intenso y explorador', sky: '#d8f5e2', planet: '#2e8a57', land: '#8fd46a', accent: '#ffd166', plant: 'Hojas tropicales' },
+    { name: 'Alien', mood: 'Extraño, divertido y experimental', sky: '#e9ddff', planet: '#7251a7', land: '#8df2c2', accent: '#f3ff6b', plant: 'Setas brillantes' },
+    { name: 'Desierto', mood: 'Minimal, cálido y despejado', sky: '#fff0d9', planet: '#d8a35f', land: '#f4cf8d', accent: '#7cb7d8', plant: 'Cactus ideas' },
+    { name: 'Ártico', mood: 'Limpio, sereno y sin ruido', sky: '#e5f7fb', planet: '#a9d7e4', land: '#f8ffff', accent: '#8aa7d8', plant: 'Cristales verdes' },
+  ];
+  const [activeEcosystem, setActiveEcosystem] = useState(ecosystems[0]);
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#f8faf7] text-[#162019]">
@@ -1674,22 +1684,90 @@ function LandingPage({
       </section>
 
       <section className="bg-white px-5 py-20 sm:px-8 lg:px-12">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:items-center">
           <div>
             <p className="text-[10px] font-black uppercase text-[#7a8f63]">Ecosistemas</p>
             <h2 className="mt-4 font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Separa tu vida sin complicarla.</h2>
             <p className="mt-5 text-lg font-semibold leading-relaxed text-[#536159]">
               Tu trabajo, tus estudios, tus planes personales y tus ideas raras no tienen por qué mezclarse. Cada mundo puede tener su propia energía, color y ritmo.
             </p>
+            <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:max-w-xl">
+              {ecosystems.map((item) => {
+                const isActive = activeEcosystem.name === item.name;
+                return (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onMouseEnter={() => setActiveEcosystem(item)}
+                    onFocus={() => setActiveEcosystem(item)}
+                    onClick={() => setActiveEcosystem(item)}
+                    className={`group rounded-2xl border p-3 text-left transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(31,45,35,0.12)] ${isActive ? 'border-[#6e9b58] bg-[#f4faf1] shadow-sm' : 'border-[#e3e8df] bg-[#f8faf7]'}`}
+                  >
+                    <div className="h-12 rounded-2xl transition-transform duration-200 group-hover:scale-[1.03]" style={{ background: `linear-gradient(135deg, ${item.sky}, ${item.planet} 58%, ${item.accent})` }} />
+                    <p className="mt-3 text-sm font-black text-[#1b271f]">{item.name}</p>
+                    <p className="mt-1 text-[11px] font-bold leading-snug text-[#667466]">{item.plant}</p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {ecosystem.map((item, index) => (
-              <div key={item} className="rounded-2xl border border-[#e3e8df] bg-[#f8faf7] p-4">
-                <div className="h-14 rounded-2xl" style={{ background: ['#dcefd1', '#d8e5dc', '#f8dbe4', '#d8e5ff', '#d7f6de', '#e3d8ff', '#f3dfc2', '#e5f7fb'][index] }} />
-                <p className="mt-3 text-sm font-black text-[#1b271f]">{item}</p>
+
+          <motion.div
+            key={activeEcosystem.name}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.24 }}
+            className="relative min-h-[31rem] overflow-hidden rounded-[2.5rem] border border-[#dfe8dd] shadow-[0_34px_120px_rgba(17,34,23,0.12)]"
+            style={{ background: `linear-gradient(180deg, ${activeEcosystem.sky} 0%, #f8faf7 78%)` }}
+          >
+            <div className="absolute inset-x-6 top-6 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-black uppercase text-[#536159]">Preview de ecosistema</p>
+                <h3 className="mt-1 font-serif text-4xl font-black text-[#162019]">{activeEcosystem.name}</h3>
+                <p className="mt-2 max-w-sm text-sm font-bold leading-relaxed text-[#536159]">{activeEcosystem.mood}</p>
               </div>
-            ))}
-          </div>
+              <span className="rounded-full bg-white/82 px-4 py-2 text-xs font-black text-[#49623e] shadow-sm backdrop-blur">
+                {activeEcosystem.plant}
+              </span>
+            </div>
+
+            <div
+              className="absolute left-1/2 top-[60%] h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-[inset_-28px_-34px_70px_rgba(25,47,30,0.24),0_34px_90px_rgba(75,105,63,0.22)]"
+              style={{ backgroundColor: activeEcosystem.planet }}
+            >
+              <div className="absolute left-12 top-16 h-16 w-28 rotate-[-20deg] rounded-full" style={{ backgroundColor: activeEcosystem.land }} />
+              <div className="absolute bottom-14 right-12 h-20 w-32 rotate-[18deg] rounded-full opacity-80" style={{ backgroundColor: activeEcosystem.land }} />
+              <div className="absolute right-20 top-24 h-10 w-16 rotate-[28deg] rounded-full opacity-80" style={{ backgroundColor: activeEcosystem.accent }} />
+              {[
+                { left: '47%', top: '18%', size: 1, delay: 0 },
+                { left: '69%', top: '39%', size: 0.86, delay: 0.1 },
+                { left: '31%', top: '45%', size: 0.92, delay: 0.2 },
+                { left: '56%', top: '68%', size: 1.08, delay: 0.3 },
+              ].map((plant) => (
+                <motion.div
+                  key={`${activeEcosystem.name}-${plant.left}`}
+                  className="absolute h-14 w-14 -translate-x-1/2 -translate-y-1/2"
+                  style={{ left: plant.left, top: plant.top, scale: plant.size }}
+                  animate={{ y: [0, -5, 0] }}
+                  transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', delay: plant.delay }}
+                >
+                  <div className="absolute bottom-0 left-1/2 h-6 w-9 -translate-x-1/2 rounded-b-xl rounded-t-md border border-black/10" style={{ backgroundColor: activeEcosystem.accent }} />
+                  <div className="absolute bottom-5 left-1/2 h-8 w-2 -translate-x-1/2 rounded-full bg-[#2f4f35]" />
+                  <div className="absolute bottom-9 left-1 h-5 w-8 rounded-full" style={{ backgroundColor: activeEcosystem.land }} />
+                  <div className="absolute bottom-10 right-0 h-5 w-8 rounded-full bg-white/45" />
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="absolute bottom-6 left-6 right-6 grid grid-cols-3 gap-3">
+              {['Ideas', 'Riego', 'Foco'].map((item, index) => (
+                <div key={item} className="rounded-2xl bg-white/84 px-4 py-3 shadow-sm backdrop-blur">
+                  <p className="text-[9px] font-black uppercase text-[#7b8278]">{item}</p>
+                  <p className="mt-1 font-serif text-2xl font-black text-[#162019]">{[12, 3, '25m'][index]}</p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
         </div>
       </section>
 
