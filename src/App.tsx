@@ -1367,6 +1367,168 @@ function PlantIllustration({ stage, progress, isGrowth, theme = 'earth' }: { sta
   );
 }
 
+function ProductOrbitPreview() {
+  const plants = [
+    { left: '48%', top: '17%', delay: 0, tone: 'bg-[#b56b3f]' },
+    { left: '70%', top: '37%', delay: 0.1, tone: 'bg-[#efd0d8]' },
+    { left: '30%', top: '44%', delay: 0.2, tone: 'bg-[#5d4634]' },
+    { left: '57%', top: '68%', delay: 0.3, tone: 'bg-[#7ab9d6]' },
+    { left: '22%', top: '67%', delay: 0.4, tone: 'bg-[#6d4bb3]' },
+  ];
+
+  return (
+    <div className="relative min-h-[34rem] overflow-hidden rounded-[2.5rem] border border-[#dfe8dd] bg-[#f9fbf8] shadow-[0_34px_120px_rgba(17,34,23,0.12)]">
+      <div className="absolute inset-x-6 top-6 flex items-center justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.26em] text-[#7a8f63]">Planeta Personal</p>
+          <h3 className="mt-1 font-serif text-3xl font-black text-[#19251d]">12 ideas creciendo</h3>
+        </div>
+        <span className="rounded-full bg-white px-4 py-2 text-xs font-black text-[#49623e] shadow-sm">3 por regar</span>
+      </div>
+      <div className="absolute left-1/2 top-[54%] h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#77a960] shadow-[inset_-28px_-32px_70px_rgba(25,47,30,0.24),0_34px_90px_rgba(75,105,63,0.28)]">
+        <div className="absolute left-12 top-16 h-16 w-28 rounded-full bg-[#a2bd76] rotate-[-20deg]" />
+        <div className="absolute bottom-14 right-12 h-20 w-32 rounded-full bg-[#4d8756] rotate-[18deg]" />
+        <div className="absolute right-20 top-24 h-10 w-16 rounded-full bg-[#d7d8a9] rotate-[28deg]" />
+        {plants.map((plant) => (
+          <motion.div
+            key={`${plant.left}-${plant.top}`}
+            className="absolute h-11 w-11 -translate-x-1/2 -translate-y-1/2"
+            style={{ left: plant.left, top: plant.top }}
+            animate={{ y: [0, -5, 0] }}
+            transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut', delay: plant.delay }}
+          >
+            <div className={`absolute bottom-0 left-1/2 h-6 w-8 -translate-x-1/2 rounded-b-xl rounded-t-md ${plant.tone} border border-black/10`} />
+            <div className="absolute bottom-5 left-1/2 h-8 w-2 -translate-x-1/2 rounded-full bg-[#355b34]" />
+            <div className="absolute bottom-9 left-2 h-5 w-7 rounded-full bg-[#7fb66b]" />
+            <div className="absolute bottom-10 right-1 h-5 w-7 rounded-full bg-[#9acb72]" />
+          </motion.div>
+        ))}
+      </div>
+      <div className="absolute bottom-6 left-6 right-6 grid grid-cols-3 gap-3">
+        {[
+          { label: 'Regar', value: '3' },
+          { label: 'Enfoque', value: '42m' },
+          { label: 'Cosechas', value: '8' },
+        ].map((item) => (
+          <div key={item.label} className="rounded-2xl bg-white/90 px-4 py-3 shadow-sm">
+            <p className="text-[9px] font-black uppercase tracking-widest text-[#7b8278]">{item.label}</p>
+            <p className="mt-1 font-serif text-2xl font-black text-[#19251d]">{item.value}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MiniProductStrip() {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="rounded-[2rem] border border-[#e3e8df] bg-white p-5 shadow-sm">
+        <div className="h-64 rounded-[1.5rem] bg-[#f7faf5] p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#7a8f63]">Hoy</p>
+            <Droplets size={20} className="text-[#536f45]" />
+          </div>
+          <h3 className="mt-3 font-serif text-3xl font-black text-[#1b271f]">Riego diario</h3>
+          <p className="mt-2 text-sm font-semibold text-[#667466]">Una idea antigua vuelve al frente sin convertirse en presión.</p>
+          <div className="mt-6 space-y-3">
+            {['Revisar propuesta', 'Elegir micro-paso', 'Guardar aprendizaje'].map((item, index) => (
+              <div key={item} className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm">
+                <span className="text-sm font-black text-[#253229]">{item}</span>
+                <span className="h-3 rounded-full bg-[#7a8f63]/25" style={{ width: 36 + index * 14 }} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Home que decide contigo</h4>
+        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">La pantalla inicial prioriza plantar, regar o avanzar. No abre con una pared de opciones.</p>
+      </div>
+
+      <div className="rounded-[2rem] border border-[#e3e8df] bg-white p-5 shadow-sm">
+        <div className="h-64 rounded-[1.5rem] bg-[#101812] p-4 text-white">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#b8d69c]">Concentración</p>
+          <div className="mt-8 text-center">
+            <p className="font-mono text-6xl font-black">24:18</p>
+            <p className="mt-2 text-xs font-black uppercase tracking-widest text-white/55">Cultivando una idea</p>
+          </div>
+          <div className="mt-8 rounded-2xl bg-white/10 p-3">
+            <div className="h-2 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full w-2/3 rounded-full bg-[#b8d69c]" />
+            </div>
+            <p className="mt-3 text-sm font-semibold text-white/70">Cerrar primer borrador</p>
+          </div>
+        </div>
+        <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Enfoque sin ruido</h4>
+        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">Un temporizador, una idea, pasos claros y recompensa visual cuando avanzas.</p>
+      </div>
+
+      <div className="rounded-[2rem] border border-[#e3e8df] bg-white p-5 shadow-sm">
+        <div className="h-64 rounded-[1.5rem] bg-[#eef6ee] p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#7a8f63]">Cosecha</p>
+          <h3 className="mt-3 font-serif text-3xl font-black text-[#1b271f]">Aprendizaje guardado</h3>
+          <div className="mt-6 rounded-2xl bg-white p-4 shadow-sm">
+            <Archive size={22} className="text-[#536f45]" />
+            <p className="mt-4 text-sm font-bold leading-relaxed text-[#536159]">Qué funcionó, qué cambiaría y cuál es la siguiente semilla.</p>
+          </div>
+          <button className="mt-5 w-full rounded-2xl bg-[#19251d] py-3 text-sm font-black text-white">Cerrar ciclo</button>
+        </div>
+        <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Cierre real</h4>
+        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">Las ideas no solo se tachan. Se cosechan con una reflexión útil para volver mejor.</p>
+      </div>
+    </div>
+  );
+}
+
+function HeroGardenScene() {
+  const plants = [
+    { left: '30%', top: '33%', delay: 0, pot: '#b46a44', leaves: '#83b86b' },
+    { left: '49%', top: '18%', delay: 0.15, pot: '#efbfd1', leaves: '#7fb76d' },
+    { left: '66%', top: '42%', delay: 0.3, pot: '#6d4bb3', leaves: '#98c86f' },
+    { left: '43%', top: '68%', delay: 0.45, pot: '#7ab9d6', leaves: '#6fae62' },
+    { left: '76%', top: '69%', delay: 0.6, pot: '#5d4634', leaves: '#9cc975' },
+  ];
+
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden bg-[#f7faf6]">
+      <div className="absolute inset-x-0 top-0 h-[42%] bg-[#eaf6ff]" />
+      <div className="absolute inset-x-0 bottom-0 h-[58%] bg-[#f7faf6]" />
+      <div className="absolute right-[9%] top-20 h-24 w-24 rounded-full bg-[#ffd56b] shadow-[0_0_90px_rgba(255,213,107,0.42)]" />
+      <motion.div
+        animate={{ y: [0, -10, 0] }}
+        transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute bottom-[-15rem] right-[-13rem] h-[38rem] w-[38rem] rounded-full bg-[#78a85f] opacity-50 shadow-[inset_-42px_-48px_90px_rgba(31,50,30,0.26),0_44px_120px_rgba(65,93,55,0.24)] sm:opacity-70 lg:bottom-[-16rem] lg:right-[-7rem] lg:h-[46rem] lg:w-[46rem] lg:opacity-100"
+      >
+        <div className="absolute left-20 top-28 h-20 w-36 rotate-[-22deg] rounded-full bg-[#a6c879]" />
+        <div className="absolute bottom-36 right-28 h-24 w-44 rotate-[17deg] rounded-full bg-[#4d8756]" />
+        <div className="absolute right-36 top-36 h-12 w-24 rotate-[26deg] rounded-full bg-[#d7d8a9]" />
+        <div className="absolute left-40 bottom-44 h-14 w-28 rotate-[-8deg] rounded-full bg-[#6f9855]" />
+        {plants.map((plant) => (
+          <motion.div
+            key={`${plant.left}-${plant.top}`}
+            className="absolute h-16 w-16 -translate-x-1/2 -translate-y-1/2"
+            style={{ left: plant.left, top: plant.top }}
+            animate={{ y: [0, -6, 0] }}
+            transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut', delay: plant.delay }}
+          >
+            <div className="absolute bottom-0 left-1/2 h-7 w-10 -translate-x-1/2 rounded-b-2xl rounded-t-lg border border-black/10" style={{ backgroundColor: plant.pot }} />
+            <div className="absolute bottom-6 left-1/2 h-9 w-2 -translate-x-1/2 rounded-full bg-[#355b34]" />
+            <div className="absolute bottom-11 left-2 h-6 w-9 rounded-full" style={{ backgroundColor: plant.leaves }} />
+            <div className="absolute bottom-12 right-1 h-6 w-9 rounded-full bg-[#a9d17d]" />
+          </motion.div>
+        ))}
+      </motion.div>
+      <div className="absolute bottom-16 left-6 hidden rounded-2xl border border-white/70 bg-white/80 px-5 py-4 shadow-[0_18px_60px_rgba(31,45,35,0.14)] backdrop-blur md:block lg:left-[48%]">
+        <p className="text-xs font-black text-[#7a8f63]">Riego diario</p>
+        <p className="mt-1 text-sm font-bold text-[#1f2d23]">3 ideas listas para revisar</p>
+      </div>
+      <div className="absolute right-8 top-[42%] hidden rounded-2xl border border-white/70 bg-white/80 px-5 py-4 shadow-[0_18px_60px_rgba(31,45,35,0.14)] backdrop-blur md:block">
+        <p className="text-xs font-black text-[#7a8f63]">Enfoque activo</p>
+        <p className="mt-1 font-mono text-2xl font-black text-[#1f2d23]">25:00</p>
+      </div>
+    </div>
+  );
+}
+
 function LandingPage({
   onEnter,
   onShowLogin,
@@ -1377,213 +1539,173 @@ function LandingPage({
   onShowRegister: () => void;
 }) {
   const features = [
-    { icon: Leaf, title: 'Captura sin friccion', text: 'Anota ideas rapidas y conviertelas en brotes cuando estes listo.' },
-    { icon: Droplets, title: 'Riego inteligente', text: 'Revisa ideas viejas sin presion: basta con mantener una viva.' },
-    { icon: Target, title: 'Enfoque claro', text: 'Trabaja una idea a la vez con pasos pequenos y progreso visible.' },
-    { icon: Archive, title: 'Cosecha aprendizajes', text: 'Cierra proyectos con una reflexion util, no solo con una lista tachada.' },
+    { icon: Leaf, title: 'Plantar sin ordenar todo', text: 'Captura una idea en segundos y déjala como semilla hasta que tengas claridad.' },
+    { icon: Droplets, title: 'Riego contra procrastinación', text: 'Seed te trae ideas viejas para revisarlas rápido, decidir si siguen vivas o darles un micro-paso.' },
+    { icon: Target, title: 'Enfoque de una sola idea', text: 'Cuando toca trabajar, la app reduce el ruido y te muestra solo el proyecto elegido.' },
+    { icon: Box, title: 'Planetas para cada vida', text: 'Separa trabajo, universidad, personal o cualquier área sin convertirlo en un sistema pesado.' },
   ];
-  const steps = [
-    { label: 'Plantar', value: 'Idea rapida' },
-    { label: 'Regar', value: '20 segundos' },
-    { label: 'Enfocar', value: 'Un paso' },
-    { label: 'Cosechar', value: 'Aprendizaje' },
-  ];
+  const ecosystem = ['Pradera', 'Bosque', 'Floración', 'Nocturno', 'Jungla', 'Alien', 'Desierto', 'Ártico'];
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#f7f3e8] text-[#223126]">
-      <section className="relative min-h-[92vh] flex items-center px-5 sm:px-8 lg:px-12 py-8 overflow-hidden">
-        <img src="/icon-512.png" alt="" className="absolute right-[-8rem] top-[-7rem] w-[28rem] sm:w-[36rem] opacity-20 blur-[2px] rotate-[-10deg]" />
-        <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(247,243,232,0.96)_0%,rgba(247,243,232,0.84)_44%,rgba(247,243,232,0.42)_100%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-52 bg-[linear-gradient(0deg,rgba(111,125,79,0.22),transparent)]" />
-        <div className="absolute right-[6%] bottom-[8%] hidden xl:block w-[30rem]">
-          <div className="relative rounded-[2rem] bg-white/78 border border-white/70 shadow-[0_34px_120px_rgba(47,59,47,0.18)] p-5 backdrop-blur-md">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#c98f58]">Hoy</p>
-                <h2 className="font-serif text-3xl font-black text-[#5a4635]">Tu jardin mental</h2>
-              </div>
-              <div className="h-11 w-11 rounded-2xl bg-[#6f7d4f] text-white flex items-center justify-center">
-                <Droplets size={21} />
-              </div>
+    <main className="min-h-screen overflow-x-hidden bg-[#f8faf7] text-[#162019]">
+      <section className="relative min-h-[88vh] overflow-hidden border-b border-[#e4ebe1] px-5 sm:px-8 lg:px-12">
+        <HeroGardenScene />
+        <nav className="relative z-10 mx-auto flex max-w-7xl items-center justify-between py-6">
+          <div className="flex items-center gap-3">
+            <img src="/icon-192.png" alt="Seed" className="h-11 w-11 rounded-2xl shadow-sm" />
+            <div>
+              <p className="font-serif text-2xl font-black leading-none text-[#1f2d23]">Seed</p>
+              <p className="text-[9px] font-black uppercase text-[#7a8f63]">Idea Garden</p>
             </div>
-            <div className="grid grid-cols-3 gap-3 mb-5">
-              {steps.slice(0, 3).map(step => (
-                <div key={step.label} className="rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-3 py-3">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-[#6b7280]">{step.label}</p>
-                  <p className="mt-2 text-sm font-black text-[#5a4635]">{step.value}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onShowLogin} className="rounded-full border border-[#dfe8dd] bg-white px-4 py-2 text-sm font-black text-[#1f2d23] shadow-sm transition-colors hover:bg-[#f1f6ef]">
+              Iniciar sesión
+            </button>
+            <button onClick={onShowRegister} className="rounded-full bg-[#1f2d23] px-4 py-2 text-sm font-black text-white shadow-sm transition-colors hover:bg-[#324434]">
+              Crear cuenta
+            </button>
+          </div>
+        </nav>
+
+        <div className="relative z-10 mx-auto flex min-h-[68vh] max-w-7xl items-center py-10 sm:py-14">
+          <div className="max-w-4xl pb-8">
+            <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] font-black uppercase text-[#7a8f63]">
+              Jardín de ideas para avanzar sin sobrecargarte
+            </motion.p>
+            <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="mt-6 max-w-4xl font-serif text-5xl font-black leading-[0.95] text-[#162019] sm:text-7xl lg:text-8xl">
+              Planta ideas. Riégalas. Hazlas crecer.
+            </motion.h1>
+            <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="mt-7 max-w-2xl text-lg font-semibold leading-relaxed text-[#536159] sm:text-xl">
+              Seed transforma notas dispersas en un jardín vivo: captura ideas, revísalas antes de olvidarlas, enfócate en una sola y cosecha aprendizajes cuando termines.
+            </motion.p>
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} className="mt-9 flex flex-col gap-3 sm:flex-row">
+              <button onClick={onShowRegister} className="rounded-2xl bg-[#1f2d23] px-6 py-4 font-black text-white shadow-[0_18px_50px_rgba(31,45,35,0.22)] transition-colors hover:bg-[#324434]">
+                Crear mi jardín
+              </button>
+              <button onClick={onShowLogin} className="rounded-2xl border border-[#dfe8dd] bg-white px-6 py-4 font-black text-[#1f2d23] shadow-sm transition-colors hover:bg-[#f1f6ef]">
+                Ya tengo cuenta
+              </button>
+              <a href="#producto" className="rounded-2xl px-6 py-4 text-center font-black text-[#536159] transition-colors hover:text-[#1f2d23]">
+                Ver producto
+              </a>
+            </motion.div>
+            <div className="mt-10 grid max-w-xl grid-cols-3 gap-3">
+              {[
+                { label: 'Riego', value: '20s' },
+                { label: 'Enfoque', value: '1 idea' },
+                { label: 'Sync', value: 'Nube' },
+              ].map((item) => (
+                <div key={item.label} className="rounded-2xl border border-[#dfe8dd] bg-white px-4 py-3 shadow-sm">
+                  <p className="text-[9px] font-black uppercase text-[#7b8278]">{item.label}</p>
+                  <p className="mt-1 font-serif text-2xl font-black text-[#1b271f]">{item.value}</p>
                 </div>
               ))}
             </div>
-            <div className="rounded-[1.5rem] bg-[#f7f3e8] border border-[#eadfce] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-[#6f7d4f]">Idea para regar</p>
-                  <p className="mt-1 font-black text-[#5a4635]">Redisenar el portfolio</p>
-                </div>
-                <span className="h-9 w-9 rounded-full bg-white text-[#6f7d4f] flex items-center justify-center">
-                  <Droplets size={17} />
-                </span>
-              </div>
-              <div className="mt-4 h-2 rounded-full bg-white overflow-hidden">
-                <motion.div className="h-full bg-[#6f7d4f]" initial={{ width: 0 }} animate={{ width: '68%' }} transition={{ duration: 1.1, delay: 0.2 }} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="relative z-10 w-full max-w-6xl mx-auto">
-          <nav className="absolute top-0 left-0 right-0 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img src="/icon-192.png" alt="Seed" className="h-11 w-11 rounded-2xl shadow-lg" />
-              <div>
-                <p className="text-2xl font-serif font-black text-[#6f7d4f] leading-none">Seed</p>
-                <p className="text-[9px] font-black uppercase tracking-[0.28em] text-[#c98f58]">Digital Garden</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={onShowLogin} className="rounded-full bg-white/76 border border-white px-4 py-2 text-sm font-black text-[#5a4635] shadow-sm hover:bg-white transition-colors">
-                Iniciar sesión
-              </button>
-              <button onClick={onShowRegister} className="rounded-full bg-[#6f7d4f] text-white px-4 py-2 text-sm font-black shadow-sm hover:bg-[#5f6f42] transition-colors">
-                Crear cuenta
-              </button>
-            </div>
-          </nav>
-
-          <div className="pt-28 max-w-3xl">
-            <div className="max-w-3xl">
-            <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] font-black uppercase tracking-[0.3em] text-[#c98f58]">
-              Jardin de ideas para personas que procrastinan
-            </motion.p>
-            <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="mt-5 font-serif text-6xl sm:text-7xl lg:text-8xl font-black leading-[0.9] text-[#4f3d2e]">
-              Seed
-            </motion.h1>
-            <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="mt-6 max-w-2xl text-lg sm:text-xl font-semibold leading-relaxed text-[#4f5d4f]">
-              Una app simple para plantar ideas, revisarlas sin culpa y convertirlas en avances reales con pasos pequenos.
-            </motion.p>
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} className="mt-8 flex flex-col sm:flex-row gap-3">
-              <button onClick={onShowRegister} className="rounded-2xl bg-[#6f7d4f] text-white px-6 py-4 font-black shadow-xl shadow-[#6f7d4f]/25 flex items-center justify-center gap-2 active:translate-y-px soft-interaction">
-                Crear mi jardín <ArrowRight size={18} />
-              </button>
-              <button onClick={onShowLogin} className="rounded-2xl bg-white/76 border border-white text-[#5a4635] px-6 py-4 font-black shadow-sm text-center hover:bg-white transition-colors">
-                Iniciar sesión
-              </button>
-              <a href="#como-funciona" className="rounded-2xl bg-white/45 border border-white text-[#5a4635] px-6 py-4 font-black shadow-sm text-center hover:bg-white transition-colors">
-                Ver como funciona
-              </a>
-            </motion.div>
-            </div>
           </div>
         </div>
       </section>
 
-      <section id="como-funciona" className="px-5 sm:px-8 lg:px-12 py-16 bg-[#fffaf0]">
-        <div className="max-w-6xl mx-auto">
-          <div className="max-w-2xl">
-            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#c98f58]">Flujo simple</p>
-            <h2 className="mt-3 font-serif text-4xl sm:text-5xl font-black text-[#5a4635]">No es otro Notion. Es un jardin que te dice que hacer despues.</h2>
-          </div>
-          <div className="mt-10 grid grid-cols-1 md:grid-cols-4 gap-4">
-            {features.map(feature => (
-              <div key={feature.title} className="rounded-[1.5rem] bg-white border border-[#eadfce] p-5 shadow-sm">
-                <div className="h-11 w-11 rounded-2xl bg-[#eef1e6] text-[#6f7d4f] flex items-center justify-center mb-5">
-                  <feature.icon size={20} />
-                </div>
-                <h3 className="font-serif text-2xl font-black text-[#5a4635]">{feature.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed font-medium text-[#6b7280]">{feature.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="px-5 sm:px-8 lg:px-12 py-16 bg-[#f7f3e8]">
-        <div className="max-w-6xl mx-auto">
-          <div className="max-w-3xl">
-            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#c98f58]">Interfaz</p>
-            <h2 className="mt-3 font-serif text-4xl sm:text-5xl font-black text-[#5a4635]">Un jardín visual, pero pensado para trabajar.</h2>
-            <p className="mt-4 text-base font-semibold leading-relaxed text-[#4f5d4f]">Seed combina un Home simple, un planeta 3D para entender tu jardín completo y un modo Enfoque para cultivar una sola idea sin distracciones.</p>
-          </div>
-
-          <div className="mt-10 grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <div className="rounded-[2rem] bg-white border border-[#eadfce] p-5 shadow-sm">
-              <div className="h-56 rounded-[1.5rem] bg-[#f7f3e8] border border-[#eadfce] p-4 overflow-hidden">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-[#c98f58]">Hoy</p>
-                    <p className="mt-1 font-serif text-2xl font-black text-[#5a4635]">Riego diario</p>
-                  </div>
-                  <Droplets className="text-[#6f7d4f]" size={24} />
-                </div>
-                <div className="mt-5 space-y-3">
-                  {['Idea por revisar', 'Siguiente paso', 'Cosecha cercana'].map((label, index) => (
-                    <div key={label} className="rounded-2xl bg-white border border-[#eadfce] px-4 py-3 flex items-center justify-between">
-                      <span className="text-sm font-black text-[#5a4635]">{label}</span>
-                    <span
-                      className="h-3 rounded-full bg-[#6f7d4f]/30"
-                      style={{ width: index === 0 ? 48 : index === 1 ? 64 : 40 }}
-                    />
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <h3 className="mt-5 font-serif text-2xl font-black text-[#5a4635]">Home útil</h3>
-              <p className="mt-2 text-sm font-semibold leading-relaxed text-[#6b7280]">Te muestra qué plantar, qué regar y cuál es el próximo paso sin llenar la pantalla de opciones.</p>
+      <section id="producto" className="border-y border-[#e4ebe1] bg-white px-5 py-20 sm:px-8 lg:px-12">
+        <div className="mx-auto max-w-7xl">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-[0.78fr_1.22fr] lg:items-end">
+            <div>
+              <p className="text-[10px] font-black uppercase text-[#7a8f63]">Qué hace diferente a Seed</p>
+              <h2 className="mt-4 max-w-3xl font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">No es un gestor de notas. Es un sistema suave para volver.</h2>
             </div>
-
-            <div className="rounded-[2rem] bg-white border border-[#eadfce] p-5 shadow-sm">
-              <div className="h-56 rounded-[1.5rem] bg-gradient-to-b from-[#cbe8ff] to-[#eaf5dc] border border-[#eadfce] relative overflow-hidden flex items-center justify-center">
-                <div className="h-36 w-36 rounded-full bg-[#6f9e52] shadow-[inset_-18px_-18px_36px_rgba(0,0,0,0.16),0_18px_60px_rgba(47,59,47,0.22)] relative">
-                  {[0, 1, 2, 3, 4].map((plant) => (
-                    <div key={plant} className="absolute h-7 w-7 rounded-full bg-[#d28a55] border-2 border-[#8b5e3c]" style={{ left: `${32 + Math.cos(plant * 1.25) * 45}px`, top: `${58 + Math.sin(plant * 1.25) * 42}px` }}>
-                      <div className="absolute left-1/2 top-[-15px] h-5 w-2 -translate-x-1/2 rounded-full bg-[#487b3d]" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <h3 className="mt-5 font-serif text-2xl font-black text-[#5a4635]">Mundo 3D</h3>
-              <p className="mt-2 text-sm font-semibold leading-relaxed text-[#6b7280]">Tus ideas aparecen como plantas en macetas dentro de un planeta que cambia por ecosistema.</p>
-            </div>
-
-            <div className="rounded-[2rem] bg-white border border-[#eadfce] p-5 shadow-sm">
-              <div className="h-56 rounded-[1.5rem] bg-[#eef1e6] border border-[#eadfce] p-4">
-                <p className="text-[9px] font-black uppercase tracking-widest text-[#c98f58]">Concentración</p>
-                <p className="mt-1 font-serif text-2xl font-black text-[#5a4635]">Cultivar 30 min</p>
-                <div className="mt-5 rounded-2xl bg-white border border-[#eadfce] p-4">
-                  <p className="font-mono text-5xl font-black text-[#5a4635]">24:18</p>
-                  <div className="mt-4 h-2 rounded-full bg-[#eef1e6] overflow-hidden">
-                    <div className="h-full w-2/3 bg-[#6f7d4f]" />
-                  </div>
-                </div>
-                <button className="mt-4 w-full rounded-2xl bg-[#6f7d4f] text-white py-3 text-sm font-black">Guardar cultivo</button>
-              </div>
-              <h3 className="mt-5 font-serif text-2xl font-black text-[#5a4635]">Modo Enfoque</h3>
-              <p className="mt-2 text-sm font-semibold leading-relaxed text-[#6b7280]">Un temporizador limpio con pasos editables para avanzar sin saltar entre muchas ideas.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="px-5 sm:px-8 lg:px-12 py-16 bg-[#eef1e6]">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-10 items-center">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#c98f58]">Para volver todos los dias</p>
-            <h2 className="mt-3 font-serif text-4xl sm:text-5xl font-black text-[#5a4635]">Riego, enfoque y cosecha mantienen tus ideas vivas.</h2>
-            <p className="mt-5 text-base font-semibold leading-relaxed text-[#4f5d4f]">
-              Seed evita la sobrecarga: no te pide organizar todo perfecto. Te muestra una idea para revisar, un paso para avanzar y un momento claro para cerrar.
+            <p className="text-lg font-semibold leading-relaxed text-[#536159]">
+              La mayoría de apps capturan información y luego la esconden. Seed usa la metáfora del jardín para darte una acción clara: plantar, regar, enfocar o cosechar.
             </p>
-            <button onClick={onEnter} className="mt-7 rounded-2xl bg-[#223126] text-white px-6 py-4 font-black shadow-xl flex items-center gap-2 active:translate-y-px soft-interaction">
-              Probar Seed <Sparkles size={18} />
-            </button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {steps.map((step, index) => (
-              <div key={step.label} className="rounded-[1.5rem] bg-white/82 border border-white p-5 shadow-sm">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#6f7d4f]">0{index + 1}</p>
-                <h3 className="mt-3 font-serif text-3xl font-black text-[#5a4635]">{step.label}</h3>
-                <p className="mt-2 text-sm font-semibold text-[#6b7280]">{step.value}</p>
+          <div className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {features.map((feature) => (
+              <div key={feature.title} className="rounded-[2rem] border border-[#e3e8df] bg-[#f8faf7] p-6">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-[#536f45] shadow-sm">
+                  <feature.icon size={22} />
+                </div>
+                <h3 className="mt-6 font-serif text-2xl font-black text-[#162019]">{feature.title}</h3>
+                <p className="mt-3 text-sm font-semibold leading-relaxed text-[#667466]">{feature.text}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[#f8faf7] px-5 py-20 sm:px-8 lg:px-12">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-10 lg:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.05fr)] lg:items-center">
+          <ProductOrbitPreview />
+          <div>
+            <p className="text-[10px] font-black uppercase text-[#7a8f63]">Mundo 3D</p>
+            <h2 className="mt-4 max-w-3xl font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Tu jardín se entiende de un vistazo.</h2>
+            <p className="mt-5 text-lg font-semibold leading-relaxed text-[#536159]">
+              El planeta no es decoración: resume cuántas ideas tienes, cuáles necesitan riego y qué proyecto está creciendo. Cada planta usa una maceta para que puedas reconocerla sin perderte en una lista.
+            </p>
+            <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {[
+                { title: 'Zoom a una planta', text: 'Al elegir una idea, el planeta se detiene y la cámara se acerca para no perder el contexto.' },
+                { title: 'Clima con sentido', text: 'Cuando llueve, el jardín se siente vivo y el riego baja presión porque la app ya cuidó tus ideas.' },
+                { title: 'Ecosistemas distintos', text: 'Pinos, cerezos, jungla, planeta alien y más temas cambian el carácter de cada planeta.' },
+                { title: 'Progreso visual', text: 'Semillas, brotes y árboles muestran si una idea está capturada, en progreso o lista para cosechar.' },
+              ].map((item) => (
+                <div key={item.title} className="rounded-2xl border border-[#e3e8df] bg-white p-5 shadow-sm">
+                  <h3 className="font-serif text-xl font-black text-[#162019]">{item.title}</h3>
+                  <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">{item.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[#f8faf7] px-5 py-20 sm:px-8 lg:px-12">
+        <div className="mx-auto max-w-7xl">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-[10px] font-black uppercase text-[#7a8f63]">Interfaz</p>
+            <h2 className="mt-4 font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Todo se siente como cuidar un jardín.</h2>
+            <p className="mt-5 text-lg font-semibold leading-relaxed text-[#536159]">
+              Home, mundo 3D, enfoque y cosecha trabajan juntos para convertir ideas sueltas en proyectos que vuelves a tocar.
+            </p>
+          </div>
+          <div className="mt-12">
+            <MiniProductStrip />
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white px-5 py-20 sm:px-8 lg:px-12">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div>
+            <p className="text-[10px] font-black uppercase text-[#7a8f63]">Ecosistemas</p>
+            <h2 className="mt-4 font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Cada área puede tener su propio planeta.</h2>
+            <p className="mt-5 text-lg font-semibold leading-relaxed text-[#536159]">
+              Trabajo, universidad, vida personal o proyectos creativos pueden tener ecosistemas distintos. Tus ideas no se amontonan: viven en mundos separados y fáciles de reconocer.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {ecosystem.map((item, index) => (
+              <div key={item} className="rounded-2xl border border-[#e3e8df] bg-[#f8faf7] p-4">
+                <div className="h-14 rounded-2xl" style={{ background: ['#dcefd1', '#d8e5dc', '#f8dbe4', '#d8e5ff', '#d7f6de', '#e3d8ff', '#f3dfc2', '#e5f7fb'][index] }} />
+                <p className="mt-3 text-sm font-black text-[#1b271f]">{item}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-20 sm:px-8 lg:px-12">
+        <div className="mx-auto max-w-5xl rounded-[2.5rem] bg-[#162019] px-6 py-14 text-center text-white sm:px-12">
+          <Sparkles className="mx-auto text-[#b8d69c]" size={28} />
+          <h2 className="mx-auto mt-5 max-w-3xl font-serif text-5xl font-black leading-[0.98] sm:text-6xl">Empieza con una semilla. Vuelve mañana a regarla.</h2>
+          <p className="mx-auto mt-5 max-w-2xl text-lg font-semibold leading-relaxed text-white/70">
+            Seed está diseñado para que una idea no muera después de escribirla. Te ayuda a volver, elegir y avanzar.
+          </p>
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            <button onClick={onShowRegister} className="rounded-2xl bg-white px-6 py-4 font-black text-[#162019]">
+              Crear cuenta
+            </button>
+            <button onClick={onEnter} className="rounded-2xl border border-white/20 px-6 py-4 font-black text-white">
+              Explorar sin cuenta
+            </button>
           </div>
         </div>
       </section>
@@ -1630,121 +1752,176 @@ function AuthEntryPage({
     if (isRegister) onSignUp();
     else onSignIn();
   };
+  const benefits = isRegister
+    ? [
+        { title: 'Tus planetas sincronizados', text: 'Ideas, pasos, riegos y cosechas viajan contigo entre dispositivos.' },
+        { title: 'Empieza sin estructura pesada', text: 'Planta una semilla ahora y ordénala después solo si hace falta.' },
+        { title: 'Vuelve sin presión', text: 'El riego te recuerda ideas útiles sin convertirlas en tareas obligatorias.' },
+        { title: 'Enfoque claro', text: 'Cuando trabajas, Seed deja visible una idea y sus pasos reales.' },
+      ]
+    : [
+        { title: 'Continúa donde estabas', text: 'Retoma el planeta, la idea y los pasos que dejaste abiertos.' },
+        { title: 'Riego pendiente', text: 'Revisa lo que necesita atención antes de que se pierda.' },
+        { title: 'Sesiones de enfoque', text: 'Vuelve a trabajar en una sola idea, con progreso visible.' },
+        { title: 'Cosechas guardadas', text: 'Consulta aprendizajes de proyectos cerrados para decidir mejor.' },
+      ];
 
   return (
-    <main className="min-h-screen bg-[#f7f3e8] text-[#223126] px-5 sm:px-8 lg:px-12 py-6 flex items-center">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute right-[-10rem] top-[-12rem] h-[32rem] w-[32rem] rounded-full bg-[#6f7d4f]/12" />
-        <div className="absolute left-[-8rem] bottom-[-10rem] h-[28rem] w-[28rem] rounded-full bg-[#c98f58]/12" />
-      </div>
-      <div className="relative z-10 w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_430px] gap-10 items-center">
-        <section className="hidden lg:block">
-          <button onClick={onBack} className="inline-flex items-center gap-2 rounded-full bg-white/70 border border-white px-4 py-2 text-sm font-black text-[#5a4635] shadow-sm">
-            <ChevronLeft size={16} /> Volver
+    <main className="min-h-screen overflow-y-auto bg-[#f8faf7] text-[#162019]">
+      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-5 py-5 sm:px-8 lg:px-12">
+        <header className="flex items-center justify-between gap-4">
+          <button onClick={onBack} className="inline-flex items-center gap-3 rounded-full border border-[#dfe8dd] bg-white px-4 py-2 text-sm font-black text-[#1f2d23] shadow-sm transition-colors hover:bg-[#f1f6ef]">
+            <ChevronLeft size={17} />
+            <span>Volver</span>
           </button>
-          <div className="mt-12 max-w-2xl">
-            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-[#c98f58]">
-              {isRegister ? 'Empieza tu jardín' : 'Vuelve a tu jardín'}
-            </p>
-            <h1 className="mt-5 font-serif text-6xl font-black leading-[0.92] text-[#4f3d2e]">
-              {isRegister ? 'Planta ideas que puedas volver a cuidar.' : 'Tus ideas siguen creciendo donde las dejaste.'}
-            </h1>
-            <p className="mt-6 text-lg font-semibold leading-relaxed text-[#4f5d4f]">
-              Seed sincroniza tus planetas, riegos y pasos para que puedas pasar de capturar una idea a trabajarla sin aprender un sistema pesado.
-            </p>
-          </div>
-          <div className="mt-10 grid grid-cols-3 gap-3 max-w-xl">
-            {[
-              { label: 'Planetas', value: '3D' },
-              { label: 'Riego', value: 'Diario' },
-              { label: 'Enfoque', value: 'Simple' },
-            ].map(item => (
-              <div key={item.label} className="rounded-2xl bg-white/76 border border-white p-4 shadow-sm">
-                <p className="text-[9px] font-black uppercase tracking-widest text-[#6b7280]">{item.label}</p>
-                <p className="mt-2 font-serif text-2xl font-black text-[#5a4635]">{item.value}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+          <button onClick={onSwitchMode} className="rounded-full border border-[#dfe8dd] bg-white px-4 py-2 text-sm font-black text-[#536159] shadow-sm transition-colors hover:bg-[#f1f6ef]">
+            {isRegister ? 'Iniciar sesión' : 'Crear cuenta'}
+          </button>
+        </header>
 
-        <section className="rounded-[2rem] bg-white border border-[#eadfce] p-5 sm:p-7 shadow-[0_30px_100px_rgba(47,59,47,0.16)]">
-          <div className="flex items-center justify-between gap-4">
-            <button onClick={onBack} className="lg:hidden h-10 w-10 rounded-full bg-[#f7f3e8] border border-[#eadfce] flex items-center justify-center text-[#5a4635]">
-              <ChevronLeft size={18} />
-            </button>
+        <div className="grid flex-1 grid-cols-1 gap-8 py-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] lg:items-center lg:gap-12">
+          <section className="hidden lg:block">
             <div className="flex items-center gap-3">
-              <img src="/icon-192.png" alt="Seed" className="h-11 w-11 rounded-2xl shadow-md" />
+              <img src="/icon-192.png" alt="Seed" className="h-12 w-12 rounded-2xl shadow-sm" />
               <div>
-                <p className="font-serif text-2xl font-black text-[#6f7d4f] leading-none">Seed</p>
-                <p className="text-[9px] font-black uppercase tracking-[0.26em] text-[#c98f58]">Digital Garden</p>
+                <p className="font-serif text-3xl font-black leading-none text-[#1f2d23]">Seed</p>
+                <p className="text-[10px] font-black uppercase text-[#7a8f63]">Idea Garden</p>
               </div>
             </div>
-            <span className="hidden sm:block rounded-full bg-[#eef1e6] px-3 py-1 text-[10px] font-black uppercase tracking-widest text-[#6f7d4f]">
-              {isRegister ? 'Registro' : 'Login'}
-            </span>
-          </div>
 
-          <div className="mt-8">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#c98f58]">{isRegister ? 'Crear cuenta' : 'Iniciar sesión'}</p>
-            <h2 className="mt-2 font-serif text-4xl font-black text-[#5a4635]">{isRegister ? 'Crea tu jardín' : 'Entra a tu jardín'}</h2>
-            <p className="mt-2 text-sm font-semibold leading-relaxed text-[#6b7280]">
-              {isRegister ? 'Guarda tus ideas y sincronízalas entre dispositivos.' : 'Continúa regando tus ideas desde cualquier dispositivo.'}
+            <p className="mt-14 text-[11px] font-black uppercase text-[#7a8f63]">
+              {isRegister ? 'Tu jardín empieza aquí' : 'Vuelve a tu jardín'}
             </p>
-          </div>
+            <h1 className="mt-5 max-w-3xl font-serif text-6xl font-black leading-[0.94] text-[#162019]">
+              {isRegister ? 'Un lugar bonito para ideas que sí quieres terminar.' : 'Tus ideas siguen vivas donde las dejaste.'}
+            </h1>
+            <p className="mt-6 max-w-2xl text-lg font-semibold leading-relaxed text-[#536159]">
+              Seed combina captura rápida, riego diario, enfoque y planetas 3D para ayudarte a volver a lo importante sin aprender una herramienta complicada.
+            </p>
 
-          <div className="mt-6 space-y-3">
-            {isRegister && (
+            <div className="mt-9 grid max-w-2xl grid-cols-2 gap-4">
+              {benefits.map((benefit) => (
+                <div key={benefit.title} className="rounded-2xl border border-[#e3e8df] bg-white p-5 shadow-sm">
+                  <CheckCircle2 size={20} className="text-[#6e9b58]" />
+                  <h3 className="mt-4 font-serif text-xl font-black text-[#162019]">{benefit.title}</h3>
+                  <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">{benefit.text}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8 max-w-2xl overflow-hidden rounded-[2rem] border border-[#dfe8dd] bg-[#eef7ed] p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase text-[#7a8f63]">Vista previa</p>
+                  <h3 className="mt-1 font-serif text-3xl font-black text-[#162019]">Planeta personal</h3>
+                </div>
+                <span className="rounded-full bg-white px-4 py-2 text-xs font-black text-[#49623e] shadow-sm">Sync activo</span>
+              </div>
+              <div className="mt-5 grid grid-cols-[140px_minmax(0,1fr)] gap-5">
+                <div className="relative h-36 rounded-full bg-[#78a85f] shadow-[inset_-18px_-24px_44px_rgba(31,50,30,0.24)]">
+                  <div className="absolute left-8 top-8 h-8 w-14 rotate-[-18deg] rounded-full bg-[#a6c879]" />
+                  <div className="absolute bottom-8 right-6 h-10 w-16 rotate-[16deg] rounded-full bg-[#4d8756]" />
+                  <div className="absolute left-14 top-14 h-8 w-8">
+                    <div className="absolute bottom-0 left-1/2 h-4 w-6 -translate-x-1/2 rounded-b-xl rounded-t-md bg-[#b46a44]" />
+                    <div className="absolute bottom-4 left-1/2 h-5 w-1 -translate-x-1/2 rounded-full bg-[#355b34]" />
+                    <div className="absolute bottom-8 left-0 h-4 w-6 rounded-full bg-[#83b86b]" />
+                    <div className="absolute bottom-8 right-0 h-4 w-6 rounded-full bg-[#a9d17d]" />
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {[
+                    { label: 'Ideas por regar', value: '3' },
+                    { label: 'Sesión sugerida', value: '25 min' },
+                    { label: 'Siguiente paso', value: 'Definir primer borrador' },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-2xl bg-white px-4 py-3 shadow-sm">
+                      <p className="text-[10px] font-black uppercase text-[#7b8278]">{item.label}</p>
+                      <p className="mt-1 text-sm font-black text-[#1f2d23]">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="mx-auto w-full max-w-[29rem] rounded-[2rem] border border-[#dfe8dd] bg-white p-5 shadow-[0_30px_100px_rgba(31,45,35,0.14)] sm:p-7">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <img src="/icon-192.png" alt="Seed" className="h-11 w-11 rounded-2xl shadow-sm lg:hidden" />
+                <div>
+                  <p className="text-[11px] font-black uppercase text-[#7a8f63]">{isRegister ? 'Crear cuenta' : 'Iniciar sesión'}</p>
+                  <h2 className="mt-1 font-serif text-4xl font-black leading-none text-[#162019]">{isRegister ? 'Crea tu jardín' : 'Entra a tu jardín'}</h2>
+                </div>
+              </div>
+              <Leaf size={24} className="hidden text-[#6e9b58] sm:block" />
+            </div>
+
+            <p className="mt-4 text-sm font-semibold leading-relaxed text-[#536159]">
+              {isRegister ? 'Guarda tus ideas, sincronízalas y vuelve a ellas con un flujo simple de plantar, regar, enfocar y cosechar.' : 'Continúa cuidando tus planetas, ideas pendientes y sesiones de enfoque desde cualquier dispositivo.'}
+            </p>
+
+            <div className="mt-7 space-y-4">
+              {isRegister && (
+                <label className="block">
+                  <span className="text-xs font-black uppercase text-[#536f45]">Nombre</span>
+                  <input
+                    value={accountName}
+                    onChange={(event) => setAccountName(event.target.value)}
+                    placeholder="Tu nombre"
+                    className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
+                  />
+                </label>
+              )}
               <label className="block">
-                <span className="text-[9px] font-black uppercase tracking-widest text-[#6f7d4f]">Nombre</span>
+                <span className="text-xs font-black uppercase text-[#536f45]">Correo</span>
                 <input
-                  value={accountName}
-                  onChange={(event) => setAccountName(event.target.value)}
-                  placeholder="Tu nombre"
-                  className="mt-1 w-full rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-4 py-3 text-sm font-bold outline-none focus:ring-1 focus:ring-[#6f7d4f]"
+                  type="email"
+                  value={authEmail}
+                  onChange={(event) => setAuthEmail(event.target.value)}
+                  placeholder="tu@email.com"
+                  className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
                 />
               </label>
+              <label className="block">
+                <span className="text-xs font-black uppercase text-[#536f45]">Contraseña</span>
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') submit();
+                  }}
+                  placeholder="Mínimo 6 caracteres"
+                  className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
+                />
+              </label>
+            </div>
+
+            <button onClick={submit} disabled={Boolean(disabledReason)} className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1f2d23] px-5 py-4 font-black text-white shadow-[0_18px_50px_rgba(31,45,35,0.22)] transition-colors hover:bg-[#324434] disabled:cursor-not-allowed disabled:opacity-45">
+              <span>{isRegister ? 'Crear mi jardín' : 'Entrar a mi jardín'}</span>
+              <ArrowRight size={18} />
+            </button>
+            {(disabledReason || authStatus) && (
+              <p className="mt-3 text-xs font-semibold leading-relaxed text-[#667466]">{authStatus || disabledReason}</p>
             )}
-            <label className="block">
-              <span className="text-[9px] font-black uppercase tracking-widest text-[#6f7d4f]">Correo</span>
-              <input
-                type="email"
-                value={authEmail}
-                onChange={(event) => setAuthEmail(event.target.value)}
-                placeholder="tu@email.com"
-                className="mt-1 w-full rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-4 py-3 text-sm font-bold outline-none focus:ring-1 focus:ring-[#6f7d4f]"
-              />
-            </label>
-            <label className="block">
-              <span className="text-[9px] font-black uppercase tracking-widest text-[#6f7d4f]">Contraseña</span>
-              <input
-                type="password"
-                value={authPassword}
-                onChange={(event) => setAuthPassword(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') submit();
-                }}
-                placeholder="Mínimo 6 caracteres"
-                className="mt-1 w-full rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-4 py-3 text-sm font-bold outline-none focus:ring-1 focus:ring-[#6f7d4f]"
-              />
-            </label>
-          </div>
 
-          <button onClick={submit} disabled={Boolean(disabledReason)} className="mt-5 w-full rounded-2xl bg-[#6f7d4f] disabled:opacity-45 text-white px-5 py-4 font-black shadow-lg shadow-[#6f7d4f]/20">
-            {isRegister ? 'Crear cuenta' : 'Iniciar sesión'}
-          </button>
-          {(disabledReason || authStatus) && (
-            <p className="mt-3 text-xs font-semibold leading-relaxed text-[#6b7280]">{authStatus || disabledReason}</p>
-          )}
+            <div className="mt-6 rounded-2xl bg-[#f8faf7] p-4">
+              <p className="text-xs font-black uppercase text-[#7a8f63]">{isRegister ? 'Qué obtienes' : 'Al entrar'}</p>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-[#536159]">
+                {isRegister ? 'Un jardín privado para ideas de trabajo, estudio o vida personal, con planetas separados y riego ligero.' : 'Tus ideas sincronizadas, riegos pendientes y pasos listos para seguir avanzando.'}
+              </p>
+            </div>
 
-          <div className="mt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm font-bold text-[#6b7280]">
-            <button onClick={onSwitchMode} className="text-[#6f7d4f] hover:text-[#5f6f42]">
-              {isRegister ? 'Ya tengo cuenta' : 'Crear una cuenta nueva'}
-            </button>
-            <button onClick={onEnter} className="text-[#5a4635] hover:text-[#6f7d4f]">
-              Entrar sin cuenta
-            </button>
-          </div>
-        </section>
+            <div className="mt-5 flex flex-col gap-3 text-sm font-bold text-[#667466] sm:flex-row sm:items-center sm:justify-between">
+              <button onClick={onSwitchMode} className="text-left text-[#536f45] transition-colors hover:text-[#1f2d23]">
+                {isRegister ? 'Ya tengo cuenta' : 'Crear una cuenta nueva'}
+              </button>
+              <button onClick={onEnter} className="text-left text-[#536159] transition-colors hover:text-[#1f2d23]">
+                Explorar sin cuenta
+              </button>
+            </div>
+          </section>
+        </div>
       </div>
     </main>
   );
