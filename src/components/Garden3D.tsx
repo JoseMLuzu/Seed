@@ -314,6 +314,137 @@ function TreeBranch({ position, rotation, length, radius, color = '#6d4c41' }: {
   );
 }
 
+function getPotStyle(palette: GardenPalette, stage: SeedNote['growthStage']) {
+  const stageScale = stage === 'bloom' ? 1.16 : stage === 'sprout' ? 1.04 : stage === 'withered' ? 0.98 : 0.9;
+  const styles: Record<GardenPalette['treeStyle'], { body: string; rim: string; soil: string; accent: string; roughness: number; metalness?: number; opacity?: number }> = {
+    broadleaf: { body: '#b66a3c', rim: '#d28a55', soil: '#4a3022', accent: '#f1b36c', roughness: 0.86 },
+    pine: { body: '#5d4634', rim: '#7a5b3f', soil: '#2d241c', accent: '#9fbf88', roughness: 0.94 },
+    cherry: { body: '#f1b3c2', rim: '#ffd1dc', soil: '#5f3a3c', accent: palette.leafAlt, roughness: 0.72 },
+    moon: { body: '#2d3556', rim: '#55628d', soil: '#181f36', accent: palette.sparkles, roughness: 0.58, metalness: 0.12 },
+    palm: { body: '#9b7042', rim: '#c89a5c', soil: '#3d2b18', accent: '#ffd166', roughness: 0.88 },
+    mushroom: { body: '#6d4bb3', rim: '#72f5d1', soil: '#2b1e4f', accent: '#d46cff', roughness: 0.42, metalness: 0.08 },
+    cactus: { body: '#c8854b', rim: '#e2aa66', soil: '#6f4a2d', accent: '#f0b75a', roughness: 0.96 },
+    ice: { body: '#bfefff', rim: '#ffffff', soil: '#86b9ca', accent: '#e0f2fe', roughness: 0.22, metalness: 0.04, opacity: 0.72 },
+  };
+
+  return { ...styles[palette.treeStyle], stageScale };
+}
+
+function IdeaPotModel({
+  palette,
+  stage,
+  selected,
+  needsWater,
+}: {
+  palette: GardenPalette;
+  stage: SeedNote['growthStage'];
+  selected: boolean;
+  needsWater: boolean;
+}) {
+  const style = getPotStyle(palette, stage);
+  const crackColor = stage === 'withered' ? '#2f241d' : style.accent;
+
+  return (
+    <group scale={[style.stageScale, style.stageScale, style.stageScale]}>
+      <mesh position={[0, -0.13, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.38, 0.28, 0.34, 28, 1, false]} />
+        <meshStandardMaterial
+          color={style.body}
+          roughness={style.roughness}
+          metalness={style.metalness || 0}
+          transparent={Boolean(style.opacity)}
+          opacity={style.opacity || 1}
+        />
+      </mesh>
+      <mesh position={[0, 0.07, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.43, 0.39, 0.11, 28]} />
+        <meshStandardMaterial color={style.rim} roughness={style.roughness} metalness={style.metalness || 0} />
+      </mesh>
+      <mesh position={[0, 0.14, 0]} receiveShadow>
+        <cylinderGeometry args={[0.35, 0.35, 0.035, 28]} />
+        <meshStandardMaterial color={needsWater ? '#8a684d' : style.soil} roughness={1} />
+      </mesh>
+      <mesh position={[0, -0.33, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.25, 0.31, 0.08, 28]} />
+        <meshStandardMaterial color={style.body} roughness={style.roughness} metalness={style.metalness || 0} />
+      </mesh>
+
+      {palette.treeStyle === 'pine' && (
+        <>
+          <TreeBranch position={[0.28, 0.04, 0.08]} rotation={[0.2, 0.2, -1.2]} length={0.18} radius={0.012} color={style.accent} />
+          <TreeBranch position={[-0.26, -0.03, 0.09]} rotation={[0.1, -0.2, 1.1]} length={0.16} radius={0.011} color={style.accent} />
+        </>
+      )}
+
+      {palette.treeStyle === 'cherry' && (
+        [0, 1, 2].map((dot) => {
+          const angle = dot * 2.1;
+          return (
+            <mesh key={dot} position={[Math.cos(angle) * 0.32, -0.02 + dot * 0.04, Math.sin(angle) * 0.32]} scale={[0.05, 0.025, 0.05]}>
+              <sphereGeometry args={[1, 12, 8]} />
+              <meshStandardMaterial color={style.accent} roughness={0.65} />
+            </mesh>
+          );
+        })
+      )}
+
+      {palette.treeStyle === 'moon' && (
+        <mesh position={[0.29, 0.0, 0.2]} rotation={[0.2, 0.1, 0.35]} scale={[0.11, 0.02, 0.11]}>
+          <torusGeometry args={[1, 0.18, 8, 24, Math.PI * 1.35]} />
+          <meshStandardMaterial color={style.accent} emissive={style.accent} emissiveIntensity={0.35} roughness={0.4} />
+        </mesh>
+      )}
+
+      {palette.treeStyle === 'palm' && (
+        <mesh position={[0, 0.05, 0]} rotation={[0, 0.55, 0]}>
+          <torusGeometry args={[0.36, 0.018, 8, 36]} />
+          <meshStandardMaterial color={style.accent} roughness={0.8} />
+        </mesh>
+      )}
+
+      {palette.treeStyle === 'mushroom' && (
+        <mesh position={[0.33, 0.02, 0.1]} scale={[0.07, 0.07, 0.07]}>
+          <sphereGeometry args={[1, 16, 12]} />
+          <meshStandardMaterial color={style.accent} emissive={style.accent} emissiveIntensity={0.35} roughness={0.35} />
+        </mesh>
+      )}
+
+      {palette.treeStyle === 'cactus' && (
+        [0, 1, 2, 3].map((rib) => {
+          const angle = rib * Math.PI / 2;
+          return (
+            <mesh key={rib} position={[Math.cos(angle) * 0.39, -0.08, Math.sin(angle) * 0.39]} rotation={[0, -angle, 0]} scale={[0.012, 0.18, 0.012]}>
+              <boxGeometry args={[1, 1, 1]} />
+              <meshStandardMaterial color={style.accent} roughness={0.9} />
+            </mesh>
+          );
+        })
+      )}
+
+      {palette.treeStyle === 'ice' && (
+        <mesh position={[0, 0.08, 0]} rotation={[0, 0.2, 0]}>
+          <torusGeometry args={[0.38, 0.018, 8, 36]} />
+          <meshStandardMaterial color={style.accent} emissive={style.accent} emissiveIntensity={0.18} roughness={0.24} transparent opacity={0.78} />
+        </mesh>
+      )}
+
+      {stage === 'withered' && (
+        <>
+          <TreeBranch position={[0.16, -0.04, 0.31]} rotation={[0.2, 0.35, -0.55]} length={0.2} radius={0.01} color={crackColor} />
+          <TreeBranch position={[-0.2, -0.15, 0.28]} rotation={[0.15, -0.25, 0.65]} length={0.18} radius={0.01} color={crackColor} />
+        </>
+      )}
+
+      {selected && (
+        <mesh position={[0, 0.15, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.48, 0.015, 8, 40]} />
+          <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.45} transparent opacity={0.72} depthWrite={false} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
 function SeedModel({ hovered, palette }: { hovered: boolean; palette: GardenPalette }) {
   return (
     <group>
@@ -1134,6 +1265,7 @@ function Plant3D({
         </mesh>
       )}
       <group ref={meshRef}>
+        <IdeaPotModel palette={palette} stage={growthStage} selected={selected} needsWater={needsWater} />
         {renderModel()}
       </group>
     </group>
