@@ -1369,28 +1369,12 @@ function PlantIllustration({ stage, progress, isGrowth, theme = 'earth' }: { sta
 
 function LandingPage({
   onEnter,
-  accountName,
-  setAccountName,
-  authEmail,
-  setAuthEmail,
-  authPassword,
-  setAuthPassword,
-  authDisabledReason,
-  authStatus,
-  onSignIn,
-  onSignUp,
+  onShowLogin,
+  onShowRegister,
 }: {
   onEnter: () => void;
-  accountName: string;
-  setAccountName: (value: string) => void;
-  authEmail: string;
-  setAuthEmail: (value: string) => void;
-  authPassword: string;
-  setAuthPassword: (value: string) => void;
-  authDisabledReason: string;
-  authStatus: string;
-  onSignIn: () => void;
-  onSignUp: () => void;
+  onShowLogin: () => void;
+  onShowRegister: () => void;
 }) {
   const features = [
     { icon: Leaf, title: 'Captura sin friccion', text: 'Anota ideas rapidas y conviertelas en brotes cuando estes listo.' },
@@ -1411,8 +1395,8 @@ function LandingPage({
         <img src="/icon-512.png" alt="" className="absolute right-[-8rem] top-[-7rem] w-[28rem] sm:w-[36rem] opacity-20 blur-[2px] rotate-[-10deg]" />
         <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(247,243,232,0.96)_0%,rgba(247,243,232,0.84)_44%,rgba(247,243,232,0.42)_100%)]" />
         <div className="absolute inset-x-0 bottom-0 h-52 bg-[linear-gradient(0deg,rgba(111,125,79,0.22),transparent)]" />
-        <div className="absolute right-[8%] bottom-[8%] hidden xl:block w-[29rem]">
-          <div className="relative rounded-[2rem] bg-white/72 border border-white/70 shadow-[0_34px_120px_rgba(47,59,47,0.18)] p-5 backdrop-blur-md">
+        <div className="absolute right-[6%] bottom-[8%] hidden xl:block w-[30rem]">
+          <div className="relative rounded-[2rem] bg-white/78 border border-white/70 shadow-[0_34px_120px_rgba(47,59,47,0.18)] p-5 backdrop-blur-md">
             <div className="flex items-center justify-between mb-5">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#c98f58]">Hoy</p>
@@ -1456,12 +1440,17 @@ function LandingPage({
                 <p className="text-[9px] font-black uppercase tracking-[0.28em] text-[#c98f58]">Digital Garden</p>
               </div>
             </div>
-            <button onClick={onEnter} className="rounded-full bg-white/76 border border-white px-4 py-2 text-sm font-black text-[#5a4635] shadow-sm hover:bg-white transition-colors">
-              Abrir app
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={onShowLogin} className="rounded-full bg-white/76 border border-white px-4 py-2 text-sm font-black text-[#5a4635] shadow-sm hover:bg-white transition-colors">
+                Iniciar sesión
+              </button>
+              <button onClick={onShowRegister} className="rounded-full bg-[#6f7d4f] text-white px-4 py-2 text-sm font-black shadow-sm hover:bg-[#5f6f42] transition-colors">
+                Crear cuenta
+              </button>
+            </div>
           </nav>
 
-          <div className="pt-28 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8 items-end">
+          <div className="pt-28 max-w-3xl">
             <div className="max-w-3xl">
             <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] font-black uppercase tracking-[0.3em] text-[#c98f58]">
               Jardin de ideas para personas que procrastinan
@@ -1473,62 +1462,17 @@ function LandingPage({
               Una app simple para plantar ideas, revisarlas sin culpa y convertirlas en avances reales con pasos pequenos.
             </motion.p>
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} className="mt-8 flex flex-col sm:flex-row gap-3">
-              <button onClick={onEnter} className="rounded-2xl bg-[#6f7d4f] text-white px-6 py-4 font-black shadow-xl shadow-[#6f7d4f]/25 flex items-center justify-center gap-2 active:translate-y-px soft-interaction">
-                Entrar al jardin <ArrowRight size={18} />
+              <button onClick={onShowRegister} className="rounded-2xl bg-[#6f7d4f] text-white px-6 py-4 font-black shadow-xl shadow-[#6f7d4f]/25 flex items-center justify-center gap-2 active:translate-y-px soft-interaction">
+                Crear mi jardín <ArrowRight size={18} />
               </button>
-              <a href="#como-funciona" className="rounded-2xl bg-white/76 border border-white text-[#5a4635] px-6 py-4 font-black shadow-sm text-center hover:bg-white transition-colors">
+              <button onClick={onShowLogin} className="rounded-2xl bg-white/76 border border-white text-[#5a4635] px-6 py-4 font-black shadow-sm text-center hover:bg-white transition-colors">
+                Iniciar sesión
+              </button>
+              <a href="#como-funciona" className="rounded-2xl bg-white/45 border border-white text-[#5a4635] px-6 py-4 font-black shadow-sm text-center hover:bg-white transition-colors">
                 Ver como funciona
               </a>
             </motion.div>
             </div>
-
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }} className="rounded-[2rem] bg-white/82 border border-white p-5 shadow-[0_24px_80px_rgba(47,59,47,0.16)] backdrop-blur-md">
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#c98f58]">Cuenta Seed</p>
-              <h2 className="mt-2 font-serif text-3xl font-black text-[#5a4635]">Guarda tu jardín</h2>
-              <p className="mt-2 text-sm font-semibold leading-relaxed text-[#6b7280]">Crea una cuenta para sincronizar ideas, planetas y riegos entre dispositivos.</p>
-              <div className="mt-5 space-y-3">
-                <label className="block">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-[#6f7d4f]">Nombre</span>
-                  <input
-                    value={accountName}
-                    onChange={(event) => setAccountName(event.target.value)}
-                    placeholder="Tu nombre"
-                    className="mt-1 w-full rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-4 py-3 text-sm font-bold outline-none focus:ring-1 focus:ring-[#6f7d4f]"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-[#6f7d4f]">Correo</span>
-                  <input
-                    type="email"
-                    value={authEmail}
-                    onChange={(event) => setAuthEmail(event.target.value)}
-                    placeholder="tu@email.com"
-                    className="mt-1 w-full rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-4 py-3 text-sm font-bold outline-none focus:ring-1 focus:ring-[#6f7d4f]"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-[#6f7d4f]">Contraseña</span>
-                  <input
-                    type="password"
-                    value={authPassword}
-                    onChange={(event) => setAuthPassword(event.target.value)}
-                    placeholder="Mínimo 6 caracteres"
-                    className="mt-1 w-full rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-4 py-3 text-sm font-bold outline-none focus:ring-1 focus:ring-[#6f7d4f]"
-                  />
-                </label>
-              </div>
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button onClick={onSignUp} disabled={Boolean(authDisabledReason)} className="rounded-2xl bg-[#6f7d4f] disabled:opacity-45 text-white px-4 py-3 text-sm font-black shadow-lg shadow-[#6f7d4f]/20">
-                  Crear cuenta
-                </button>
-                <button onClick={onSignIn} disabled={Boolean(authDisabledReason)} className="rounded-2xl bg-[#f7f3e8] disabled:opacity-45 border border-[#eadfce] text-[#5a4635] px-4 py-3 text-sm font-black">
-                  Iniciar sesión
-                </button>
-              </div>
-              {(authDisabledReason || authStatus) && (
-                <p className="mt-3 text-xs font-semibold text-[#6b7280]">{authStatus || authDisabledReason}</p>
-              )}
-            </motion.div>
           </div>
         </div>
       </section>
@@ -1647,10 +1591,170 @@ function LandingPage({
   );
 }
 
+function AuthEntryPage({
+  mode,
+  onBack,
+  onSwitchMode,
+  onEnter,
+  accountName,
+  setAccountName,
+  authEmail,
+  setAuthEmail,
+  authPassword,
+  setAuthPassword,
+  authDisabledReason,
+  authStatus,
+  onSignIn,
+  onSignUp,
+}: {
+  mode: 'login' | 'register';
+  onBack: () => void;
+  onSwitchMode: () => void;
+  onEnter: () => void;
+  accountName: string;
+  setAccountName: (value: string) => void;
+  authEmail: string;
+  setAuthEmail: (value: string) => void;
+  authPassword: string;
+  setAuthPassword: (value: string) => void;
+  authDisabledReason: string;
+  authStatus: string;
+  onSignIn: () => void;
+  onSignUp: () => void;
+}) {
+  const isRegister = mode === 'register';
+  const nameMissing = isRegister && !accountName.trim();
+  const disabledReason = nameMissing ? 'Escribe tu nombre para crear tu jardín.' : authDisabledReason;
+  const submit = () => {
+    if (disabledReason) return;
+    if (isRegister) onSignUp();
+    else onSignIn();
+  };
+
+  return (
+    <main className="min-h-screen bg-[#f7f3e8] text-[#223126] px-5 sm:px-8 lg:px-12 py-6 flex items-center">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute right-[-10rem] top-[-12rem] h-[32rem] w-[32rem] rounded-full bg-[#6f7d4f]/12" />
+        <div className="absolute left-[-8rem] bottom-[-10rem] h-[28rem] w-[28rem] rounded-full bg-[#c98f58]/12" />
+      </div>
+      <div className="relative z-10 w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_430px] gap-10 items-center">
+        <section className="hidden lg:block">
+          <button onClick={onBack} className="inline-flex items-center gap-2 rounded-full bg-white/70 border border-white px-4 py-2 text-sm font-black text-[#5a4635] shadow-sm">
+            <ChevronLeft size={16} /> Volver
+          </button>
+          <div className="mt-12 max-w-2xl">
+            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-[#c98f58]">
+              {isRegister ? 'Empieza tu jardín' : 'Vuelve a tu jardín'}
+            </p>
+            <h1 className="mt-5 font-serif text-6xl font-black leading-[0.92] text-[#4f3d2e]">
+              {isRegister ? 'Planta ideas que puedas volver a cuidar.' : 'Tus ideas siguen creciendo donde las dejaste.'}
+            </h1>
+            <p className="mt-6 text-lg font-semibold leading-relaxed text-[#4f5d4f]">
+              Seed sincroniza tus planetas, riegos y pasos para que puedas pasar de capturar una idea a trabajarla sin aprender un sistema pesado.
+            </p>
+          </div>
+          <div className="mt-10 grid grid-cols-3 gap-3 max-w-xl">
+            {[
+              { label: 'Planetas', value: '3D' },
+              { label: 'Riego', value: 'Diario' },
+              { label: 'Enfoque', value: 'Simple' },
+            ].map(item => (
+              <div key={item.label} className="rounded-2xl bg-white/76 border border-white p-4 shadow-sm">
+                <p className="text-[9px] font-black uppercase tracking-widest text-[#6b7280]">{item.label}</p>
+                <p className="mt-2 font-serif text-2xl font-black text-[#5a4635]">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-[2rem] bg-white border border-[#eadfce] p-5 sm:p-7 shadow-[0_30px_100px_rgba(47,59,47,0.16)]">
+          <div className="flex items-center justify-between gap-4">
+            <button onClick={onBack} className="lg:hidden h-10 w-10 rounded-full bg-[#f7f3e8] border border-[#eadfce] flex items-center justify-center text-[#5a4635]">
+              <ChevronLeft size={18} />
+            </button>
+            <div className="flex items-center gap-3">
+              <img src="/icon-192.png" alt="Seed" className="h-11 w-11 rounded-2xl shadow-md" />
+              <div>
+                <p className="font-serif text-2xl font-black text-[#6f7d4f] leading-none">Seed</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.26em] text-[#c98f58]">Digital Garden</p>
+              </div>
+            </div>
+            <span className="hidden sm:block rounded-full bg-[#eef1e6] px-3 py-1 text-[10px] font-black uppercase tracking-widest text-[#6f7d4f]">
+              {isRegister ? 'Registro' : 'Login'}
+            </span>
+          </div>
+
+          <div className="mt-8">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#c98f58]">{isRegister ? 'Crear cuenta' : 'Iniciar sesión'}</p>
+            <h2 className="mt-2 font-serif text-4xl font-black text-[#5a4635]">{isRegister ? 'Crea tu jardín' : 'Entra a tu jardín'}</h2>
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-[#6b7280]">
+              {isRegister ? 'Guarda tus ideas y sincronízalas entre dispositivos.' : 'Continúa regando tus ideas desde cualquier dispositivo.'}
+            </p>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            {isRegister && (
+              <label className="block">
+                <span className="text-[9px] font-black uppercase tracking-widest text-[#6f7d4f]">Nombre</span>
+                <input
+                  value={accountName}
+                  onChange={(event) => setAccountName(event.target.value)}
+                  placeholder="Tu nombre"
+                  className="mt-1 w-full rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-4 py-3 text-sm font-bold outline-none focus:ring-1 focus:ring-[#6f7d4f]"
+                />
+              </label>
+            )}
+            <label className="block">
+              <span className="text-[9px] font-black uppercase tracking-widest text-[#6f7d4f]">Correo</span>
+              <input
+                type="email"
+                value={authEmail}
+                onChange={(event) => setAuthEmail(event.target.value)}
+                placeholder="tu@email.com"
+                className="mt-1 w-full rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-4 py-3 text-sm font-bold outline-none focus:ring-1 focus:ring-[#6f7d4f]"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[9px] font-black uppercase tracking-widest text-[#6f7d4f]">Contraseña</span>
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(event) => setAuthPassword(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') submit();
+                }}
+                placeholder="Mínimo 6 caracteres"
+                className="mt-1 w-full rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-4 py-3 text-sm font-bold outline-none focus:ring-1 focus:ring-[#6f7d4f]"
+              />
+            </label>
+          </div>
+
+          <button onClick={submit} disabled={Boolean(disabledReason)} className="mt-5 w-full rounded-2xl bg-[#6f7d4f] disabled:opacity-45 text-white px-5 py-4 font-black shadow-lg shadow-[#6f7d4f]/20">
+            {isRegister ? 'Crear cuenta' : 'Iniciar sesión'}
+          </button>
+          {(disabledReason || authStatus) && (
+            <p className="mt-3 text-xs font-semibold leading-relaxed text-[#6b7280]">{authStatus || disabledReason}</p>
+          )}
+
+          <div className="mt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm font-bold text-[#6b7280]">
+            <button onClick={onSwitchMode} className="text-[#6f7d4f] hover:text-[#5f6f42]">
+              {isRegister ? 'Ya tengo cuenta' : 'Crear una cuenta nueva'}
+            </button>
+            <button onClick={onEnter} className="text-[#5a4635] hover:text-[#6f7d4f]">
+              Entrar sin cuenta
+            </button>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
 export default function App() {
   const [notes, setNotes] = useState<SeedNote[]>([]);
   const [notesLoaded, setNotesLoaded] = useState(false);
   const [showLanding, setShowLanding] = useState(() => localStorage.getItem('seed-landing-seen') !== 'true');
+  const [landingRoute, setLandingRoute] = useState<'landing' | 'login' | 'register'>('landing');
   const importInputRef = useRef<HTMLInputElement>(null);
   const [planets, setPlanets] = useState<Planet[]>(() => {
     try {
@@ -2466,7 +2570,12 @@ export default function App() {
       email: authEmail.trim(),
       password: authPassword,
     });
-    setAuthStatus(error ? formatAuthError(error.message) : 'Sesión iniciada.');
+    if (error) {
+      setAuthStatus(formatAuthError(error.message));
+      return;
+    }
+    setAuthStatus('Sesión iniciada.');
+    enterApp();
   };
 
   const signOut = async () => {
@@ -2500,6 +2609,7 @@ export default function App() {
   const enterApp = () => {
     localStorage.setItem('seed-landing-seen', 'true');
     setShowLanding(false);
+    setLandingRoute('landing');
   };
 
   const runCardAction = (note: SeedNote, action: ReturnType<typeof getIdeaGuidance>['kind']) => {
@@ -2528,19 +2638,35 @@ export default function App() {
   };
 
   if (showLanding) {
+    if (landingRoute !== 'landing') {
+      return (
+        <AuthEntryPage
+          mode={landingRoute}
+          onBack={() => setLandingRoute('landing')}
+          onSwitchMode={() => setLandingRoute(landingRoute === 'login' ? 'register' : 'login')}
+          onEnter={enterApp}
+          accountName={account.name}
+          setAccountName={(name) => setAccount(current => ({ ...current, name }))}
+          authEmail={authEmail}
+          setAuthEmail={(email) => {
+            setAuthEmail(email);
+            setAccount(current => ({ ...current, email }));
+          }}
+          authPassword={authPassword}
+          setAuthPassword={setAuthPassword}
+          authDisabledReason={authDisabledReason}
+          authStatus={authStatus}
+          onSignIn={signInWithEmail}
+          onSignUp={signUpWithEmail}
+        />
+      );
+    }
+
     return (
       <LandingPage
         onEnter={enterApp}
-        accountName={account.name}
-        setAccountName={(name) => setAccount(current => ({ ...current, name }))}
-        authEmail={authEmail}
-        setAuthEmail={setAuthEmail}
-        authPassword={authPassword}
-        setAuthPassword={setAuthPassword}
-        authDisabledReason={authDisabledReason}
-        authStatus={authStatus}
-        onSignIn={signInWithEmail}
-        onSignUp={signUpWithEmail}
+        onShowLogin={() => setLandingRoute('login')}
+        onShowRegister={() => setLandingRoute('register')}
       />
     );
   }
