@@ -1424,18 +1424,18 @@ function MiniProductStrip() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <div className="rounded-[2rem] border border-[#e3e8df] bg-white p-5 shadow-sm">
-        <div className="h-64 rounded-[1.5rem] bg-[#f7faf5] p-4">
+        <div className="flex min-h-[18rem] flex-col rounded-[1.5rem] bg-[#f7faf5] p-4">
           <div className="flex items-center justify-between">
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#7a8f63]">Hoy</p>
             <Droplets size={20} className="text-[#536f45]" />
           </div>
           <h3 className="mt-3 font-serif text-3xl font-black text-[#1b271f]">Riego diario</h3>
           <p className="mt-2 text-sm font-semibold text-[#667466]">Una idea antigua vuelve al frente sin convertirse en presión.</p>
-          <div className="mt-6 space-y-3">
+          <div className="mt-auto space-y-2 pt-5">
             {['Revisar propuesta', 'Elegir micro-paso', 'Guardar aprendizaje'].map((item, index) => (
-              <div key={item} className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm">
-                <span className="text-sm font-black text-[#253229]">{item}</span>
-                <span className="h-3 rounded-full bg-[#7a8f63]/25" style={{ width: 36 + index * 14 }} />
+              <div key={item} className="flex min-h-11 items-center justify-between gap-3 rounded-2xl bg-white px-4 py-2.5 shadow-sm">
+                <span className="min-w-0 text-sm font-black leading-snug text-[#253229]">{item}</span>
+                <span className="h-2.5 shrink-0 rounded-full bg-[#7a8f63]/25" style={{ width: 36 + index * 14 }} />
               </div>
             ))}
           </div>
@@ -1445,13 +1445,13 @@ function MiniProductStrip() {
       </div>
 
       <div className="rounded-[2rem] border border-[#e3e8df] bg-white p-5 shadow-sm">
-        <div className="h-64 rounded-[1.5rem] bg-[#101812] p-4 text-white">
+        <div className="flex min-h-[18rem] flex-col rounded-[1.5rem] bg-[#101812] p-4 text-white">
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#b8d69c]">Concentración</p>
           <div className="mt-8 text-center">
             <p className="font-mono text-6xl font-black">24:18</p>
             <p className="mt-2 text-xs font-black uppercase tracking-widest text-white/55">Cultivando una idea</p>
           </div>
-          <div className="mt-8 rounded-2xl bg-white/10 p-3">
+          <div className="mt-auto rounded-2xl bg-white/10 p-3">
             <div className="h-2 overflow-hidden rounded-full bg-white/10">
               <div className="h-full w-2/3 rounded-full bg-[#b8d69c]" />
             </div>
@@ -1463,14 +1463,14 @@ function MiniProductStrip() {
       </div>
 
       <div className="rounded-[2rem] border border-[#e3e8df] bg-white p-5 shadow-sm">
-        <div className="h-64 rounded-[1.5rem] bg-[#eef6ee] p-4">
+        <div className="flex min-h-[18rem] flex-col rounded-[1.5rem] bg-[#eef6ee] p-4">
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#7a8f63]">Cosecha</p>
-          <h3 className="mt-3 font-serif text-3xl font-black text-[#1b271f]">Aprendizaje guardado</h3>
-          <div className="mt-6 rounded-2xl bg-white p-4 shadow-sm">
+          <h3 className="mt-3 font-serif text-3xl font-black leading-tight text-[#1b271f]">Aprendizaje guardado</h3>
+          <div className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
             <Archive size={22} className="text-[#536f45]" />
             <p className="mt-4 text-sm font-bold leading-relaxed text-[#536159]">Qué funcionó, qué cambiaría y cuál es la siguiente semilla.</p>
           </div>
-          <button className="mt-5 w-full rounded-2xl bg-[#19251d] py-3 text-sm font-black text-white">Cerrar ciclo</button>
+          <button className="mt-auto w-full rounded-2xl bg-[#19251d] py-3 text-sm font-black text-white">Cerrar ciclo</button>
         </div>
         <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Cierre real</h4>
         <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">Las ideas no solo se tachan. Se cosechan con una reflexión útil para volver mejor.</p>
@@ -1574,10 +1574,10 @@ function LandingPage({
               Jardín de ideas para avanzar sin sobrecargarte
             </motion.p>
             <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="mt-6 max-w-4xl font-serif text-5xl font-black leading-[0.95] text-[#162019] sm:text-7xl lg:text-8xl">
-              Planta ideas. Riégalas. Hazlas crecer.
+              Haz crecer tus ideas.
             </motion.h1>
             <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="mt-7 max-w-2xl text-lg font-semibold leading-relaxed text-[#536159] sm:text-xl">
-              Seed transforma notas dispersas en un jardín vivo: captura ideas, revísalas antes de olvidarlas, enfócate en una sola y cosecha aprendizajes cuando termines.
+              Seed transforma notas dispersas en un jardín vivo: planta lo que se te ocurre, riégalo antes de olvidarlo, enfócate en una sola idea y cosecha aprendizajes cuando termines.
             </motion.p>
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} className="mt-9 flex flex-col gap-3 sm:flex-row">
               <button onClick={onShowRegister} className="rounded-2xl bg-[#1f2d23] px-6 py-4 font-black text-white shadow-[0_18px_50px_rgba(31,45,35,0.22)] transition-colors hover:bg-[#324434]">
