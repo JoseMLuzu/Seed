@@ -392,7 +392,7 @@ function TodayView({
 }) {
   const activeNotes = notes.filter(note => !note.inbox && note.growthStage !== 'bloom' && !note.paused);
   const allThirstyNotes = activeNotes
-    .filter(wateringDue)
+    .filter(note => wateringDue(note))
     .sort((a, b) => daysSince(b.lastWateredAt || b.createdAt) - daysSince(a.lastWateredAt || a.createdAt));
   const thirstyNotes = allThirstyNotes.slice(0, 3);
   const hiddenThirstyCount = Math.max(0, allThirstyNotes.length - thirstyNotes.length);
