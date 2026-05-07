@@ -1430,9 +1430,9 @@ function MiniProductStrip() {
             <Droplets size={20} className="text-[#536f45]" />
           </div>
           <h3 className="mt-3 font-serif text-3xl font-black text-[#1b271f]">Riego diario</h3>
-          <p className="mt-2 text-sm font-semibold text-[#667466]">Una idea antigua vuelve al frente sin convertirse en presión.</p>
+          <p className="mt-2 text-sm font-semibold text-[#667466]">Un pequeño recordatorio para que tus buenas ideas no se queden olvidadas.</p>
           <div className="mt-auto space-y-2 pt-5">
-            {['Revisar propuesta', 'Elegir micro-paso', 'Guardar aprendizaje'].map((item, index) => (
+            {['Volver a mirarla', 'Elegir un paso fácil', 'Dejarla más clara'].map((item, index) => (
               <div key={item} className="flex min-h-11 items-center justify-between gap-3 rounded-2xl bg-white px-4 py-2.5 shadow-sm">
                 <span className="min-w-0 text-sm font-black leading-snug text-[#253229]">{item}</span>
                 <span className="h-2.5 shrink-0 rounded-full bg-[#7a8f63]/25" style={{ width: 36 + index * 14 }} />
@@ -1440,8 +1440,8 @@ function MiniProductStrip() {
             ))}
           </div>
         </div>
-        <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Home que decide contigo</h4>
-        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">La pantalla inicial prioriza plantar, regar o avanzar. No abre con una pared de opciones.</p>
+        <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Siempre sabes qué hacer</h4>
+        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">Abres Seed y encuentras una acción simple: plantar algo nuevo, cuidar una idea o avanzar un paso.</p>
       </div>
 
       <div className="rounded-[2rem] border border-[#e3e8df] bg-white p-5 shadow-sm">
@@ -1449,31 +1449,31 @@ function MiniProductStrip() {
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#b8d69c]">Concentración</p>
           <div className="mt-8 text-center">
             <p className="font-mono text-6xl font-black">24:18</p>
-            <p className="mt-2 text-xs font-black uppercase tracking-widest text-white/55">Cultivando una idea</p>
+            <p className="mt-2 text-xs font-black uppercase tracking-widest text-white/55">Una idea, cero ruido</p>
           </div>
           <div className="mt-auto rounded-2xl bg-white/10 p-3">
             <div className="h-2 overflow-hidden rounded-full bg-white/10">
               <div className="h-full w-2/3 rounded-full bg-[#b8d69c]" />
             </div>
-            <p className="mt-3 text-sm font-semibold text-white/70">Cerrar primer borrador</p>
+            <p className="mt-3 text-sm font-semibold text-white/70">Terminar el primer borrador</p>
           </div>
         </div>
-        <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Enfoque sin ruido</h4>
-        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">Un temporizador, una idea, pasos claros y recompensa visual cuando avanzas.</p>
+        <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Entra en modo jardín</h4>
+        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">La app se calma contigo: ves solo una idea, su siguiente paso y cómo crece mientras avanzas.</p>
       </div>
 
       <div className="rounded-[2rem] border border-[#e3e8df] bg-white p-5 shadow-sm">
         <div className="flex min-h-[18rem] flex-col rounded-[1.5rem] bg-[#eef6ee] p-4">
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#7a8f63]">Cosecha</p>
-          <h3 className="mt-3 font-serif text-3xl font-black leading-tight text-[#1b271f]">Aprendizaje guardado</h3>
+          <h3 className="mt-3 font-serif text-3xl font-black leading-tight text-[#1b271f]">Idea cosechada</h3>
           <div className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
             <Archive size={22} className="text-[#536f45]" />
-            <p className="mt-4 text-sm font-bold leading-relaxed text-[#536159]">Qué funcionó, qué cambiaría y cuál es la siguiente semilla.</p>
+            <p className="mt-4 text-sm font-bold leading-relaxed text-[#536159]">Qué lograste, qué aprendiste y qué podría crecer después.</p>
           </div>
           <button className="mt-auto w-full rounded-2xl bg-[#19251d] py-3 text-sm font-black text-white">Cerrar ciclo</button>
         </div>
-        <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Cierre real</h4>
-        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">Las ideas no solo se tachan. Se cosechan con una reflexión útil para volver mejor.</p>
+        <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Terminar también se siente bien</h4>
+        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">Cada proyecto cerrado deja una pequeña cosecha: progreso, claridad y ganas para lo siguiente.</p>
       </div>
     </div>
   );
@@ -1539,10 +1539,10 @@ function LandingPage({
   onShowRegister: () => void;
 }) {
   const features = [
-    { icon: Leaf, title: 'Plantar sin ordenar todo', text: 'Captura una idea en segundos y déjala como semilla hasta que tengas claridad.' },
-    { icon: Droplets, title: 'Riego contra procrastinación', text: 'Seed te trae ideas viejas para revisarlas rápido, decidir si siguen vivas o darles un micro-paso.' },
-    { icon: Target, title: 'Enfoque de una sola idea', text: 'Cuando toca trabajar, la app reduce el ruido y te muestra solo el proyecto elegido.' },
-    { icon: Box, title: 'Planetas para cada vida', text: 'Separa trabajo, universidad, personal o cualquier área sin convertirlo en un sistema pesado.' },
+    { icon: Leaf, title: 'Guarda ideas sin pensarlo tanto', text: 'Escribe eso que se te ocurrió y déjalo crecer poco a poco, sin tener que organizarlo todo desde el primer día.' },
+    { icon: Droplets, title: 'Vuelve a lo que vale la pena', text: 'Seed te recuerda ideas que podrían seguir vivas, para revisarlas en segundos y decidir si quieres darles cariño.' },
+    { icon: Target, title: 'Menos distracción, más avance', text: 'Cuando quieras trabajar, eliges una idea y la app te deja con lo justo: foco, pasos y una sensación clara de progreso.' },
+    { icon: Box, title: 'Un planeta para cada parte de ti', text: 'Trabajo, estudio, vida personal o proyectos creativos pueden vivir separados, cada uno con su propio jardín.' },
   ];
   const ecosystem = ['Pradera', 'Bosque', 'Floración', 'Nocturno', 'Jungla', 'Alien', 'Desierto', 'Ártico'];
 
@@ -1571,13 +1571,13 @@ function LandingPage({
         <div className="relative z-10 mx-auto flex min-h-[68vh] max-w-7xl items-center py-10 sm:py-14">
           <div className="max-w-4xl pb-8">
             <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] font-black uppercase text-[#7a8f63]">
-              Jardín de ideas para avanzar sin sobrecargarte
+              Un jardín para tus ideas, planes y proyectos
             </motion.p>
             <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="mt-6 max-w-4xl font-serif text-5xl font-black leading-[0.95] text-[#162019] sm:text-7xl lg:text-8xl">
               Haz crecer tus ideas.
             </motion.h1>
             <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="mt-7 max-w-2xl text-lg font-semibold leading-relaxed text-[#536159] sm:text-xl">
-              Seed transforma notas dispersas en un jardín vivo: planta lo que se te ocurre, riégalo antes de olvidarlo, enfócate en una sola idea y cosecha aprendizajes cuando termines.
+              Seed convierte esas ideas que normalmente se pierden en algo que puedes cuidar. Planta lo que se te ocurre, vuelve cuando haga falta y mira cómo toma forma sin sentir que tienes otra app complicada que aprender.
             </motion.p>
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} className="mt-9 flex flex-col gap-3 sm:flex-row">
               <button onClick={onShowRegister} className="rounded-2xl bg-[#1f2d23] px-6 py-4 font-black text-white shadow-[0_18px_50px_rgba(31,45,35,0.22)] transition-colors hover:bg-[#324434]">
@@ -1592,9 +1592,9 @@ function LandingPage({
             </motion.div>
             <div className="mt-10 grid max-w-xl grid-cols-3 gap-3">
               {[
-                { label: 'Riego', value: '20s' },
-                { label: 'Enfoque', value: '1 idea' },
-                { label: 'Sync', value: 'Nube' },
+                { label: 'Revisar', value: '20s' },
+                { label: 'Enfocar', value: '1 idea' },
+                { label: 'Guardar', value: 'Siempre' },
               ].map((item) => (
                 <div key={item.label} className="rounded-2xl border border-[#dfe8dd] bg-white px-4 py-3 shadow-sm">
                   <p className="text-[9px] font-black uppercase text-[#7b8278]">{item.label}</p>
@@ -1610,11 +1610,11 @@ function LandingPage({
         <div className="mx-auto max-w-7xl">
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-[0.78fr_1.22fr] lg:items-end">
             <div>
-              <p className="text-[10px] font-black uppercase text-[#7a8f63]">Qué hace diferente a Seed</p>
-              <h2 className="mt-4 max-w-3xl font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">No es un gestor de notas. Es un sistema suave para volver.</h2>
+              <p className="text-[10px] font-black uppercase text-[#7a8f63]">Por qué se siente diferente</p>
+              <h2 className="mt-4 max-w-3xl font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">No guardes ideas para olvidarlas. Dales un lugar donde crecer.</h2>
             </div>
             <p className="text-lg font-semibold leading-relaxed text-[#536159]">
-              La mayoría de apps capturan información y luego la esconden. Seed usa la metáfora del jardín para darte una acción clara: plantar, regar, enfocar o cosechar.
+              Muchas apps terminan siendo cajones llenos de notas. Seed se siente más como cuidar un jardín: vuelves con curiosidad, eliges algo pequeño y lo haces avanzar.
             </p>
           </div>
           <div className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1636,16 +1636,16 @@ function LandingPage({
           <ProductOrbitPreview />
           <div>
             <p className="text-[10px] font-black uppercase text-[#7a8f63]">Mundo 3D</p>
-            <h2 className="mt-4 max-w-3xl font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Tu jardín se entiende de un vistazo.</h2>
+            <h2 className="mt-4 max-w-3xl font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Tu progreso se vuelve algo que puedes ver.</h2>
             <p className="mt-5 text-lg font-semibold leading-relaxed text-[#536159]">
-              El planeta no es decoración: resume cuántas ideas tienes, cuáles necesitan riego y qué proyecto está creciendo. Cada planta usa una maceta para que puedas reconocerla sin perderte en una lista.
+              En vez de mirar una lista fría, ves un pequeño mundo lleno de ideas. Algunas apenas nacen, otras necesitan atención y otras ya están listas para florecer.
             </p>
             <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {[
-                { title: 'Zoom a una planta', text: 'Al elegir una idea, el planeta se detiene y la cámara se acerca para no perder el contexto.' },
-                { title: 'Clima con sentido', text: 'Cuando llueve, el jardín se siente vivo y el riego baja presión porque la app ya cuidó tus ideas.' },
-                { title: 'Ecosistemas distintos', text: 'Pinos, cerezos, jungla, planeta alien y más temas cambian el carácter de cada planeta.' },
-                { title: 'Progreso visual', text: 'Semillas, brotes y árboles muestran si una idea está capturada, en progreso o lista para cosechar.' },
+                { title: 'Encuentra tu idea rápido', text: 'Tocas una planta y el mundo se acerca a ella, para que no tengas que buscar entre listas interminables.' },
+                { title: 'El jardín también respira', text: 'El clima, la luz y la lluvia hacen que volver a tus ideas se sienta menos como una tarea y más como un ritual.' },
+                { title: 'Cada planeta tiene personalidad', text: 'Puedes tener un jardín para trabajo, otro para estudio y otro para tus proyectos personales.' },
+                { title: 'Ves cómo va creciendo', text: 'Una idea empieza como semilla, se vuelve brote y puede terminar como árbol cuando la haces avanzar.' },
               ].map((item) => (
                 <div key={item.title} className="rounded-2xl border border-[#e3e8df] bg-white p-5 shadow-sm">
                   <h3 className="font-serif text-xl font-black text-[#162019]">{item.title}</h3>
@@ -1661,9 +1661,9 @@ function LandingPage({
         <div className="mx-auto max-w-7xl">
           <div className="mx-auto max-w-3xl text-center">
             <p className="text-[10px] font-black uppercase text-[#7a8f63]">Interfaz</p>
-            <h2 className="mt-4 font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Todo se siente como cuidar un jardín.</h2>
+            <h2 className="mt-4 font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Una app que te invita a volver.</h2>
             <p className="mt-5 text-lg font-semibold leading-relaxed text-[#536159]">
-              Home, mundo 3D, enfoque y cosecha trabajan juntos para convertir ideas sueltas en proyectos que vuelves a tocar.
+              Seed no quiere llenarte de botones. Quiere ayudarte a recordar qué importa, elegir un paso pequeño y sentir que tus ideas siguen vivas.
             </p>
           </div>
           <div className="mt-12">
@@ -1676,9 +1676,9 @@ function LandingPage({
         <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
           <div>
             <p className="text-[10px] font-black uppercase text-[#7a8f63]">Ecosistemas</p>
-            <h2 className="mt-4 font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Cada área puede tener su propio planeta.</h2>
+            <h2 className="mt-4 font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Separa tu vida sin complicarla.</h2>
             <p className="mt-5 text-lg font-semibold leading-relaxed text-[#536159]">
-              Trabajo, universidad, vida personal o proyectos creativos pueden tener ecosistemas distintos. Tus ideas no se amontonan: viven en mundos separados y fáciles de reconocer.
+              Tu trabajo, tus estudios, tus planes personales y tus ideas raras no tienen por qué mezclarse. Cada mundo puede tener su propia energía, color y ritmo.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -1695,9 +1695,9 @@ function LandingPage({
       <section className="px-5 py-20 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-5xl rounded-[2.5rem] bg-[#162019] px-6 py-14 text-center text-white sm:px-12">
           <Sparkles className="mx-auto text-[#b8d69c]" size={28} />
-          <h2 className="mx-auto mt-5 max-w-3xl font-serif text-5xl font-black leading-[0.98] sm:text-6xl">Empieza con una semilla. Vuelve mañana a regarla.</h2>
+          <h2 className="mx-auto mt-5 max-w-3xl font-serif text-5xl font-black leading-[0.98] sm:text-6xl">Empieza con una idea pequeña. Deja que crezca contigo.</h2>
           <p className="mx-auto mt-5 max-w-2xl text-lg font-semibold leading-relaxed text-white/70">
-            Seed está diseñado para que una idea no muera después de escribirla. Te ayuda a volver, elegir y avanzar.
+            No necesitas tener todo claro. Solo planta una idea, vuelve cuando puedas y deja que Seed te ayude a convertirla en algo real.
           </p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <button onClick={onShowRegister} className="rounded-2xl bg-white px-6 py-4 font-black text-[#162019]">
@@ -1754,16 +1754,16 @@ function AuthEntryPage({
   };
   const benefits = isRegister
     ? [
-        { title: 'Tus planetas sincronizados', text: 'Ideas, pasos, riegos y cosechas viajan contigo entre dispositivos.' },
-        { title: 'Empieza sin estructura pesada', text: 'Planta una semilla ahora y ordénala después solo si hace falta.' },
-        { title: 'Vuelve sin presión', text: 'El riego te recuerda ideas útiles sin convertirlas en tareas obligatorias.' },
-        { title: 'Enfoque claro', text: 'Cuando trabajas, Seed deja visible una idea y sus pasos reales.' },
+        { title: 'Tus ideas contigo', text: 'Empieza en un dispositivo y vuelve desde otro sin perder lo que estabas cuidando.' },
+        { title: 'Sin configurar mil cosas', text: 'Planta una idea ahora. Ya habrá tiempo para darle forma cuando vuelva a llamar tu atención.' },
+        { title: 'Recordatorios amables', text: 'El riego te ayuda a volver a ideas buenas sin culpa, presión ni listas eternas.' },
+        { title: 'Un paso a la vez', text: 'Cuando quieras avanzar, Seed te ayuda a mirar una sola idea y hacer algo pequeño.' },
       ]
     : [
-        { title: 'Continúa donde estabas', text: 'Retoma el planeta, la idea y los pasos que dejaste abiertos.' },
-        { title: 'Riego pendiente', text: 'Revisa lo que necesita atención antes de que se pierda.' },
-        { title: 'Sesiones de enfoque', text: 'Vuelve a trabajar en una sola idea, con progreso visible.' },
-        { title: 'Cosechas guardadas', text: 'Consulta aprendizajes de proyectos cerrados para decidir mejor.' },
+        { title: 'Vuelve sin perderte', text: 'Encuentra tus jardines, tus ideas y el siguiente paso que dejaste pendiente.' },
+        { title: 'Ideas que piden atención', text: 'Seed te muestra lo que vale la pena volver a mirar antes de que se enfríe.' },
+        { title: 'Foco más fácil', text: 'Retoma una idea, pon un tiempo y avanza sin rodearte de distracciones.' },
+        { title: 'Tu progreso guardado', text: 'Cada idea terminada deja claridad para la próxima vez que quieras crear algo.' },
       ];
 
   return (
@@ -1793,10 +1793,10 @@ function AuthEntryPage({
               {isRegister ? 'Tu jardín empieza aquí' : 'Vuelve a tu jardín'}
             </p>
             <h1 className="mt-5 max-w-3xl font-serif text-6xl font-black leading-[0.94] text-[#162019]">
-              {isRegister ? 'Un lugar bonito para ideas que sí quieres terminar.' : 'Tus ideas siguen vivas donde las dejaste.'}
+              {isRegister ? 'Un lugar bonito para no perder tus mejores ideas.' : 'Tus ideas siguen creciendo donde las dejaste.'}
             </h1>
             <p className="mt-6 max-w-2xl text-lg font-semibold leading-relaxed text-[#536159]">
-              Seed combina captura rápida, riego diario, enfoque y planetas 3D para ayudarte a volver a lo importante sin aprender una herramienta complicada.
+              Seed te ayuda a guardar lo que se te ocurre, volver con ganas y avanzar poco a poco. Sin tableros infinitos. Sin sentir que tienes que organizar tu vida entera.
             </p>
 
             <div className="mt-9 grid max-w-2xl grid-cols-2 gap-4">
@@ -1813,9 +1813,9 @@ function AuthEntryPage({
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-black uppercase text-[#7a8f63]">Vista previa</p>
-                  <h3 className="mt-1 font-serif text-3xl font-black text-[#162019]">Planeta personal</h3>
+                  <h3 className="mt-1 font-serif text-3xl font-black text-[#162019]">Tu primer jardín</h3>
                 </div>
-                <span className="rounded-full bg-white px-4 py-2 text-xs font-black text-[#49623e] shadow-sm">Sync activo</span>
+                <span className="rounded-full bg-white px-4 py-2 text-xs font-black text-[#49623e] shadow-sm">Guardado</span>
               </div>
               <div className="mt-5 grid grid-cols-[140px_minmax(0,1fr)] gap-5">
                 <div className="relative h-36 rounded-full bg-[#78a85f] shadow-[inset_-18px_-24px_44px_rgba(31,50,30,0.24)]">
@@ -1830,9 +1830,9 @@ function AuthEntryPage({
                 </div>
                 <div className="space-y-3">
                   {[
-                    { label: 'Ideas por regar', value: '3' },
-                    { label: 'Sesión sugerida', value: '25 min' },
-                    { label: 'Siguiente paso', value: 'Definir primer borrador' },
+                    { label: 'Ideas por cuidar', value: '3' },
+                    { label: 'Buen momento para', value: '25 min' },
+                    { label: 'Siguiente paso', value: 'Escribir el primer borrador' },
                   ].map((item) => (
                     <div key={item.label} className="rounded-2xl bg-white px-4 py-3 shadow-sm">
                       <p className="text-[10px] font-black uppercase text-[#7b8278]">{item.label}</p>
@@ -1857,7 +1857,7 @@ function AuthEntryPage({
             </div>
 
             <p className="mt-4 text-sm font-semibold leading-relaxed text-[#536159]">
-              {isRegister ? 'Guarda tus ideas, sincronízalas y vuelve a ellas con un flujo simple de plantar, regar, enfocar y cosechar.' : 'Continúa cuidando tus planetas, ideas pendientes y sesiones de enfoque desde cualquier dispositivo.'}
+              {isRegister ? 'Crea un jardín privado para esas ideas que quieres recordar, cuidar y convertir en algo real.' : 'Entra a tu jardín y retoma las ideas que estaban esperando un poco de atención.'}
             </p>
 
             <div className="mt-7 space-y-4">
@@ -1908,7 +1908,7 @@ function AuthEntryPage({
             <div className="mt-6 rounded-2xl bg-[#f8faf7] p-4">
               <p className="text-xs font-black uppercase text-[#7a8f63]">{isRegister ? 'Qué obtienes' : 'Al entrar'}</p>
               <p className="mt-2 text-sm font-semibold leading-relaxed text-[#536159]">
-                {isRegister ? 'Un jardín privado para ideas de trabajo, estudio o vida personal, con planetas separados y riego ligero.' : 'Tus ideas sincronizadas, riegos pendientes y pasos listos para seguir avanzando.'}
+                {isRegister ? 'Un lugar simple para ideas de trabajo, estudio o vida personal, con jardines separados y recordatorios amables.' : 'Tus jardines, ideas pendientes y próximos pasos listos para seguir avanzando sin empezar de cero.'}
               </p>
             </div>
 
