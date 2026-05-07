@@ -1552,11 +1552,11 @@ function LandingPage({
       <section className="relative min-h-[88vh] overflow-hidden border-b border-[#e4ebe1] px-5 sm:px-8 lg:px-12">
         <HeroGardenScene />
         <nav className="relative z-10 mx-auto flex max-w-7xl items-center justify-between py-6">
-          <div className="flex items-center gap-3">
-            <img src="/icon-192.png" alt="Seed" className="h-11 w-11 rounded-2xl shadow-sm" />
+          <div className="flex items-center gap-3.5">
+            <img src="/icon-192.png" alt="Seed" className="h-14 w-14 rounded-[1.35rem] shadow-sm" />
             <div>
-              <p className="font-serif text-2xl font-black leading-none text-[#1f2d23]">Seed</p>
-              <p className="text-[9px] font-black uppercase text-[#7a8f63]">Idea Garden</p>
+              <p className="font-serif text-3xl font-black leading-none text-[#1f2d23]">Seed</p>
+              <p className="text-[10px] font-black uppercase text-[#7a8f63]">Grow What Matters</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1782,11 +1782,11 @@ function AuthEntryPage({
 
         <div className="grid flex-1 grid-cols-1 gap-8 py-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] lg:items-center lg:gap-12">
           <section className="hidden lg:block">
-            <div className="flex items-center gap-3">
-              <img src="/icon-192.png" alt="Seed" className="h-12 w-12 rounded-2xl shadow-sm" />
+            <div className="flex items-center gap-3.5">
+              <img src="/icon-192.png" alt="Seed" className="h-14 w-14 rounded-[1.35rem] shadow-sm" />
               <div>
-                <p className="font-serif text-3xl font-black leading-none text-[#1f2d23]">Seed</p>
-                <p className="text-[10px] font-black uppercase text-[#7a8f63]">Idea Garden</p>
+                <p className="font-serif text-4xl font-black leading-none text-[#1f2d23]">Seed</p>
+                <p className="text-[10px] font-black uppercase text-[#7a8f63]">Grow What Matters</p>
               </div>
             </div>
 
@@ -2866,7 +2866,7 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-3xl font-serif font-black text-[var(--sage)] leading-none">Seed</h1>
-            <p className="text-[9px] font-black tracking-[0.3em] uppercase text-[var(--seed-accent)] opacity-60">Digital Garden</p>
+            <p className="text-[9px] font-black tracking-[0.3em] uppercase text-[var(--seed-accent)] opacity-60">Grow What Matters</p>
           </div>
         </motion.div>
 
