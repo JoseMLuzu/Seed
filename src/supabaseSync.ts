@@ -18,7 +18,50 @@ type NoteRow = {
   data: SeedNote;
 };
 
-export async function syncGardenWithSupabase(snapshot: SyncSnapshot, user: User): Promise<SyncSnapshot> {
+function noteUpdatedAt(note: SeedNote) {
+  return note.updatedAt || note.createdAt || 0;
+}
+
+function normalizeRemoteNote(row: NoteRow): SeedNote {
+  return {
+    ...row.data,
+    planetId: row.data.planetId || row.planet_id || 'personal',
+  };
+}
+
+function normalizeRemotePlanet(row: PlanetRow): Planet {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || '',
+    theme: row.theme,
+    createdAt: row.created_at_ms || Date.now(),
+  };
+}
+
+export async function fetchGardenFromSupabase(): Promise<SyncSnapshot> {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+
+  const { data: remotePlanets, error: planetsError } = await supabase
+    .from('seed_planets')
+    .select('id,user_id,name,description,theme,created_at_ms')
+    .order('created_at_ms', { ascending: true });
+
+  if (planetsError) throw planetsError;
+
+  const { data: remoteNotes, error: notesError } = await supabase
+    .from('seed_notes')
+    .select('id,user_id,planet_id,data');
+
+  if (notesError) throw notesError;
+
+  return {
+    planets: (remotePlanets || []).map(row => normalizeRemotePlanet(row as PlanetRow)),
+    notes: (remoteNotes || []).map(row => normalizeRemoteNote(row as NoteRow)),
+  };
+}
+
+export async function pushGardenToSupabase(snapshot: SyncSnapshot, user: User) {
   if (!supabase) throw new Error('Supabase no está configurado.');
 
   const planetRows: PlanetRow[] = snapshot.planets.map(planet => ({
@@ -46,31 +89,43 @@ export async function syncGardenWithSupabase(snapshot: SyncSnapshot, user: User)
     const { error } = await supabase.from('seed_notes').upsert(noteRows, { onConflict: 'id,user_id' });
     if (error) throw error;
   }
+}
 
-  const { data: remotePlanets, error: planetsError } = await supabase
-    .from('seed_planets')
-    .select('id,user_id,name,description,theme,created_at_ms')
-    .order('created_at_ms', { ascending: true });
+export async function syncGardenWithSupabase(snapshot: SyncSnapshot, user: User): Promise<SyncSnapshot> {
+  const remote = await fetchGardenFromSupabase();
+  const remoteNotesById = new Map(remote.notes.map(note => [note.id, note]));
+  const notesToPush = snapshot.notes.filter(note => {
+    const remoteNote = remoteNotesById.get(note.id);
+    return !remoteNote || noteUpdatedAt(note) >= noteUpdatedAt(remoteNote);
+  });
 
-  if (planetsError) throw planetsError;
+  await pushGardenToSupabase({ planets: snapshot.planets, notes: notesToPush }, user);
+  return fetchGardenFromSupabase();
+}
 
-  const { data: remoteNotes, error: notesError } = await supabase
+export async function deleteNoteFromSupabase(id: string, user: User) {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { error } = await supabase
     .from('seed_notes')
-    .select('id,user_id,planet_id,data');
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id);
+  if (error) throw error;
+}
 
+export async function deletePlanetFromSupabase(id: string, user: User) {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { error: notesError } = await supabase
+    .from('seed_notes')
+    .delete()
+    .eq('planet_id', id)
+    .eq('user_id', user.id);
   if (notesError) throw notesError;
 
-  return {
-    planets: (remotePlanets || []).map(row => ({
-      id: row.id,
-      name: row.name,
-      description: row.description || '',
-      theme: row.theme,
-      createdAt: row.created_at_ms || Date.now(),
-    })),
-    notes: (remoteNotes || []).map(row => ({
-      ...row.data,
-      planetId: row.data.planetId || row.planet_id || 'personal',
-    })),
-  };
+  const { error } = await supabase
+    .from('seed_planets')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id);
+  if (error) throw error;
 }

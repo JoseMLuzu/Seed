@@ -57,7 +57,7 @@ import { addFocusMinutes, cultivateInboxNote as cultivateNote, DAY_MS, daysSince
 import { loadNotesFromDb, migrateLocalNotesToDb, saveNotesToDb } from './storage';
 import { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';
-import { syncGardenWithSupabase } from './supabaseSync';
+import { deleteNoteFromSupabase, deletePlanetFromSupabase, pushGardenToSupabase, syncGardenWithSupabase } from './supabaseSync';
 
 const Garden3D = lazy(() => import('./components/Garden3D'));
 
@@ -85,6 +85,18 @@ const DEFAULT_PLANETS: Planet[] = [
   { id: 'work', name: 'Trabajo', description: 'Proyectos, entregas y decisiones profesionales.', theme: 'forest', createdAt: 0 },
   { id: 'study', name: 'Universidad', description: 'Tareas, lecturas, examenes e investigacion.', theme: 'arctic', createdAt: 0 },
 ];
+
+function touchNote(note: SeedNote, timestamp = Date.now()): SeedNote {
+  return { ...note, updatedAt: timestamp };
+}
+
+function touchPlanet(planet: Planet, timestamp = Date.now()): Planet {
+  return { ...planet, updatedAt: timestamp };
+}
+
+function noteUpdatedAt(note: SeedNote) {
+  return note.updatedAt || note.createdAt || 0;
+}
 
 const SEED_TYPES: { id: NonNullable<SeedNote['seedType']>; label: string; task: string }[] = [
   { id: 'idea', label: 'Idea', task: 'Aclarar por qué vale la pena cultivar esta idea' },
@@ -1469,6 +1481,9 @@ export default function App() {
   const [authStatus, setAuthStatus] = useState('');
   const [syncStatus, setSyncStatus] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+  const applyingRemoteSyncRef = useRef(false);
+  const remoteSyncReadyRef = useRef(false);
+  const autoSyncTimerRef = useRef<number | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('seed-notifications') === 'true');
   const [defaultWateringInterval, setDefaultWateringInterval] = useState(() => Number(localStorage.getItem('seed-default-watering') || 1));
   const [reminderHour, setReminderHour] = useState(() => Number(localStorage.getItem('seed-reminder-hour') || 9));
@@ -1604,6 +1619,138 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!session?.user || !notesLoaded) {
+      remoteSyncReadyRef.current = false;
+      return;
+    }
+
+    let cancelled = false;
+    setIsSyncing(true);
+    setSyncStatus('Preparando sync entre dispositivos...');
+
+    syncGardenWithSupabase({ planets, notes }, session.user)
+      .then(synced => {
+        if (cancelled) return;
+        applyingRemoteSyncRef.current = true;
+        if (synced.planets.length > 0) setPlanets(synced.planets);
+        setNotes(synced.notes);
+        window.setTimeout(() => {
+          applyingRemoteSyncRef.current = false;
+          remoteSyncReadyRef.current = true;
+        }, 0);
+        setSyncStatus(`Sync activo: ${synced.notes.length} ideas en la nube.`);
+      })
+      .catch(error => {
+        if (!cancelled) setSyncStatus(error instanceof Error ? error.message : 'No se pudo preparar el sync.');
+      })
+      .finally(() => {
+        if (!cancelled) setIsSyncing(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [session?.user?.id, notesLoaded]);
+
+  useEffect(() => {
+    if (!supabase || !session?.user) return;
+    const userId = session.user.id;
+    const markRemoteApplyDone = () => window.setTimeout(() => { applyingRemoteSyncRef.current = false; }, 0);
+
+    const notesChannel = supabase
+      .channel(`seed-notes-${userId}`)
+      .on(
+        'postgres_changes' as never,
+        { event: '*', schema: 'public', table: 'seed_notes', filter: `user_id=eq.${userId}` } as never,
+        (payload: any) => {
+          applyingRemoteSyncRef.current = true;
+          if (payload.eventType === 'DELETE') {
+            const deletedId = payload.old?.id;
+            if (deletedId) setNotes(current => current.filter(note => note.id !== deletedId));
+            markRemoteApplyDone();
+            return;
+          }
+
+          const row = payload.new;
+          if (!row?.data?.id) {
+            markRemoteApplyDone();
+            return;
+          }
+
+          const incoming: SeedNote = {
+            ...row.data,
+            planetId: row.data.planetId || row.planet_id || DEFAULT_PLANET_ID,
+          };
+
+          setNotes(current => {
+            const existing = current.find(note => note.id === incoming.id);
+            if (existing && noteUpdatedAt(existing) > noteUpdatedAt(incoming)) return current;
+            if (existing) return current.map(note => note.id === incoming.id ? incoming : note);
+            return [incoming, ...current];
+          });
+          markRemoteApplyDone();
+        },
+      )
+      .subscribe();
+
+    const planetsChannel = supabase
+      .channel(`seed-planets-${userId}`)
+      .on(
+        'postgres_changes' as never,
+        { event: '*', schema: 'public', table: 'seed_planets', filter: `user_id=eq.${userId}` } as never,
+        (payload: any) => {
+          applyingRemoteSyncRef.current = true;
+          if (payload.eventType === 'DELETE') {
+            const deletedId = payload.old?.id;
+            if (deletedId) setPlanets(current => current.filter(planet => planet.id !== deletedId));
+            markRemoteApplyDone();
+            return;
+          }
+
+          const row = payload.new;
+          if (!row?.id) {
+            markRemoteApplyDone();
+            return;
+          }
+
+          const incoming: Planet = {
+            id: row.id,
+            name: row.name,
+            description: row.description || '',
+            theme: row.theme,
+            createdAt: row.created_at_ms || Date.now(),
+          };
+
+          setPlanets(current => {
+            const existing = current.find(planet => planet.id === incoming.id);
+            if (existing) return current.map(planet => planet.id === incoming.id ? { ...planet, ...incoming } : planet);
+            return [...current, incoming];
+          });
+          markRemoteApplyDone();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(notesChannel);
+      supabase.removeChannel(planetsChannel);
+    };
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user || !notesLoaded || !remoteSyncReadyRef.current || applyingRemoteSyncRef.current) return;
+    if (autoSyncTimerRef.current) window.clearTimeout(autoSyncTimerRef.current);
+
+    autoSyncTimerRef.current = window.setTimeout(() => {
+      pushGardenToSupabase({ planets, notes }, session.user)
+        .then(() => setSyncStatus('Cambios guardados en la nube.'))
+        .catch(error => setSyncStatus(error instanceof Error ? error.message : 'No se pudieron guardar los cambios en la nube.'));
+    }, 900);
+
+    return () => {
+      if (autoSyncTimerRef.current) window.clearTimeout(autoSyncTimerRef.current);
+    };
+  }, [planets, notes, notesLoaded, session?.user?.id]);
+
+  useEffect(() => {
     if (!notesLoaded || !notificationsEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
     const dueNotes = notes.filter(note => !note.inbox && !note.paused && note.growthStage !== 'bloom' && wateringDue(note));
     if (dueNotes.length === 0) return;
@@ -1632,7 +1779,7 @@ export default function App() {
       const updatedNotes = notes.map(note => {
         if (!note.paused && note.dueDate && note.dueDate < now && note.growthStage !== 'bloom' && note.growthStage !== 'withered') {
           changed = true;
-          return { ...note, growthStage: 'withered' as const };
+          return touchNote({ ...note, growthStage: 'withered' as const });
         }
         return note;
       });
@@ -1664,7 +1811,7 @@ export default function App() {
       planetId: activePlanetId,
     };
     
-    setNotes([note, ...notes]);
+    setNotes([touchNote(note), ...notes]);
     setNewNote({ title: '', content: '', dueDate: '', seedType: 'idea' });
     setIsAdding(false);
     setSelectedNoteId(note.id);
@@ -1691,7 +1838,7 @@ export default function App() {
       planetId: activePlanetId,
     };
 
-    setNotes([note, ...notes]);
+    setNotes([touchNote(note), ...notes]);
     setQuickNote('');
     setView('inbox');
   };
@@ -1701,10 +1848,15 @@ export default function App() {
     if (!window.confirm(`Eliminar "${note?.title || 'esta semilla'}"? Esta acción no se puede deshacer.`)) return;
     setNotes(notes.filter(n => n.id !== id));
     if (selectedNoteId === id) setSelectedNoteId(null);
+    if (session?.user) {
+      deleteNoteFromSupabase(id, session.user).catch(error => {
+        setSyncStatus(error instanceof Error ? error.message : 'No se pudo borrar la idea en la nube.');
+      });
+    }
   };
 
   const updateNote = (id: string, updates: Partial<SeedNote>) => {
-    setNotes(notes.map(n => n.id === id ? { ...n, ...updates } : n));
+    setNotes(notes.map(n => n.id === id ? touchNote({ ...n, ...updates }) : n));
   };
 
   const recordWateringRitual = () => {
@@ -1728,7 +1880,7 @@ export default function App() {
     setNotes(notes.map(n => {
       if (n.id === id && !n.isGrowth) {
         const seedType = SEED_TYPES.find(type => type.id === (n.seedType || 'idea')) || SEED_TYPES[0];
-        return { 
+        return touchNote({ 
           ...n, 
           isGrowth: true, 
           growthStage: 'sprout',
@@ -1736,14 +1888,14 @@ export default function App() {
           inbox: false,
           lastWateredAt: Date.now(),
           tasks: [{ id: crypto.randomUUID(), text: seedType.task, completed: false }]
-        };
+        });
       }
       return n;
     }));
   };
 
   const waterNote = (id: string, note = 'Riego rápido: sigue viva') => {
-    setNotes(notes.map(n => n.id === id ? waterSeedNote(n, note) : n));
+    setNotes(notes.map(n => n.id === id ? touchNote(waterSeedNote(n, note)) : n));
     recordWateringRitual();
     markRecentlyWatered(id);
     setWateringNoteId(null);
@@ -1759,14 +1911,14 @@ export default function App() {
     setNotes(notes.map(n => {
       if (n.id !== id) return n;
       const cultivated = cultivateNote(n);
-      return {
+      return touchNote({
         ...cultivated,
         isGrowth: true,
         growthStage: cultivated.growthStage === 'seed' ? 'sprout' : cultivated.growthStage,
         tasks: cultivated.tasks.length > 0
           ? cultivated.tasks
           : [{ id: crypto.randomUUID(), text: 'Dar el primer paso de 5 minutos', completed: false }],
-      };
+      });
     }));
     setSelectedNoteId(id);
     setFilterStage('all');
@@ -1775,14 +1927,14 @@ export default function App() {
   };
 
   const saveInboxForLater = (id: string) => {
-    setNotes(notes.map(n => n.id === id ? { ...n, inbox: false, paused: true, lastWateredAt: Date.now() } : n));
+    setNotes(notes.map(n => n.id === id ? touchNote({ ...n, inbox: false, paused: true, lastWateredAt: Date.now() }) : n));
   };
 
   const addTinyStep = (id: string, text?: string) => {
     const taskText = (text || wateringNote).trim() || 'Dedicar 2 minutos a destrabar esta idea';
     setNotes(notes.map(n => {
       if (n.id !== id) return n;
-      return {
+      return touchNote({
         ...n,
         isGrowth: true,
         growthStage: n.growthStage === 'seed' ? 'sprout' : n.growthStage,
@@ -1791,7 +1943,7 @@ export default function App() {
         lastWateredAt: Date.now(),
         lastWateringNote: `Próximo micro-paso: ${taskText}`,
         tasks: [...n.tasks, { id: crypto.randomUUID(), text: taskText, completed: false }],
-      };
+      });
     }));
     recordWateringRitual();
     markRecentlyWatered(id);
@@ -1803,11 +1955,11 @@ export default function App() {
   };
 
   const togglePauseNote = (id: string) => {
-    setNotes(notes.map(n => n.id === id ? { ...n, paused: !n.paused } : n));
+    setNotes(notes.map(n => n.id === id ? touchNote({ ...n, paused: !n.paused }) : n));
   };
 
   const logFocusMinutes = (id: string, minutes: number) => {
-    setNotes(notes.map(n => n.id === id ? addFocusMinutes(n, minutes) : n));
+    setNotes(notes.map(n => n.id === id ? touchNote(addFocusMinutes(n, minutes)) : n));
   };
 
   const showSeedNotification = async (body: string) => {
@@ -1840,10 +1992,10 @@ export default function App() {
   const addTask = (noteId: string) => {
     setNotes(notes.map(n => {
       if (n.id === noteId) {
-        return { 
+        return touchNote({ 
           ...n, 
           tasks: [...n.tasks, { id: crypto.randomUUID(), text: '', completed: false }] 
-        };
+        });
       }
       return n;
     }));
@@ -1852,10 +2004,10 @@ export default function App() {
   const updateTask = (noteId: string, taskId: string, text: string) => {
     setNotes(notes.map(n => {
       if (n.id === noteId) {
-        return {
+        return touchNote({
           ...n,
           tasks: n.tasks.map(t => t.id === taskId ? { ...t, text } : t)
-        };
+        });
       }
       return n;
     }));
@@ -1874,7 +2026,7 @@ export default function App() {
         if (!wasBloom && updated.growthStage === 'bloom') {
           window.setTimeout(() => setHarvestNoteId(updated.id), 500);
         }
-        return updated;
+        return touchNote(updated);
       }
       return n;
     }));
@@ -1885,10 +2037,10 @@ export default function App() {
       if (n.id === fromId) {
         const connections = n.connections || [];
         const exists = connections.includes(toId);
-        return {
+        return touchNote({
           ...n,
           connections: exists ? connections.filter(id => id !== toId) : [...connections, toId]
-        };
+        });
       }
       return n;
     }));
@@ -2025,13 +2177,13 @@ export default function App() {
   const addPlanet = () => {
     const name = newPlanetName.trim();
     if (!name) return;
-    const planet: Planet = {
+    const planet: Planet = touchPlanet({
       id: crypto.randomUUID(),
       name,
       description: 'Nuevo espacio para cultivar ideas.',
       theme,
       createdAt: Date.now(),
-    };
+    });
     setPlanets([...planets, planet]);
     setNewPlanetName('');
     setIsAddingPlanet(false);
@@ -2047,7 +2199,7 @@ export default function App() {
   const renameActivePlanet = () => {
     const name = editingPlanetName.trim();
     if (!name) return;
-    setPlanets(current => current.map(planet => planet.id === activePlanet.id ? { ...planet, name } : planet));
+    setPlanets(current => current.map(planet => planet.id === activePlanet.id ? touchPlanet({ ...planet, name }) : planet));
     setShowPlanetSettings(false);
   };
 
@@ -2064,6 +2216,11 @@ export default function App() {
     const nextPlanet = planets.find(planet => planet.id !== activePlanet.id) || DEFAULT_PLANETS[0];
     setNotes(current => current.filter(note => (note.planetId || DEFAULT_PLANET_ID) !== activePlanet.id));
     setPlanets(current => current.filter(planet => planet.id !== activePlanet.id));
+    if (session?.user) {
+      deletePlanetFromSupabase(activePlanet.id, session.user).catch(error => {
+        setSyncStatus(error instanceof Error ? error.message : 'No se pudo borrar el planeta en la nube.');
+      });
+    }
     setShowPlanetSettings(false);
     switchPlanet(nextPlanet.id);
   };
@@ -3441,7 +3598,7 @@ export default function App() {
                           key={item.id}
                           onClick={() => {
                             setTheme(item.id);
-                            setPlanets(current => current.map(planet => planet.id === activePlanet.id ? { ...planet, theme: item.id } : planet));
+                            setPlanets(current => current.map(planet => planet.id === activePlanet.id ? touchPlanet({ ...planet, theme: item.id }) : planet));
                           }}
                           className={`rounded-2xl border px-3 py-4 text-center transition-all ${(activePlanet.theme || theme) === item.id ? 'bg-[var(--sage)] text-white border-[var(--sage)]' : 'bg-[var(--bg-app)] text-[var(--earth)] border-[var(--border)]'}`}
                         >
