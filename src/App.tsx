@@ -780,6 +780,9 @@ function FocusView({
   const [remaining, setRemaining] = useState(10 * 60);
   const [active, setActive] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [customDuration, setCustomDuration] = useState(15);
+  const [customHours, setCustomHours] = useState(0);
+  const [customMinutes, setCustomMinutes] = useState(15);
   const [sessionStartCompleted, setSessionStartCompleted] = useState(0);
   const [sessionSummary, setSessionSummary] = useState<{ minutes: number; steps: number; growth: number } | null>(null);
   const nextTask = focusNote?.tasks.find(task => !task.completed);
@@ -852,6 +855,19 @@ function FocusView({
   };
 
   const formattedTime = `${Math.floor(remaining / 60).toString().padStart(2, '0')}:${(remaining % 60).toString().padStart(2, '0')}`;
+  const setFocusDuration = (minutes: number) => {
+    setDuration(minutes);
+    setRemaining(minutes * 60);
+  };
+  const setCustomFocusDuration = (hours: number, minutes: number) => {
+    const safeHours = Math.max(0, Math.min(8, hours));
+    const safeMinutes = Math.max(0, Math.min(55, minutes));
+    const totalMinutes = Math.max(5, safeHours * 60 + safeMinutes);
+    setCustomHours(safeHours);
+    setCustomMinutes(safeMinutes);
+    setCustomDuration(totalMinutes);
+    setFocusDuration(totalMinutes);
+  };
 
   if (!focusNote) {
     return (
@@ -873,14 +889,14 @@ function FocusView({
       exit={{ opacity: 0 }}
       className={`fixed inset-0 z-40 overflow-y-auto app-scrollbar ${isDay ? 'bg-[#dff5e8]' : 'bg-[#07110d]'} text-[var(--text-main)]`}
     >
-      <div className="min-h-screen relative overflow-hidden p-5 md:p-8">
+      <div className="min-h-screen relative overflow-hidden p-3 sm:p-5">
         <div className={`absolute inset-0 ${isDay ? 'bg-[radial-gradient(circle_at_78%_16%,rgba(255,229,143,0.75),transparent_14%),linear-gradient(180deg,#dff5e8_0%,#f8faf3_58%,#eef7e8_100%)]' : 'bg-[radial-gradient(circle_at_78%_16%,rgba(230,226,204,0.9),transparent_8%),linear-gradient(180deg,#07110d_0%,#0d1d17_55%,#14251b_100%)]'}`} />
         {!isDay && (
           <div className="absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_20%_20%,white_0_1px,transparent_1px),radial-gradient(circle_at_62%_34%,white_0_1px,transparent_1px)] bg-[length:120px_120px,180px_180px]" />
         )}
 
         <div className="relative z-10 max-w-6xl mx-auto">
-          <div className="flex items-center justify-between gap-4 mb-6">
+          <div className="flex items-center justify-between gap-4 mb-4">
             <button onClick={() => { stopFocus(); onExit(); }} className="rounded-full bg-[var(--surface-strong)] border border-[var(--border)] px-4 py-2 text-xs font-black text-[var(--sage)] shadow-sm soft-interaction">
               Salir de enfoque
             </button>
@@ -890,62 +906,103 @@ function FocusView({
             </div>
           </div>
 
-          <section className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_390px] gap-6 items-stretch">
-            <div className="rounded-[2rem] bg-[var(--card-bg)] backdrop-blur-xl border border-[var(--border)] shadow-[0_24px_90px_rgb(47,62,51,0.14)] p-5 md:p-8 flex flex-col">
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_240px] gap-5 items-start">
+          <section className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start lg:items-stretch lg:h-[calc(100vh-6.5rem)]">
+            <div className="rounded-[2rem] bg-[var(--card-bg)] backdrop-blur-xl border border-[var(--border)] shadow-[0_24px_90px_rgb(47,62,51,0.14)] p-4 md:p-5 flex min-h-0 flex-col">
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
                 <div className="text-center xl:text-left">
                   <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Modo enfoque</p>
-                  <h3 className="text-3xl md:text-5xl font-serif font-black text-[var(--earth)] mt-2 leading-none">{focusNote.title}</h3>
-                  <p className="text-[var(--text-muted)] mt-5 leading-relaxed max-w-2xl mx-auto xl:mx-0">{focusNote.content}</p>
+                  <h3 className="text-2xl md:text-4xl font-serif font-black text-[var(--earth)] mt-2 leading-tight">{focusNote.title}</h3>
+                  <p className="text-sm text-[var(--text-muted)] mt-3 leading-relaxed max-w-2xl mx-auto xl:mx-0 line-clamp-3">{focusNote.content}</p>
                 </div>
 
                 <div className="rounded-[1.75rem] bg-[var(--bg-app)]/80 border border-[var(--border)] p-4">
                   <p className="text-[9px] font-black uppercase tracking-widest text-[var(--sage)]">Preparar bloque</p>
-                  <label className="block mt-3">
+                  <label className="block mt-2">
                     <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Idea</span>
                     <select
                       value={focusNote.id}
                       onChange={(event) => onPickFocus(event.target.value)}
                       disabled={active}
-                      className="mt-1 w-full rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-3 text-sm font-bold text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)] disabled:opacity-60"
+                      className="mt-1 w-full rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-2.5 text-sm font-bold text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)] disabled:opacity-60"
                     >
                       {focusCandidates.map(note => (
                         <option key={note.id} value={note.id}>{note.title}</option>
                       ))}
                     </select>
                   </label>
-                  <div className="mt-3">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Tiempo</p>
-                    <div className="mt-1 grid grid-cols-3 gap-1 rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] p-1">
-                      {[5, 10, 25].map(minutes => (
-                        <button
-                          key={minutes}
-                          onClick={() => { setDuration(minutes); setRemaining(minutes * 60); }}
+                  <div className="mt-3 rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Tiempo</p>
+                      <p className="text-sm font-black text-[var(--sage)]">{duration < 60 ? `${duration} min` : `${Math.floor(duration / 60)}h ${duration % 60}m`}</p>
+                    </div>
+                    <label className="mt-2 block">
+                      <span className="sr-only">Elegir tiempo de enfoque</span>
+                      <select
+                        value={[5, 10, 30].includes(duration) ? String(duration) : 'custom'}
+                        disabled={active}
+                        onChange={(event) => {
+                          if (event.target.value === 'custom') {
+                            setFocusDuration(customDuration);
+                            return;
+                          }
+                          setFocusDuration(Number(event.target.value));
+                        }}
+                        className="w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm font-black text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)] disabled:opacity-60"
+                      >
+                        <option value="5">Riego corto: 5 min</option>
+                        <option value="10">Cultivo ligero: 10 min</option>
+                        <option value="30">Cultivo profundo: 30 min</option>
+                        <option value="custom">Tiempo personalizado</option>
+                      </select>
+                    </label>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <label className="block">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Horas</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={8}
+                          step={1}
+                          value={customHours}
                           disabled={active}
-                          className={`rounded-xl py-2 text-xs font-black transition-all ${duration === minutes ? 'bg-[var(--sage)] text-white shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--sage)]'} disabled:opacity-60`}
-                        >
-                          {minutes}m
-                        </button>
-                      ))}
+                          onChange={(event) => setCustomFocusDuration(Number(event.target.value) || 0, customMinutes)}
+                          className="mt-1 w-full rounded-xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2 text-sm font-black text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)] disabled:opacity-60"
+                          aria-label="Horas personalizadas"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Min</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={55}
+                          step={5}
+                          value={customMinutes}
+                          disabled={active}
+                          onChange={(event) => setCustomFocusDuration(customHours, Number(event.target.value) || 0)}
+                          className="mt-1 w-full rounded-xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2 text-sm font-black text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)] disabled:opacity-60"
+                          aria-label="Minutos personalizados"
+                        />
+                      </label>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-6 rounded-[2rem] bg-[var(--bg-app)]/80 border border-[var(--border)] p-5 flex-1">
+              <div className="mt-4 rounded-[2rem] bg-[var(--bg-app)]/80 border border-[var(--border)] p-4 flex min-h-0 flex-1 flex-col">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)] mb-2">Pasos</p>
-                    <p className="font-serif text-2xl font-black text-[var(--earth)]">Una acción clara</p>
+                    <p className="font-serif text-xl font-black text-[var(--earth)]">Una acción clara</p>
                   </div>
                   <span className="text-xs font-black text-[var(--sage)]">{progress}%</span>
                 </div>
 
-                <div className="space-y-3 mt-5">
+                <div className="space-y-2 mt-4 min-h-0 flex-1 overflow-y-auto app-scrollbar pr-1">
                   {focusNote.tasks.length === 0 ? (
                     <p className="text-sm text-[var(--text-muted)]">Agrega un primer paso pequeño para empezar.</p>
                   ) : focusNote.tasks.map(task => (
-                    <div key={task.id} className={`rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] p-3 flex items-start gap-3 transition-all ${task.completed ? 'opacity-55' : 'hover:border-[var(--sage)]/30 hover:shadow-sm'}`}>
+                    <div key={task.id} className={`rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] p-2.5 flex items-start gap-3 transition-all ${task.completed ? 'opacity-55' : 'hover:border-[var(--sage)]/30 hover:shadow-sm'}`}>
                       <button
                         onClick={() => onToggleTask(focusNote.id, task.id)}
                         className={`mt-1 h-6 w-6 rounded-lg border-2 flex items-center justify-center shrink-0 ${task.completed ? 'bg-[var(--sage)] border-[var(--sage)] text-white' : 'border-[var(--border)] text-transparent'}`}
@@ -963,43 +1020,43 @@ function FocusView({
                   ))}
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                <div className="flex flex-col sm:flex-row gap-2 mt-3">
                   <input
                     value={step}
                     onChange={(event) => setStep(event.target.value)}
                     placeholder="Nuevo paso pequeño..."
-                    className="flex-1 rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-4 py-3 outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                    className="flex-1 rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-4 py-2.5 outline-none focus:ring-1 focus:ring-[var(--sage)]"
                   />
                   <button
                     onClick={() => { onAddTinyStep(focusNote.id, step); setStep(''); }}
-                    className="rounded-2xl bg-[var(--sage)] text-white px-5 py-3 font-black"
+                    className="rounded-2xl bg-[var(--sage)] text-white px-5 py-2.5 font-black"
                   >
                     Agregar
                   </button>
                 </div>
               </div>
 
-              <div className="mt-5 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-3 items-center">
-                <button onClick={active ? stopFocus : () => startFocus(duration)} className="rounded-2xl bg-[var(--sage)] text-white py-4 px-5 font-black shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction">
-                  {active ? 'Terminar y guardar' : `Empezar ${duration} min`}
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-center">
+                <button onClick={active ? stopFocus : () => startFocus(duration)} className="rounded-2xl bg-[var(--sage)] text-white py-3.5 px-5 font-black shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction">
+                  {active ? 'Guardar cultivo' : `Cultivar ${duration} min`}
                 </button>
-                <button onClick={() => onOpenWatering(focusNote.id)} className="rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-5 py-4 text-xs font-black text-[var(--sage)] hover:border-[var(--sage)]/40 soft-interaction">
+                <button onClick={() => onOpenWatering(focusNote.id)} className="rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-5 py-3.5 text-xs font-black text-[var(--sage)] hover:border-[var(--sage)]/40 soft-interaction">
                   Me bloqueé
                 </button>
-                <button onClick={() => onSelectNote(focusNote.id)} className="rounded-2xl bg-transparent border border-transparent px-4 py-4 text-xs font-black text-[var(--text-muted)] hover:text-[var(--sage)] soft-interaction">
+                <button onClick={() => { stopFocus(); onSelectNote(focusNote.id); onExit(); }} className="rounded-2xl bg-transparent border border-transparent px-4 py-3.5 text-xs font-black text-[var(--text-muted)] hover:text-[var(--sage)] soft-interaction">
                   Editar idea
                 </button>
               </div>
             </div>
 
-            <aside className="rounded-[2rem] bg-[var(--surface-strong)] backdrop-blur-xl border border-[var(--border)] p-5 md:p-6 shadow-[0_24px_90px_rgb(47,62,51,0.12)] lg:sticky lg:top-8 self-start">
-              <div className="text-center rounded-[2rem] bg-[var(--bg-app)]/70 border border-[var(--border)] px-4 py-6">
+            <aside className="rounded-[2rem] bg-[var(--surface-strong)] backdrop-blur-xl border border-[var(--border)] p-4 shadow-[0_24px_90px_rgb(47,62,51,0.12)] lg:sticky lg:top-5 lg:h-full flex flex-col self-start lg:self-stretch">
+              <div className="text-center rounded-[2rem] bg-[var(--bg-app)]/70 border border-[var(--border)] px-4 py-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Tiempo restante</p>
-                <p className="font-mono text-6xl md:text-7xl font-black text-[var(--earth)] mt-2 tabular-nums">{formattedTime}</p>
+                <p className="font-mono text-5xl md:text-6xl font-black text-[var(--earth)] mt-1 tabular-nums">{formattedTime}</p>
                 <p className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] mt-2">{active ? 'Protegiendo tu atención' : finished ? 'Sesión terminada' : 'Listo para empezar'}</p>
               </div>
 
-              <div className={`mt-5 h-64 rounded-[2rem] border border-[var(--border)] flex items-center justify-center relative overflow-hidden ${isDay ? 'bg-gradient-to-b from-sky-100 via-emerald-50 to-white' : 'bg-gradient-to-b from-[#14251b] via-[#1d3425] to-[#edf7ea]'}`}>
+              <div className={`mt-4 min-h-40 flex-1 rounded-[2rem] border border-[var(--border)] flex items-center justify-center relative overflow-hidden ${isDay ? 'bg-gradient-to-b from-sky-100 via-emerald-50 to-white' : 'bg-gradient-to-b from-[#14251b] via-[#1d3425] to-[#edf7ea]'}`}>
                 <div className="seed-card-sheen" />
                 <div className="absolute bottom-8 w-40 h-5 rounded-full bg-green-900/10 blur-md" />
                 <motion.div
@@ -1010,7 +1067,7 @@ function FocusView({
                 </motion.div>
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3 text-center">
+              <div className="mt-4 grid grid-cols-2 gap-2 text-center">
                 <div className="rounded-2xl bg-[var(--bg-app)]/70 border border-[var(--border)] p-3">
                   <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Pasos</p>
                   <p className="text-2xl font-serif font-black text-[var(--earth)]">{focusNote.tasks.filter(task => task.completed).length}/{focusNote.tasks.length}</p>
@@ -1021,11 +1078,11 @@ function FocusView({
                 </div>
               </div>
 
-              <div className="mt-5 rounded-[1.75rem] bg-[var(--bg-app)]/70 border border-[var(--border)] p-4">
+              <div className="mt-4 rounded-[1.75rem] bg-[var(--bg-app)]/70 border border-[var(--border)] p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-[var(--sage)]">Consejos del jardinero</p>
                 <div className="mt-3 space-y-2">
                   {focusTips.map(tip => (
-                    <p key={tip} className="rounded-2xl bg-[var(--surface-strong)] px-3 py-2 text-xs font-semibold leading-relaxed text-[var(--text-muted)]">
+                    <p key={tip} className="rounded-2xl bg-[var(--surface-strong)] px-3 py-2 text-[11px] font-semibold leading-relaxed text-[var(--text-muted)]">
                       {tip}
                     </p>
                   ))}
