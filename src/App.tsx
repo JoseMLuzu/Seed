@@ -1491,6 +1491,13 @@ export default function App() {
   const todayKey = format(Date.now(), 'yyyy-MM-dd');
   const wateredToday = wateringRitual.lastDate === todayKey;
   const accountInitials = getAccountInitials(account.name, account.email);
+  const authDisabledReason = !isSupabaseConfigured
+    ? 'Faltan las variables VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en este despliegue.'
+    : !authEmail.trim()
+      ? 'Escribe tu correo para continuar.'
+      : authPassword.length < 6
+        ? 'La contraseña debe tener al menos 6 caracteres.'
+        : '';
 
   // Persistence
   useEffect(() => {
@@ -3387,18 +3394,21 @@ export default function App() {
                           />
                           <button
                             onClick={signInWithEmail}
-                            disabled={!isSupabaseConfigured || !authEmail.trim() || authPassword.length < 6}
+                            disabled={Boolean(authDisabledReason)}
                             className="rounded-2xl bg-[var(--sage)] disabled:opacity-40 text-white py-3 text-xs font-black"
                           >
                             Iniciar sesión
                           </button>
                           <button
                             onClick={signUpWithEmail}
-                            disabled={!isSupabaseConfigured || !authEmail.trim() || authPassword.length < 6}
+                            disabled={Boolean(authDisabledReason)}
                             className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] text-[var(--sage)] py-3 text-xs font-black"
                           >
                             Crear cuenta
                           </button>
+                          {authDisabledReason && (
+                            <p className="sm:col-span-2 text-xs font-semibold text-[var(--text-muted)]">{authDisabledReason}</p>
+                          )}
                         </div>
                       )}
 
