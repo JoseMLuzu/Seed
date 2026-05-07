@@ -17,6 +17,7 @@ export interface SeedNote {
   title: string;
   content: string;
   createdAt: number;
+  updatedAt?: number;
   tags: string[];
   isGrowth: boolean; // if true, it's a To-Do list
   tasks: Task[];
@@ -40,6 +41,7 @@ export interface Planet {
   description: string;
   theme: Theme;
   createdAt: number;
+  updatedAt?: number;
 }
 
 export interface SyncSnapshot {

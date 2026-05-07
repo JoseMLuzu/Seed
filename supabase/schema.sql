@@ -67,3 +67,27 @@ create policy "Users can update own seed notes"
 create policy "Users can delete own seed notes"
   on public.seed_notes for delete
   using (auth.uid() = user_id);
+
+alter table public.seed_planets replica identity full;
+alter table public.seed_notes replica identity full;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'seed_planets'
+  ) then
+    alter publication supabase_realtime add table public.seed_planets;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'seed_notes'
+  ) then
+    alter publication supabase_realtime add table public.seed_notes;
+  end if;
+end $$;
