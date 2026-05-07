@@ -1367,7 +1367,31 @@ function PlantIllustration({ stage, progress, isGrowth, theme = 'earth' }: { sta
   );
 }
 
-function LandingPage({ onEnter }: { onEnter: () => void }) {
+function LandingPage({
+  onEnter,
+  accountName,
+  setAccountName,
+  authEmail,
+  setAuthEmail,
+  authPassword,
+  setAuthPassword,
+  authDisabledReason,
+  authStatus,
+  onSignIn,
+  onSignUp,
+}: {
+  onEnter: () => void;
+  accountName: string;
+  setAccountName: (value: string) => void;
+  authEmail: string;
+  setAuthEmail: (value: string) => void;
+  authPassword: string;
+  setAuthPassword: (value: string) => void;
+  authDisabledReason: string;
+  authStatus: string;
+  onSignIn: () => void;
+  onSignUp: () => void;
+}) {
   const features = [
     { icon: Leaf, title: 'Captura sin friccion', text: 'Anota ideas rapidas y conviertelas en brotes cuando estes listo.' },
     { icon: Droplets, title: 'Riego inteligente', text: 'Revisa ideas viejas sin presion: basta con mantener una viva.' },
@@ -1387,7 +1411,7 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
         <img src="/icon-512.png" alt="" className="absolute right-[-8rem] top-[-7rem] w-[28rem] sm:w-[36rem] opacity-20 blur-[2px] rotate-[-10deg]" />
         <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(247,243,232,0.96)_0%,rgba(247,243,232,0.84)_44%,rgba(247,243,232,0.42)_100%)]" />
         <div className="absolute inset-x-0 bottom-0 h-52 bg-[linear-gradient(0deg,rgba(111,125,79,0.22),transparent)]" />
-        <div className="absolute right-[8%] bottom-[8%] hidden lg:block w-[29rem]">
+        <div className="absolute right-[8%] bottom-[8%] hidden xl:block w-[29rem]">
           <div className="relative rounded-[2rem] bg-white/72 border border-white/70 shadow-[0_34px_120px_rgba(47,59,47,0.18)] p-5 backdrop-blur-md">
             <div className="flex items-center justify-between mb-5">
               <div>
@@ -1437,7 +1461,8 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
             </button>
           </nav>
 
-          <div className="pt-28 max-w-3xl">
+          <div className="pt-28 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8 items-end">
+            <div className="max-w-3xl">
             <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] font-black uppercase tracking-[0.3em] text-[#c98f58]">
               Jardin de ideas para personas que procrastinan
             </motion.p>
@@ -1454,6 +1479,55 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
               <a href="#como-funciona" className="rounded-2xl bg-white/76 border border-white text-[#5a4635] px-6 py-4 font-black shadow-sm text-center hover:bg-white transition-colors">
                 Ver como funciona
               </a>
+            </motion.div>
+            </div>
+
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }} className="rounded-[2rem] bg-white/82 border border-white p-5 shadow-[0_24px_80px_rgba(47,59,47,0.16)] backdrop-blur-md">
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#c98f58]">Cuenta Seed</p>
+              <h2 className="mt-2 font-serif text-3xl font-black text-[#5a4635]">Guarda tu jardín</h2>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-[#6b7280]">Crea una cuenta para sincronizar ideas, planetas y riegos entre dispositivos.</p>
+              <div className="mt-5 space-y-3">
+                <label className="block">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-[#6f7d4f]">Nombre</span>
+                  <input
+                    value={accountName}
+                    onChange={(event) => setAccountName(event.target.value)}
+                    placeholder="Tu nombre"
+                    className="mt-1 w-full rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-4 py-3 text-sm font-bold outline-none focus:ring-1 focus:ring-[#6f7d4f]"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-[#6f7d4f]">Correo</span>
+                  <input
+                    type="email"
+                    value={authEmail}
+                    onChange={(event) => setAuthEmail(event.target.value)}
+                    placeholder="tu@email.com"
+                    className="mt-1 w-full rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-4 py-3 text-sm font-bold outline-none focus:ring-1 focus:ring-[#6f7d4f]"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-[#6f7d4f]">Contraseña</span>
+                  <input
+                    type="password"
+                    value={authPassword}
+                    onChange={(event) => setAuthPassword(event.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    className="mt-1 w-full rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-4 py-3 text-sm font-bold outline-none focus:ring-1 focus:ring-[#6f7d4f]"
+                  />
+                </label>
+              </div>
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button onClick={onSignUp} disabled={Boolean(authDisabledReason)} className="rounded-2xl bg-[#6f7d4f] disabled:opacity-45 text-white px-4 py-3 text-sm font-black shadow-lg shadow-[#6f7d4f]/20">
+                  Crear cuenta
+                </button>
+                <button onClick={onSignIn} disabled={Boolean(authDisabledReason)} className="rounded-2xl bg-[#f7f3e8] disabled:opacity-45 border border-[#eadfce] text-[#5a4635] px-4 py-3 text-sm font-black">
+                  Iniciar sesión
+                </button>
+              </div>
+              {(authDisabledReason || authStatus) && (
+                <p className="mt-3 text-xs font-semibold text-[#6b7280]">{authStatus || authDisabledReason}</p>
+              )}
             </motion.div>
           </div>
         </div>
@@ -1475,6 +1549,73 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
                 <p className="mt-3 text-sm leading-relaxed font-medium text-[#6b7280]">{feature.text}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 sm:px-8 lg:px-12 py-16 bg-[#f7f3e8]">
+        <div className="max-w-6xl mx-auto">
+          <div className="max-w-3xl">
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#c98f58]">Interfaz</p>
+            <h2 className="mt-3 font-serif text-4xl sm:text-5xl font-black text-[#5a4635]">Un jardín visual, pero pensado para trabajar.</h2>
+            <p className="mt-4 text-base font-semibold leading-relaxed text-[#4f5d4f]">Seed combina un Home simple, un planeta 3D para entender tu jardín completo y un modo Enfoque para cultivar una sola idea sin distracciones.</p>
+          </div>
+
+          <div className="mt-10 grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="rounded-[2rem] bg-white border border-[#eadfce] p-5 shadow-sm">
+              <div className="h-56 rounded-[1.5rem] bg-[#f7f3e8] border border-[#eadfce] p-4 overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-[#c98f58]">Hoy</p>
+                    <p className="mt-1 font-serif text-2xl font-black text-[#5a4635]">Riego diario</p>
+                  </div>
+                  <Droplets className="text-[#6f7d4f]" size={24} />
+                </div>
+                <div className="mt-5 space-y-3">
+                  {['Idea por revisar', 'Siguiente paso', 'Cosecha cercana'].map((label, index) => (
+                    <div key={label} className="rounded-2xl bg-white border border-[#eadfce] px-4 py-3 flex items-center justify-between">
+                      <span className="text-sm font-black text-[#5a4635]">{label}</span>
+                    <span
+                      className="h-3 rounded-full bg-[#6f7d4f]/30"
+                      style={{ width: index === 0 ? 48 : index === 1 ? 64 : 40 }}
+                    />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <h3 className="mt-5 font-serif text-2xl font-black text-[#5a4635]">Home útil</h3>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-[#6b7280]">Te muestra qué plantar, qué regar y cuál es el próximo paso sin llenar la pantalla de opciones.</p>
+            </div>
+
+            <div className="rounded-[2rem] bg-white border border-[#eadfce] p-5 shadow-sm">
+              <div className="h-56 rounded-[1.5rem] bg-gradient-to-b from-[#cbe8ff] to-[#eaf5dc] border border-[#eadfce] relative overflow-hidden flex items-center justify-center">
+                <div className="h-36 w-36 rounded-full bg-[#6f9e52] shadow-[inset_-18px_-18px_36px_rgba(0,0,0,0.16),0_18px_60px_rgba(47,59,47,0.22)] relative">
+                  {[0, 1, 2, 3, 4].map((plant) => (
+                    <div key={plant} className="absolute h-7 w-7 rounded-full bg-[#d28a55] border-2 border-[#8b5e3c]" style={{ left: `${32 + Math.cos(plant * 1.25) * 45}px`, top: `${58 + Math.sin(plant * 1.25) * 42}px` }}>
+                      <div className="absolute left-1/2 top-[-15px] h-5 w-2 -translate-x-1/2 rounded-full bg-[#487b3d]" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <h3 className="mt-5 font-serif text-2xl font-black text-[#5a4635]">Mundo 3D</h3>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-[#6b7280]">Tus ideas aparecen como plantas en macetas dentro de un planeta que cambia por ecosistema.</p>
+            </div>
+
+            <div className="rounded-[2rem] bg-white border border-[#eadfce] p-5 shadow-sm">
+              <div className="h-56 rounded-[1.5rem] bg-[#eef1e6] border border-[#eadfce] p-4">
+                <p className="text-[9px] font-black uppercase tracking-widest text-[#c98f58]">Concentración</p>
+                <p className="mt-1 font-serif text-2xl font-black text-[#5a4635]">Cultivar 30 min</p>
+                <div className="mt-5 rounded-2xl bg-white border border-[#eadfce] p-4">
+                  <p className="font-mono text-5xl font-black text-[#5a4635]">24:18</p>
+                  <div className="mt-4 h-2 rounded-full bg-[#eef1e6] overflow-hidden">
+                    <div className="h-full w-2/3 bg-[#6f7d4f]" />
+                  </div>
+                </div>
+                <button className="mt-4 w-full rounded-2xl bg-[#6f7d4f] text-white py-3 text-sm font-black">Guardar cultivo</button>
+              </div>
+              <h3 className="mt-5 font-serif text-2xl font-black text-[#5a4635]">Modo Enfoque</h3>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-[#6b7280]">Un temporizador limpio con pasos editables para avanzar sin saltar entre muchas ideas.</p>
+            </div>
           </div>
         </div>
       </section>
@@ -2304,6 +2445,12 @@ export default function App() {
     const { error } = await supabase.auth.signUp({
       email: authEmail.trim(),
       password: authPassword,
+      options: {
+        data: {
+          name: account.name,
+          role: account.role,
+        },
+      },
     });
     setAuthStatus(error ? formatAuthError(error.message) : 'Cuenta creada. Revisa tu correo si Supabase pide confirmación.');
   };
@@ -2381,7 +2528,21 @@ export default function App() {
   };
 
   if (showLanding) {
-    return <LandingPage onEnter={enterApp} />;
+    return (
+      <LandingPage
+        onEnter={enterApp}
+        accountName={account.name}
+        setAccountName={(name) => setAccount(current => ({ ...current, name }))}
+        authEmail={authEmail}
+        setAuthEmail={setAuthEmail}
+        authPassword={authPassword}
+        setAuthPassword={setAuthPassword}
+        authDisabledReason={authDisabledReason}
+        authStatus={authStatus}
+        onSignIn={signInWithEmail}
+        onSignUp={signUpWithEmail}
+      />
+    );
   }
 
   return (
