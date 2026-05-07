@@ -1330,6 +1330,7 @@ function formatDue(date?: number) {
 export default function Garden3D({
   notes,
   theme,
+  planetName,
   onSelectNote,
   onReviewNote,
   onFocusNote,
@@ -1337,6 +1338,7 @@ export default function Garden3D({
 }: {
   notes: SeedNote[];
   theme: Theme;
+  planetName?: string;
   onSelectNote: (id: string) => void;
   onReviewNote?: (id: string) => void;
   onFocusNote?: (id: string) => void;
@@ -1497,7 +1499,7 @@ export default function Garden3D({
       <div className="absolute top-5 left-5 sm:top-10 sm:left-10 pointer-events-none max-w-[55%]">
         <div className="flex items-center gap-3 mb-2">
           <div className={`w-3 h-3 rounded-full ${isRaining ? 'bg-sky-300 shadow-[0_0_12px_rgba(125,211,252,0.7)]' : 'bg-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.7)]'} animate-pulse`} />
-          <p className="text-[11px] font-black uppercase tracking-[0.4em] text-white/45">Galaxy Garden</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.4em] text-white/45">{planetName || 'Galaxy Garden'}</p>
         </div>
         <h4 className="text-3xl sm:text-5xl font-serif text-white tracking-tight leading-none drop-shadow-xl">
           {palette.label}<br/><span className={`${isRaining ? 'text-sky-200/70' : 'text-yellow-200/70'} italic`}>{isRaining ? 'Lluvia' : 'Vivo'}</span>

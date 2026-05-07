@@ -13,6 +13,7 @@ export interface Task {
 
 export interface SeedNote {
   id: string;
+  planetId?: string;
   title: string;
   content: string;
   createdAt: number;
@@ -31,4 +32,17 @@ export interface SeedNote {
   reflection?: string;
   focusedMinutes?: number;
   harvestedAt?: number;
+}
+
+export interface Planet {
+  id: string;
+  name: string;
+  description: string;
+  theme: Theme;
+  createdAt: number;
+}
+
+export interface SyncSnapshot {
+  planets: Planet[];
+  notes: SeedNote[];
 }

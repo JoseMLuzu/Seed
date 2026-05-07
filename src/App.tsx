@@ -32,12 +32,10 @@ import {
   CheckCircle2, 
   Circle, 
   Trash2, 
-  Palette,
   ArrowRight,
   TrendingUp,
   X,
   Calendar as CalendarIcon,
-  Clock,
   Skull,
   ChevronLeft,
   ChevronRight,
@@ -54,9 +52,12 @@ import {
   Sparkles,
   User
 } from 'lucide-react';
-import { Theme, SeedNote } from './types';
+import { Theme, SeedNote, Planet } from './types';
 import { addFocusMinutes, cultivateInboxNote as cultivateNote, DAY_MS, daysSince, toggleTaskForNote, wateringDue, waterNote as waterSeedNote } from './seedLogic';
 import { loadNotesFromDb, migrateLocalNotesToDb, saveNotesToDb } from './storage';
+import { Session } from '@supabase/supabase-js';
+import { isSupabaseConfigured, supabase } from './supabase';
+import { syncGardenWithSupabase } from './supabaseSync';
 
 const Garden3D = lazy(() => import('./components/Garden3D'));
 
@@ -75,6 +76,14 @@ const THEMES: { id: Theme; label: string; icon: string }[] = [
   { id: 'alien', label: 'Alien', icon: '🪐' },
   { id: 'desert', label: 'Desierto', icon: '🌵' },
   { id: 'arctic', label: 'Ártico', icon: '❄️' },
+];
+
+const DEFAULT_PLANET_ID = 'personal';
+
+const DEFAULT_PLANETS: Planet[] = [
+  { id: DEFAULT_PLANET_ID, name: 'Personal', description: 'Ideas de vida, habitos y pendientes propios.', theme: 'earth', createdAt: 0 },
+  { id: 'work', name: 'Trabajo', description: 'Proyectos, entregas y decisiones profesionales.', theme: 'forest', createdAt: 0 },
+  { id: 'study', name: 'Universidad', description: 'Tareas, lecturas, examenes e investigacion.', theme: 'arctic', createdAt: 0 },
 ];
 
 const SEED_TYPES: { id: NonNullable<SeedNote['seedType']>; label: string; task: string }[] = [
@@ -202,19 +211,19 @@ function getIdeaGuidance(note: SeedNote) {
   };
 }
 
-function getWorkflowStep(notes: SeedNote[], wateredToday: boolean) {
-  if (notes.some(note => note.inbox)) return 'plant';
-  if (!wateredToday && notes.some(note => !note.inbox && !note.paused && note.growthStage !== 'bloom' && wateringDue(note))) return 'water';
-  if (notes.some(note => !note.inbox && !note.paused && note.isGrowth && note.growthStage !== 'bloom' && note.tasks.some(task => !task.completed))) return 'focus';
-  if (notes.some(note => note.growthStage === 'bloom' && !note.reflection)) return 'harvest';
-  return 'plant';
-}
-
 function getAccountInitials(name: string, email: string) {
   const source = name.trim() || email.trim() || 'Jardinero Digital';
   const parts = source.split(/\s+/).filter(Boolean);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
+function formatAuthError(message: string) {
+  if (message.toLowerCase().includes('email rate limit exceeded')) {
+    return 'Límite de emails alcanzado. Para pruebas: Supabase > Authentication > Providers > Email > desactiva Confirm email, guarda y vuelve a intentar.';
+  }
+
+  return message;
 }
 
 function CalendarView({ 
@@ -346,8 +355,10 @@ function TodayView({
   onOpenWatering,
   onSelectNote,
   onToggleTask,
+  onFocusNote,
   onEnableNotifications,
   onNavigate,
+  onShowWateringQueue,
   wateredToday,
   wateringStreak,
   getProgress,
@@ -359,22 +370,29 @@ function TodayView({
   onOpenWatering: (id: string) => void;
   onSelectNote: (id: string) => void;
   onToggleTask: (noteId: string, taskId: string) => void;
+  onFocusNote: (id: string) => void;
   onEnableNotifications: () => void;
   onNavigate: (view: 'today' | 'inbox' | 'focus' | 'garden' | 'harvest' | 'calendar' | '3D') => void;
+  onShowWateringQueue: () => void;
   wateredToday: boolean;
   wateringStreak: number;
   getProgress: (note: SeedNote) => number;
 }) {
   const activeNotes = notes.filter(note => !note.inbox && note.growthStage !== 'bloom' && !note.paused);
-  const thirstyNotes = activeNotes
+  const allThirstyNotes = activeNotes
     .filter(wateringDue)
-    .sort((a, b) => daysSince(b.lastWateredAt || b.createdAt) - daysSince(a.lastWateredAt || a.createdAt))
-    .slice(0, 4);
+    .sort((a, b) => daysSince(b.lastWateredAt || b.createdAt) - daysSince(a.lastWateredAt || a.createdAt));
+  const thirstyNotes = allThirstyNotes.slice(0, 3);
+  const hiddenThirstyCount = Math.max(0, allThirstyNotes.length - thirstyNotes.length);
   const nextActions = notes
-    .filter(note => !note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom')
+    .filter(note => !note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom' && !wateringDue(note))
     .map(note => ({ note, task: note.tasks.find(task => !task.completed) }))
     .filter((item): item is { note: SeedNote; task: NonNullable<typeof item.task> } => Boolean(item.task))
     .slice(0, 4);
+  const inboxNotes = notes
+    .filter(note => note.inbox)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 3);
   const dueSoon = notes
     .filter(note => !note.inbox && note.dueDate && note.growthStage !== 'bloom' && !note.paused)
     .sort((a, b) => (a.dueDate || 0) - (b.dueDate || 0))
@@ -383,11 +401,7 @@ function TodayView({
     .filter(note => note.growthStage === 'bloom')
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 3);
-  const plantedThisWeek = notes.filter(note => Date.now() - note.createdAt < 7 * DAY_MS).length;
-  const wateredThisWeek = notes.filter(note => note.lastWateredAt && Date.now() - note.lastWateredAt < 7 * DAY_MS).length;
-  const harvested = notes.filter(note => note.growthStage === 'bloom').length;
   const firstWatering = thirstyNotes[0];
-  const workflowStep = getWorkflowStep(notes, wateredToday);
 
   return (
     <motion.div
@@ -431,115 +445,115 @@ function TodayView({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Plantadas', value: plantedThisWeek },
-          { label: 'Regadas', value: wateredThisWeek },
-          { label: 'Cosechas', value: harvested },
-        ].map((stat) => (
-          <div key={stat.label} className="rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] p-4 shadow-sm">
-            <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{stat.label}</p>
-            <p className="text-3xl font-serif font-black text-[var(--earth)] mt-2">{stat.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <section className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-4 md:p-5">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {[
-            { id: 'plant', label: 'Plantar', detail: 'Captura una idea', view: 'inbox' as const, icon: Leaf },
-            { id: 'water', label: 'Regar', detail: 'Cuida una idea', view: 'today' as const, icon: Droplets },
-            { id: 'focus', label: 'Enfocar', detail: 'Tacha un paso', view: 'focus' as const, icon: Target },
-            { id: 'harvest', label: 'Cosechar', detail: 'Guarda aprendizaje', view: 'harvest' as const, icon: Archive },
-          ].map((step, index) => (
+      {inboxNotes.length > 0 && (
+        <section className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Semillero</p>
+              <h3 className="mt-1 text-2xl font-serif font-black text-[var(--earth)]">
+                {inboxNotes.length === 1 ? '1 semilla por cultivar' : `${inboxNotes.length} semillas por cultivar`}
+              </h3>
+              <p className="mt-2 text-sm font-semibold text-[var(--text-muted)]">Son ideas rápidas. Elige cuáles pasan al jardín cuando tengas claridad.</p>
+            </div>
             <button
-              key={step.id}
-              onClick={() => onNavigate(step.view)}
-              className={`rounded-2xl border p-3 text-left soft-interaction ${workflowStep === step.id ? 'bg-[var(--sage)] text-white border-[var(--sage)] shadow-lg shadow-[var(--sage)]/20' : 'bg-[var(--surface-strong)] text-[var(--earth)] border-[var(--border)] hover:bg-[var(--surface-hover)]'}`}
+              onClick={() => onNavigate('inbox')}
+              className="rounded-2xl bg-[var(--sage)] text-white px-5 py-3 font-black shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
             >
-              <div className="flex items-center justify-between gap-2">
-                <step.icon size={17} />
-                <span className="text-[10px] font-black opacity-60">0{index + 1}</span>
-              </div>
-              <p className="mt-3 text-sm font-black">{step.label}</p>
-              <p className="mt-1 text-[10px] font-semibold opacity-70">{step.detail}</p>
+              Cultivar semillas
             </button>
-          ))}
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
 
-      <section className={`rounded-[2rem] border p-5 md:p-6 shadow-sm ${wateredToday ? 'bg-green-50 border-green-100' : 'bg-[var(--card-bg)] border-[var(--border)]'}`}>
+      <section className={`rounded-[2rem] border p-5 md:p-6 shadow-sm ${firstWatering ? 'bg-[var(--card-bg)] border-[var(--border)]' : wateredToday ? 'bg-green-50 border-green-100' : 'bg-[var(--card-bg)] border-[var(--border)]'}`}>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
           <div className="flex items-start gap-4">
-            <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 ${wateredToday ? 'bg-green-600 text-white' : 'bg-[var(--sage)] text-white'}`}>
+            <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 ${firstWatering ? 'bg-[var(--sage)] text-white' : wateredToday ? 'bg-green-600 text-white' : 'bg-[var(--sage)] text-white'}`}>
               <Droplets size={22} />
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Riego diario</p>
               <h3 className="mt-1 text-2xl md:text-3xl font-serif font-black text-[var(--earth)]">
-                {wateredToday ? 'Jardín cuidado hoy' : firstWatering ? 'Riega 1 idea hoy' : 'Tu jardín está fresco'}
+                {firstWatering ? wateredToday ? 'Aún hay ideas por regar' : 'Riega 1 idea hoy' : wateredToday ? 'Jardín cuidado hoy' : 'Tu jardín está fresco'}
               </h3>
               <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-                {wateredToday
-                  ? `Llevas ${wateringStreak} día${wateringStreak === 1 ? '' : 's'} regando tu jardín.`
-                  : firstWatering
-                    ? 'Una revisión de 20 segundos basta: mira la idea, decide si sigue viva o crea un micro-paso.'
+                {firstWatering
+                  ? wateredToday
+                    ? `Ya cuidaste tu racha de ${wateringStreak} día${wateringStreak === 1 ? '' : 's'}, pero puedes revisar otra idea si quieres.`
+                    : 'Una revisión de 20 segundos basta: mira la idea, decide si sigue viva o crea un micro-paso.'
+                  : wateredToday
+                    ? `Llevas ${wateringStreak} día${wateringStreak === 1 ? '' : 's'} regando tu jardín.`
                     : 'No hay ideas pidiendo riego ahora. Puedes plantar o avanzar un paso.'}
               </p>
             </div>
           </div>
           <button
             onClick={() => firstWatering ? onOpenWatering(firstWatering.id) : undefined}
-            disabled={!firstWatering || wateredToday}
+            disabled={!firstWatering}
             className="rounded-2xl bg-[var(--sage)] disabled:bg-[var(--surface-strong)] disabled:text-[var(--text-muted)] text-white px-5 py-3 font-black shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
           >
-            {wateredToday ? 'Hecho por hoy' : firstWatering ? 'Regar ahora' : 'Sin riego pendiente'}
+            {firstWatering ? wateredToday ? 'Regar otra' : 'Regar ahora' : wateredToday ? 'Hecho por hoy' : 'Sin riego pendiente'}
           </button>
         </div>
       </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <section className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-serif text-2xl font-black text-[var(--earth)]">Ideas para regar</h3>
-            <Droplets size={20} className="text-[var(--sage)]" />
-          </div>
-          <div className="space-y-3">
-            {thirstyNotes.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">Tu jardín está al día. Ninguna idea está pidiendo riego rápido ahora.</p>
-            ) : thirstyNotes.map(note => (
-              <button
-                key={note.id}
-                onClick={() => onOpenWatering(note.id)}
-                className="w-full text-left rounded-2xl bg-[var(--bg-app)] hover:bg-[var(--surface-strong)] border border-[var(--border)] p-4 soft-interaction group"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-bold text-[var(--earth)] truncate">{note.title}</p>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] mt-1">
-                      Riego rápido: {daysSince(note.lastWateredAt || note.createdAt)} días sin mirar
-                    </p>
-                    {note.lastWateringNote && (
-                      <p className="text-xs text-[var(--text-muted)] mt-2 line-clamp-1">{note.lastWateringNote}</p>
-                    )}
+        {thirstyNotes.length > 0 && (
+          <section className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] shadow-sm p-5">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h3 className="font-serif text-2xl font-black text-[var(--earth)]">Ideas para regar</h3>
+                <p className="text-xs text-[var(--text-muted)] mt-1">Solo revisa las más antiguas. Hoy basta con una.</p>
+              </div>
+              <Droplets size={20} className="text-[var(--sage)] shrink-0 mt-1" />
+            </div>
+            <div className="space-y-3">
+              {thirstyNotes.map(note => (
+                <button
+                  key={note.id}
+                  onClick={() => onOpenWatering(note.id)}
+                  className="w-full text-left rounded-2xl bg-[var(--bg-app)] hover:bg-[var(--surface-strong)] border border-[var(--border)] p-4 soft-interaction group"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-bold text-[var(--earth)] truncate">{note.title}</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] mt-1">
+                        {daysSince(note.lastWateredAt || note.createdAt)} días sin revisar
+                      </p>
+                      {note.lastWateringNote && (
+                        <p className="text-xs text-[var(--text-muted)] mt-2 line-clamp-1">{note.lastWateringNote}</p>
+                      )}
+                    </div>
+                    <span className="h-9 w-9 rounded-full bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center shadow-sm transition-colors group-hover:bg-[var(--surface-hover)]">
+                      <Droplets size={17} />
+                    </span>
                   </div>
-                  <span className="h-9 w-9 rounded-full bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center shadow-sm transition-colors group-hover:bg-[var(--surface-hover)]">
-                    <Droplets size={17} />
-                  </span>
-                </div>
+                </button>
+              ))}
+            </div>
+            {hiddenThirstyCount > 0 && (
+              <button
+                onClick={onShowWateringQueue}
+                className="mt-4 w-full rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] text-[var(--sage)] px-4 py-3 text-sm font-black hover:bg-[var(--surface-strong)] transition-colors"
+              >
+                Ver {hiddenThirstyCount} más en el jardín
               </button>
-            ))}
-          </div>
-        </section>
+            )}
+          </section>
+        )}
 
-        <section className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] shadow-sm p-5">
+        <section className={`rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] shadow-sm p-5 ${thirstyNotes.length === 0 ? 'xl:col-span-2' : ''}`}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-serif text-2xl font-black text-[var(--earth)]">Siguiente paso</h3>
             <ArrowRight size={20} className="text-[var(--sage)]" />
           </div>
           <div className="space-y-3">
             {nextActions.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">Convierte una semilla en brote para ver acciones aquí.</p>
+              <p className="text-sm text-[var(--text-muted)]">
+                {thirstyNotes.length > 0
+                  ? 'Primero riega las ideas pendientes. Después aparecerán aquí los pasos listos para enfocar.'
+                  : 'Convierte una semilla en brote para ver acciones aquí.'}
+              </p>
             ) : nextActions.map(({ note, task }) => (
               <div key={task.id} className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4">
                 <button onClick={() => onSelectNote(note.id)} className="text-left w-full">
@@ -551,8 +565,14 @@ function TodayView({
                     <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${getProgress(note)}%` }} />
                   </div>
                   <button
-                    onClick={() => onToggleTask(note.id, task.id)}
+                    onClick={() => onFocusNote(note.id)}
                     className="text-xs font-black text-white bg-[var(--sage)] px-3 py-2 rounded-xl active:translate-y-px soft-interaction"
+                  >
+                    Enfocar
+                  </button>
+                  <button
+                    onClick={() => onToggleTask(note.id, task.id)}
+                    className="text-xs font-black text-[var(--sage)] bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-2 rounded-xl active:translate-y-px soft-interaction"
                   >
                     Hecho
                   </button>
@@ -563,35 +583,37 @@ function TodayView({
         </section>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <section className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-5">
-          <h3 className="font-serif text-2xl font-black text-[var(--earth)] mb-4">Próximas cosechas</h3>
-          <div className="space-y-2">
-            {dueSoon.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">No hay fechas urgentes.</p>
-            ) : dueSoon.map(note => (
-              <button key={note.id} onClick={() => onSelectNote(note.id)} className="w-full flex items-center justify-between rounded-2xl bg-[var(--surface-strong)] px-4 py-3 text-left">
-                <span className="font-bold text-[var(--earth)] truncate">{note.title}</span>
-                <span className="text-[10px] font-black uppercase tracking-widest text-[var(--seed-accent)]">{format(note.dueDate!, 'd MMM')}</span>
-              </button>
-            ))}
-          </div>
-        </section>
+      {(dueSoon.length > 0 || harvests.length > 0) && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {dueSoon.length > 0 && (
+            <section className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-5">
+              <h3 className="font-serif text-2xl font-black text-[var(--earth)] mb-4">Próximas cosechas</h3>
+              <div className="space-y-2">
+                {dueSoon.map(note => (
+                  <button key={note.id} onClick={() => onSelectNote(note.id)} className="w-full flex items-center justify-between rounded-2xl bg-[var(--surface-strong)] px-4 py-3 text-left">
+                    <span className="font-bold text-[var(--earth)] truncate">{note.title}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--seed-accent)]">{format(note.dueDate!, 'd MMM')}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
-        <section className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-5">
-          <h3 className="font-serif text-2xl font-black text-[var(--earth)] mb-4">Archivo de cosechas</h3>
-          <div className="space-y-2">
-            {harvests.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">Todavía no hay ideas cosechadas.</p>
-            ) : harvests.map(note => (
-              <button key={note.id} onClick={() => onSelectNote(note.id)} className="w-full flex items-center gap-3 rounded-2xl bg-[var(--surface-strong)] px-4 py-3 text-left">
-                <Archive size={16} className="text-green-600 shrink-0" />
-                <span className="font-bold text-[var(--earth)] truncate">{note.title}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      </div>
+          {harvests.length > 0 && (
+            <section className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-5">
+              <h3 className="font-serif text-2xl font-black text-[var(--earth)] mb-4">Archivo de cosechas</h3>
+              <div className="space-y-2">
+                {harvests.map(note => (
+                  <button key={note.id} onClick={() => onSelectNote(note.id)} className="w-full flex items-center gap-3 rounded-2xl bg-[var(--surface-strong)] px-4 py-3 text-left">
+                    <Archive size={16} className="text-green-600 shrink-0" />
+                    <span className="font-bold text-[var(--earth)] truncate">{note.title}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -620,17 +642,17 @@ function InboxView({
       className="pb-24"
     >
       <div className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-6 shadow-sm mb-6">
-        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Bandeja simple</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Semillero</p>
         <h3 className="text-3xl font-serif font-black text-[var(--earth)] mt-1">Semillas rápidas</h3>
-        <p className="text-sm text-[var(--text-muted)] mt-2">Aquí caen ideas crudas. Solo decide: cultivar, guardar para después o soltar.</p>
+        <p className="text-sm text-[var(--text-muted)] mt-2">Aquí caen ideas crudas. Elige una y conviértela en el siguiente brote del jardín.</p>
       </div>
 
       <div className="space-y-3">
         {inboxNotes.length === 0 ? (
           <div className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-8 text-center">
             <Inbox className="mx-auto text-[var(--sage)] opacity-40 mb-4" size={40} />
-            <p className="font-serif text-2xl text-[var(--earth)]">Inbox limpio</p>
-            <p className="text-sm text-[var(--text-muted)] mt-2">Cuando captures ideas rápidas, aparecerán aquí.</p>
+            <p className="font-serif text-2xl text-[var(--earth)]">Semillero limpio</p>
+            <p className="text-sm text-[var(--text-muted)] mt-2">Cuando captures ideas rápidas, aparecerán aquí antes de pasar al jardín.</p>
           </div>
         ) : inboxNotes.map(note => (
           <div key={note.id} className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-5 shadow-sm">
@@ -638,16 +660,18 @@ function InboxView({
               <p className="font-serif text-2xl font-black text-[var(--earth)]">{note.title}</p>
               <p className="text-sm text-[var(--text-muted)] mt-2 line-clamp-2">{note.content}</p>
             </button>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-5">
-              <button onClick={() => onCultivate(note.id)} className="rounded-2xl bg-[var(--sage)] text-white py-3 text-xs font-black flex items-center justify-center gap-2">
-                <Sprout size={15} /> Cultivar
+            <div className="mt-5">
+              <button onClick={() => onCultivate(note.id)} className="w-full rounded-2xl bg-[var(--sage)] text-white py-3 text-sm font-black flex items-center justify-center gap-2 shadow-sm active:translate-y-px soft-interaction">
+                <Sprout size={16} /> Cultivar ahora
               </button>
-              <button onClick={() => onSaveLater(note.id)} className="rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] py-3 text-xs font-black flex items-center justify-center gap-2 border border-[var(--border)]">
-                <Archive size={15} /> Después
-              </button>
-              <button onClick={() => onDelete(note.id)} className="rounded-2xl bg-red-50 text-red-500 py-3 text-xs font-black flex items-center justify-center gap-2">
-                <Trash2 size={15} /> Soltar
-              </button>
+              <div className="flex items-center justify-center gap-5 mt-3 text-[11px] font-black">
+                <button onClick={() => onSaveLater(note.id)} className="text-[var(--text-muted)] hover:text-[var(--sage)] transition-colors flex items-center gap-1.5">
+                  <Archive size={13} /> Después
+                </button>
+                <button onClick={() => onDelete(note.id)} className="text-red-400 hover:text-red-600 transition-colors flex items-center gap-1.5">
+                  <Trash2 size={13} /> Soltar
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -708,6 +732,7 @@ function HarvestView({ notes, onSelectNote }: { notes: SeedNote[]; onSelectNote:
 
 function FocusView({
   notes,
+  theme,
   focusNoteId,
   onAddTinyStep,
   onOpenWatering,
@@ -719,6 +744,7 @@ function FocusView({
   onExit,
 }: {
   notes: SeedNote[];
+  theme: Theme;
   focusNoteId: string | null;
   onAddTinyStep: (id: string, text?: string) => void;
   onOpenWatering: (id: string) => void;
@@ -942,12 +968,14 @@ function FocusView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
-                <button onClick={active ? stopFocus : () => startFocus(duration)} className="rounded-2xl bg-[var(--sage)] text-white py-4 font-black shadow-lg shadow-[var(--sage)]/20">
+              <div className="mt-6">
+                <button onClick={active ? stopFocus : () => startFocus(duration)} className="w-full rounded-2xl bg-[var(--sage)] text-white py-4 font-black shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction">
                   {active ? 'Terminar sesión' : 'Empezar enfoque'}
                 </button>
-                <button onClick={() => onOpenWatering(focusNote.id)} className="rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)] py-4 font-black border border-[var(--border)]">Me bloqueé</button>
-                <button onClick={() => onSelectNote(focusNote.id)} className="rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)] py-4 font-black border border-[var(--border)]">Editar idea</button>
+                <div className="flex items-center justify-center gap-5 mt-3 text-xs font-black">
+                  <button onClick={() => onOpenWatering(focusNote.id)} className="text-[var(--text-muted)] hover:text-[var(--sage)] transition-colors">Me bloqueé</button>
+                  <button onClick={() => onSelectNote(focusNote.id)} className="text-[var(--text-muted)] hover:text-[var(--sage)] transition-colors">Editar idea</button>
+                </div>
               </div>
             </div>
 
@@ -965,7 +993,7 @@ function FocusView({
                   animate={{ scale: 1 + progress / 220, y: active ? [0, -4, 0] : 0 }}
                   transition={{ duration: 3.5, repeat: active ? Infinity : 0, ease: "easeInOut" }}
                 >
-                  <PlantIllustration stage={focusNote.growthStage} progress={progress} isGrowth={focusNote.isGrowth} />
+                  <PlantIllustration stage={focusNote.growthStage} progress={progress} isGrowth={focusNote.isGrowth} theme={theme} />
                 </motion.div>
               </div>
 
@@ -1018,9 +1046,93 @@ function FocusView({
   );
 }
 
-function PlantIllustration({ stage, progress, isGrowth }: { stage: SeedNote['growthStage']; progress: number; isGrowth: boolean }) {
+const TREE_PALETTES: Record<Theme, {
+  trunk: string;
+  branch: string;
+  leaf1: string;
+  leaf2: string;
+  leaf3: string;
+  leaf4: string;
+  fruit: string;
+}> = {
+  earth: {
+    trunk: 'from-[#6b4428] via-[#8b5a32] to-[#a96b3b]',
+    branch: 'bg-[#8b5a32]',
+    leaf1: 'bg-gradient-to-br from-green-300 to-emerald-700',
+    leaf2: 'bg-gradient-to-bl from-lime-300 to-green-700',
+    leaf3: 'bg-gradient-to-br from-lime-200 via-green-400 to-emerald-700',
+    leaf4: 'bg-gradient-to-br from-green-300 to-emerald-800',
+    fruit: 'bg-gradient-to-br from-amber-200 to-orange-500',
+  },
+  forest: {
+    trunk: 'from-[#3f2a1d] via-[#5a3b25] to-[#775132]',
+    branch: 'bg-[#5a3b25]',
+    leaf1: 'bg-gradient-to-br from-emerald-600 to-green-950',
+    leaf2: 'bg-gradient-to-bl from-lime-500 to-emerald-900',
+    leaf3: 'bg-gradient-to-br from-green-400 via-emerald-700 to-green-950',
+    leaf4: 'bg-gradient-to-br from-emerald-500 to-green-950',
+    fruit: 'bg-gradient-to-br from-yellow-200 to-lime-500',
+  },
+  bloom: {
+    trunk: 'from-[#7b4a37] via-[#a26255] to-[#c78a7a]',
+    branch: 'bg-[#a26255]',
+    leaf1: 'bg-gradient-to-br from-pink-200 to-rose-500',
+    leaf2: 'bg-gradient-to-bl from-fuchsia-200 to-pink-500',
+    leaf3: 'bg-gradient-to-br from-white via-pink-200 to-rose-500',
+    leaf4: 'bg-gradient-to-br from-rose-200 to-pink-600',
+    fruit: 'bg-gradient-to-br from-yellow-100 to-rose-400',
+  },
+  night: {
+    trunk: 'from-[#26324b] via-[#3d4d70] to-[#6478a6]',
+    branch: 'bg-[#3d4d70]',
+    leaf1: 'bg-gradient-to-br from-sky-300 to-blue-800',
+    leaf2: 'bg-gradient-to-bl from-cyan-200 to-indigo-700',
+    leaf3: 'bg-gradient-to-br from-white via-sky-300 to-indigo-700',
+    leaf4: 'bg-gradient-to-br from-blue-300 to-indigo-900',
+    fruit: 'bg-gradient-to-br from-violet-200 to-fuchsia-500',
+  },
+  jungle: {
+    trunk: 'from-[#5b341f] via-[#875027] to-[#b87935]',
+    branch: 'bg-[#875027]',
+    leaf1: 'bg-gradient-to-br from-lime-300 to-green-800',
+    leaf2: 'bg-gradient-to-bl from-yellow-300 to-emerald-700',
+    leaf3: 'bg-gradient-to-br from-lime-200 via-green-500 to-teal-800',
+    leaf4: 'bg-gradient-to-br from-green-400 to-teal-900',
+    fruit: 'bg-gradient-to-br from-orange-200 to-red-500',
+  },
+  alien: {
+    trunk: 'from-[#43206f] via-[#6532a8] to-[#9b5cff]',
+    branch: 'bg-[#6532a8]',
+    leaf1: 'bg-gradient-to-br from-emerald-200 to-teal-600',
+    leaf2: 'bg-gradient-to-bl from-cyan-200 to-fuchsia-600',
+    leaf3: 'bg-gradient-to-br from-lime-200 via-teal-300 to-purple-700',
+    leaf4: 'bg-gradient-to-br from-fuchsia-300 to-violet-800',
+    fruit: 'bg-gradient-to-br from-lime-200 to-fuchsia-500',
+  },
+  desert: {
+    trunk: 'from-[#7c4b29] via-[#a86734] to-[#d49455]',
+    branch: 'bg-[#a86734]',
+    leaf1: 'bg-gradient-to-br from-lime-200 to-lime-700',
+    leaf2: 'bg-gradient-to-bl from-yellow-200 to-green-700',
+    leaf3: 'bg-gradient-to-br from-amber-100 via-lime-300 to-green-700',
+    leaf4: 'bg-gradient-to-br from-lime-200 to-green-800',
+    fruit: 'bg-gradient-to-br from-yellow-200 to-orange-600',
+  },
+  arctic: {
+    trunk: 'from-[#6f8793] via-[#8daab8] to-[#d1edf7]',
+    branch: 'bg-[#8daab8]',
+    leaf1: 'bg-gradient-to-br from-cyan-100 to-sky-500',
+    leaf2: 'bg-gradient-to-bl from-white to-blue-400',
+    leaf3: 'bg-gradient-to-br from-white via-cyan-100 to-sky-500',
+    leaf4: 'bg-gradient-to-br from-cyan-200 to-blue-600',
+    fruit: 'bg-gradient-to-br from-white to-cyan-300',
+  },
+};
+
+function PlantIllustration({ stage, progress, isGrowth, theme = 'earth' }: { stage: SeedNote['growthStage']; progress: number; isGrowth: boolean; theme?: Theme }) {
   const swayClass = stage !== 'withered' ? 'sway' : '';
   const stemTransition = { type: 'spring' as const, stiffness: 90, damping: 18 };
+  const tree = TREE_PALETTES[theme] || TREE_PALETTES.earth;
   
   if (stage === 'seed' && !isGrowth) {
     return (
@@ -1054,22 +1166,31 @@ function PlantIllustration({ stage, progress, isGrowth }: { stage: SeedNote['gro
 
   if (stage === 'withered') {
     return (
-      <div className="relative w-20 h-24 flex flex-col items-center justify-end">
-        <div className="absolute bottom-1 w-16 h-2 rounded-full bg-stone-400/20 blur-sm" />
+      <div className="relative w-24 h-28 flex flex-col items-center justify-end">
+        <div className="absolute bottom-1 w-20 h-3 rounded-full bg-stone-500/20 blur-sm" />
         <motion.div
           initial={{ rotate: 0, opacity: 0.2 }}
-          animate={{ rotate: 12, opacity: 1 }}
+          animate={{ rotate: 10, opacity: 1 }}
           transition={{ duration: 0.7, ease: "easeOut" }}
-          className="w-1.5 h-14 bg-gradient-to-t from-stone-500 to-stone-300 rounded-full origin-bottom"
+          className="relative w-3 h-20 bg-gradient-to-t from-stone-700 via-stone-500 to-stone-400 rounded-full origin-bottom shadow-sm"
+        >
+          <div className="absolute left-1/2 top-6 h-9 w-1.5 rounded-full bg-stone-500 origin-bottom rotate-[-45deg]" />
+          <div className="absolute right-1/2 top-9 h-8 w-1.5 rounded-full bg-stone-500 origin-bottom rotate-[48deg]" />
+        </motion.div>
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 0.75 }}
+          transition={{ delay: 0.15, duration: 0.5 }}
+          className="absolute top-4 left-8 h-10 w-12 rounded-full bg-gradient-to-br from-stone-300 to-stone-500 rotate-[-18deg]"
         />
         <motion.div
           initial={{ scale: 0.6, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.15, duration: 0.5 }}
-          className="w-8 h-4 bg-gradient-to-r from-stone-300 to-stone-400 rounded-full -mt-11 -ml-6 rotate-45"
+          animate={{ scale: 1, opacity: 0.55 }}
+          transition={{ delay: 0.2, duration: 0.5 }}
+          className="absolute top-8 right-7 h-9 w-10 rounded-full bg-gradient-to-br from-stone-300 to-stone-500 rotate-[20deg]"
         />
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.5 }} transition={{ delay: 0.25 }}>
-          <Skull size={16} className="text-[var(--text-muted)] mt-2" />
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.5 }} transition={{ delay: 0.25 }} className="absolute bottom-6">
+          <Skull size={15} className="text-[var(--text-muted)]" />
         </motion.div>
       </div>
     );
@@ -1077,87 +1198,251 @@ function PlantIllustration({ stage, progress, isGrowth }: { stage: SeedNote['gro
 
   if (stage === 'bloom') {
     return (
-      <div className={`relative w-24 h-28 flex flex-col items-center justify-end ${swayClass}`}>
-        <div className="absolute bottom-1 w-20 h-3 rounded-full bg-green-900/10 blur-sm" />
+      <div className={`relative w-28 h-32 flex flex-col items-center justify-end ${swayClass}`}>
+        <div className="absolute bottom-1 w-24 h-4 rounded-full bg-green-950/10 blur-sm" />
         <motion.div
           initial={{ scaleY: 0 }}
           animate={{ scaleY: 1 }}
           transition={stemTransition}
-          className="w-2 h-18 bg-gradient-to-t from-green-700 to-green-400 rounded-full origin-bottom shadow-sm"
-        />
-        <motion.div
-          initial={{ scale: 0.4, opacity: 0, y: 10 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          transition={{ delay: 0.16, ...stemTransition }}
-          className="absolute top-0 flex items-center justify-center"
+          className={`relative w-4 h-24 bg-gradient-to-t ${tree.trunk} rounded-full origin-bottom shadow-[inset_-5px_0_8px_rgba(0,0,0,0.14)]`}
         >
-          <motion.div 
-            animate={{ rotate: 360 }}
-            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-            className="relative"
-          >
-            <div className="w-11 h-11 bg-gradient-to-br from-yellow-200 to-yellow-500 rounded-full shadow-lg ring-4 ring-yellow-100/50" />
-            {[0, 72, 144, 216, 288].map(deg => (
-              <div 
-                key={deg}
-                style={{ transform: `rotate(${deg}deg) translateY(-14px)` }}
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-9 h-9 bg-gradient-to-br from-pink-300 to-rose-500 rounded-full -z-10 shadow-sm"
-              />
-            ))}
-          </motion.div>
+          <div className={`absolute left-1/2 top-8 h-12 w-2 rounded-full ${tree.branch} origin-bottom rotate-[-48deg]`} />
+          <div className={`absolute right-1/2 top-11 h-11 w-2 rounded-full ${tree.branch} origin-bottom rotate-[48deg]`} />
+          <div className={`absolute left-1/2 top-4 h-10 w-1.5 rounded-full ${tree.branch} origin-bottom rotate-[-25deg]`} />
+          <div className={`absolute right-1/2 top-5 h-10 w-1.5 rounded-full ${tree.branch} origin-bottom rotate-[25deg]`} />
         </motion.div>
-        <motion.div
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ delay: 0.18, ...stemTransition }}
-          className="w-8 h-4 bg-gradient-to-br from-green-400 to-green-700 rounded-full -mt-9 -ml-10 rotate-[-30deg] origin-right"
-        />
-        <motion.div
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ delay: 0.24, ...stemTransition }}
-          className="w-8 h-4 bg-gradient-to-br from-green-400 to-green-700 rounded-full -mt-5 ml-10 rotate-[30deg] origin-left"
-        />
+        {[
+          `left-2 top-1 h-16 w-18 ${tree.leaf1}`,
+          `right-2 top-2 h-16 w-18 ${tree.leaf2}`,
+          `left-1/2 top-[-10px] h-20 w-20 -translate-x-1/2 ${tree.leaf3}`,
+          `left-7 top-9 h-14 w-16 ${tree.leaf4}`,
+          `right-7 top-10 h-14 w-16 ${tree.leaf2}`,
+        ].map((classes, index) => (
+          <motion.div
+            key={classes}
+            initial={{ scale: 0.35, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.08 + index * 0.04, ...stemTransition }}
+            className={`absolute rounded-full shadow-lg ${classes}`}
+          />
+        ))}
+        {[18, 42, 66].map((left, index) => (
+          <motion.span
+            key={left}
+            className={`absolute h-2.5 w-2.5 rounded-full ${tree.fruit} shadow-sm`}
+            style={{ left, top: 34 + (index % 2) * 20 }}
+            animate={{ y: [0, -2, 0], opacity: [0.75, 1, 0.75] }}
+            transition={{ duration: 2.4 + index * 0.4, repeat: Infinity, ease: "easeInOut" }}
+          />
+        ))}
       </div>
     );
   }
 
-  // Sprout / Growing stage
-  const height = 10 + (progress * 0.4); // 10px to 50px
+  const height = 34 + (progress * 0.48);
+  const crownScale = 0.65 + (progress / 220);
   return (
-    <div className={`relative w-20 h-24 flex flex-col items-center justify-end ${swayClass}`}>
-      <div className="absolute bottom-1 w-16 h-2 rounded-full bg-green-900/10 blur-sm" />
+    <div className={`relative w-28 h-32 flex flex-col items-center justify-end ${swayClass}`}>
+      <div className="absolute bottom-1 w-22 h-4 rounded-full bg-green-950/10 blur-sm" />
       <motion.div
         animate={{ height }}
         transition={stemTransition}
-        className="w-1.5 bg-gradient-to-t from-green-700 to-green-400 rounded-full origin-bottom shadow-sm"
-      />
+        className={`relative w-3 bg-gradient-to-t ${tree.trunk} rounded-full origin-bottom shadow-[inset_-4px_0_6px_rgba(0,0,0,0.12)]`}
+      >
+        <div className={`absolute left-1/2 top-5 h-9 w-1.5 rounded-full ${tree.branch} origin-bottom rotate-[-46deg]`} />
+        <div className={`absolute right-1/2 top-8 h-8 w-1.5 rounded-full ${tree.branch} origin-bottom rotate-[48deg]`} />
+      </motion.div>
       <motion.div
-        animate={{ y: 70 - height }}
+        animate={{ y: 58 - height, scale: crownScale }}
         transition={stemTransition}
-        className="absolute top-0 flex gap-1 -mt-2"
+        className="absolute top-0 left-1/2 -translate-x-1/2 h-20 w-24"
       >
         <motion.div
-          initial={{ scaleX: 0, rotate: -20 }}
-          animate={{ scaleX: 1, rotate: -45 }}
-          transition={{ delay: 0.12, ...stemTransition }}
-          className="w-6 h-4 bg-gradient-to-br from-green-300 to-green-600 rounded-full origin-right shadow-sm"
+          initial={{ scale: 0.35, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.08, ...stemTransition }}
+          className={`absolute left-3 top-7 h-12 w-14 rounded-full ${tree.leaf1} shadow-md`}
         />
         <motion.div
-          initial={{ scaleX: 0, rotate: 20 }}
-          animate={{ scaleX: 1, rotate: 45 }}
+          initial={{ scale: 0.35, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.14, ...stemTransition }}
+          className={`absolute right-3 top-8 h-12 w-14 rounded-full ${tree.leaf2} shadow-md`}
+        />
+        <motion.div
+          initial={{ scale: 0.35, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.18, ...stemTransition }}
-          className="w-6 h-4 bg-gradient-to-br from-green-300 to-green-600 rounded-full origin-left shadow-sm"
+          className={`absolute left-1/2 top-0 h-16 w-16 -translate-x-1/2 rounded-full ${tree.leaf3} shadow-lg`}
+        />
+        <motion.div
+          initial={{ scale: 0.35, opacity: 0 }}
+          animate={{ scale: progress > 45 ? 1 : 0.65, opacity: progress > 45 ? 1 : 0.55 }}
+          transition={{ delay: 0.22, ...stemTransition }}
+          className={`absolute left-6 top-12 h-10 w-13 rounded-full ${tree.leaf4} shadow-md`}
         />
       </motion.div>
     </div>
   );
 }
 
+function LandingPage({ onEnter }: { onEnter: () => void }) {
+  const features = [
+    { icon: Leaf, title: 'Captura sin friccion', text: 'Anota ideas rapidas y conviertelas en brotes cuando estes listo.' },
+    { icon: Droplets, title: 'Riego inteligente', text: 'Revisa ideas viejas sin presion: basta con mantener una viva.' },
+    { icon: Target, title: 'Enfoque claro', text: 'Trabaja una idea a la vez con pasos pequenos y progreso visible.' },
+    { icon: Archive, title: 'Cosecha aprendizajes', text: 'Cierra proyectos con una reflexion util, no solo con una lista tachada.' },
+  ];
+  const steps = [
+    { label: 'Plantar', value: 'Idea rapida' },
+    { label: 'Regar', value: '20 segundos' },
+    { label: 'Enfocar', value: 'Un paso' },
+    { label: 'Cosechar', value: 'Aprendizaje' },
+  ];
+
+  return (
+    <main className="min-h-screen overflow-x-hidden bg-[#f7f3e8] text-[#223126]">
+      <section className="relative min-h-[92vh] flex items-center px-5 sm:px-8 lg:px-12 py-8 overflow-hidden">
+        <img src="/icon-512.png" alt="" className="absolute right-[-8rem] top-[-7rem] w-[28rem] sm:w-[36rem] opacity-20 blur-[2px] rotate-[-10deg]" />
+        <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(247,243,232,0.96)_0%,rgba(247,243,232,0.84)_44%,rgba(247,243,232,0.42)_100%)]" />
+        <div className="absolute inset-x-0 bottom-0 h-52 bg-[linear-gradient(0deg,rgba(111,125,79,0.22),transparent)]" />
+        <div className="absolute right-[8%] bottom-[8%] hidden lg:block w-[29rem]">
+          <div className="relative rounded-[2rem] bg-white/72 border border-white/70 shadow-[0_34px_120px_rgba(47,59,47,0.18)] p-5 backdrop-blur-md">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#c98f58]">Hoy</p>
+                <h2 className="font-serif text-3xl font-black text-[#5a4635]">Tu jardin mental</h2>
+              </div>
+              <div className="h-11 w-11 rounded-2xl bg-[#6f7d4f] text-white flex items-center justify-center">
+                <Droplets size={21} />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              {steps.slice(0, 3).map(step => (
+                <div key={step.label} className="rounded-2xl bg-[#f7f3e8] border border-[#eadfce] px-3 py-3">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-[#6b7280]">{step.label}</p>
+                  <p className="mt-2 text-sm font-black text-[#5a4635]">{step.value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-[1.5rem] bg-[#f7f3e8] border border-[#eadfce] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-[#6f7d4f]">Idea para regar</p>
+                  <p className="mt-1 font-black text-[#5a4635]">Redisenar el portfolio</p>
+                </div>
+                <span className="h-9 w-9 rounded-full bg-white text-[#6f7d4f] flex items-center justify-center">
+                  <Droplets size={17} />
+                </span>
+              </div>
+              <div className="mt-4 h-2 rounded-full bg-white overflow-hidden">
+                <motion.div className="h-full bg-[#6f7d4f]" initial={{ width: 0 }} animate={{ width: '68%' }} transition={{ duration: 1.1, delay: 0.2 }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative z-10 w-full max-w-6xl mx-auto">
+          <nav className="absolute top-0 left-0 right-0 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img src="/icon-192.png" alt="Seed" className="h-11 w-11 rounded-2xl shadow-lg" />
+              <div>
+                <p className="text-2xl font-serif font-black text-[#6f7d4f] leading-none">Seed</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.28em] text-[#c98f58]">Digital Garden</p>
+              </div>
+            </div>
+            <button onClick={onEnter} className="rounded-full bg-white/76 border border-white px-4 py-2 text-sm font-black text-[#5a4635] shadow-sm hover:bg-white transition-colors">
+              Abrir app
+            </button>
+          </nav>
+
+          <div className="pt-28 max-w-3xl">
+            <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] font-black uppercase tracking-[0.3em] text-[#c98f58]">
+              Jardin de ideas para personas que procrastinan
+            </motion.p>
+            <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="mt-5 font-serif text-6xl sm:text-7xl lg:text-8xl font-black leading-[0.9] text-[#4f3d2e]">
+              Seed
+            </motion.h1>
+            <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="mt-6 max-w-2xl text-lg sm:text-xl font-semibold leading-relaxed text-[#4f5d4f]">
+              Una app simple para plantar ideas, revisarlas sin culpa y convertirlas en avances reales con pasos pequenos.
+            </motion.p>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} className="mt-8 flex flex-col sm:flex-row gap-3">
+              <button onClick={onEnter} className="rounded-2xl bg-[#6f7d4f] text-white px-6 py-4 font-black shadow-xl shadow-[#6f7d4f]/25 flex items-center justify-center gap-2 active:translate-y-px soft-interaction">
+                Entrar al jardin <ArrowRight size={18} />
+              </button>
+              <a href="#como-funciona" className="rounded-2xl bg-white/76 border border-white text-[#5a4635] px-6 py-4 font-black shadow-sm text-center hover:bg-white transition-colors">
+                Ver como funciona
+              </a>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      <section id="como-funciona" className="px-5 sm:px-8 lg:px-12 py-16 bg-[#fffaf0]">
+        <div className="max-w-6xl mx-auto">
+          <div className="max-w-2xl">
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#c98f58]">Flujo simple</p>
+            <h2 className="mt-3 font-serif text-4xl sm:text-5xl font-black text-[#5a4635]">No es otro Notion. Es un jardin que te dice que hacer despues.</h2>
+          </div>
+          <div className="mt-10 grid grid-cols-1 md:grid-cols-4 gap-4">
+            {features.map(feature => (
+              <div key={feature.title} className="rounded-[1.5rem] bg-white border border-[#eadfce] p-5 shadow-sm">
+                <div className="h-11 w-11 rounded-2xl bg-[#eef1e6] text-[#6f7d4f] flex items-center justify-center mb-5">
+                  <feature.icon size={20} />
+                </div>
+                <h3 className="font-serif text-2xl font-black text-[#5a4635]">{feature.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed font-medium text-[#6b7280]">{feature.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 sm:px-8 lg:px-12 py-16 bg-[#eef1e6]">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-10 items-center">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#c98f58]">Para volver todos los dias</p>
+            <h2 className="mt-3 font-serif text-4xl sm:text-5xl font-black text-[#5a4635]">Riego, enfoque y cosecha mantienen tus ideas vivas.</h2>
+            <p className="mt-5 text-base font-semibold leading-relaxed text-[#4f5d4f]">
+              Seed evita la sobrecarga: no te pide organizar todo perfecto. Te muestra una idea para revisar, un paso para avanzar y un momento claro para cerrar.
+            </p>
+            <button onClick={onEnter} className="mt-7 rounded-2xl bg-[#223126] text-white px-6 py-4 font-black shadow-xl flex items-center gap-2 active:translate-y-px soft-interaction">
+              Probar Seed <Sparkles size={18} />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {steps.map((step, index) => (
+              <div key={step.label} className="rounded-[1.5rem] bg-white/82 border border-white p-5 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#6f7d4f]">0{index + 1}</p>
+                <h3 className="mt-3 font-serif text-3xl font-black text-[#5a4635]">{step.label}</h3>
+                <p className="mt-2 text-sm font-semibold text-[#6b7280]">{step.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export default function App() {
   const [notes, setNotes] = useState<SeedNote[]>([]);
   const [notesLoaded, setNotesLoaded] = useState(false);
+  const [showLanding, setShowLanding] = useState(() => localStorage.getItem('seed-landing-seen') !== 'true');
   const importInputRef = useRef<HTMLInputElement>(null);
+  const [planets, setPlanets] = useState<Planet[]>(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('seed-planets') || '[]');
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_PLANETS;
+    } catch {
+      return DEFAULT_PLANETS;
+    }
+  });
+  const [activePlanetId, setActivePlanetId] = useState(() => localStorage.getItem('seed-active-planet') || DEFAULT_PLANET_ID);
+  const [isAddingPlanet, setIsAddingPlanet] = useState(false);
+  const [newPlanetName, setNewPlanetName] = useState('');
+  const [showPlanetSettings, setShowPlanetSettings] = useState(false);
+  const [editingPlanetName, setEditingPlanetName] = useState('');
   
   const [theme, setTheme] = useState<Theme>(() => {
     return (localStorage.getItem('seed-theme') as Theme) || 'earth';
@@ -1178,6 +1463,12 @@ export default function App() {
   const [celebration, setCelebration] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('seed-onboarded') !== 'true');
   const [showSettings, setShowSettings] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authStatus, setAuthStatus] = useState('');
+  const [syncStatus, setSyncStatus] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('seed-notifications') === 'true');
   const [defaultWateringInterval, setDefaultWateringInterval] = useState(() => Number(localStorage.getItem('seed-default-watering') || 1));
   const [reminderHour, setReminderHour] = useState(() => Number(localStorage.getItem('seed-reminder-hour') || 9));
@@ -1222,6 +1513,47 @@ export default function App() {
   }, [notes, notesLoaded]);
 
   useEffect(() => {
+    if (!import.meta.env.DEV || !notesLoaded) return;
+
+    const demoNote: SeedNote = {
+      id: 'demo-watering-note',
+      planetId: activePlanetId,
+      title: 'Idea de prueba por regar',
+      content: 'Esta semilla esta atrasada a proposito para probar como se ve el filtro Por regar.',
+      createdAt: Date.now() - 5 * DAY_MS,
+      tags: [],
+      isGrowth: true,
+      tasks: [{ id: 'demo-watering-task', text: 'Revisar si esta idea sigue viva', completed: false }],
+      growthStage: 'sprout',
+      lastWateredAt: Date.now() - 4 * DAY_MS,
+      wateringIntervalDays: 1,
+      inbox: false,
+      seedType: 'idea',
+    };
+
+    setNotes(current => {
+      const existing = current.find(note => note.id === demoNote.id);
+      if (!existing) return [demoNote, ...current];
+      if ((existing.planetId || DEFAULT_PLANET_ID) === activePlanetId && wateringDue(existing)) return current;
+      return current.map(note => note.id === demoNote.id ? demoNote : note);
+    });
+  }, [activePlanetId, notesLoaded]);
+
+  useEffect(() => {
+    localStorage.setItem('seed-planets', JSON.stringify(planets));
+  }, [planets]);
+
+  useEffect(() => {
+    if (!planets.some(planet => planet.id === activePlanetId)) {
+      setActivePlanetId(planets[0]?.id || DEFAULT_PLANET_ID);
+    }
+  }, [activePlanetId, planets]);
+
+  useEffect(() => {
+    localStorage.setItem('seed-active-planet', activePlanetId);
+  }, [activePlanetId]);
+
+  useEffect(() => {
     localStorage.setItem('seed-theme', theme);
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
@@ -1245,6 +1577,24 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('seed-watering-ritual', JSON.stringify(wateringRitual));
   }, [wateringRitual]);
+
+  useEffect(() => {
+    if (!supabase) return;
+
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthEmail(data.session?.user.email || '');
+    });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthEmail(nextSession?.user.email || authEmail);
+    });
+
+    return () => {
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (!notesLoaded || !notificationsEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
@@ -1304,11 +1654,14 @@ export default function App() {
       wateringIntervalDays: defaultWateringInterval,
       inbox: false,
       seedType: newNote.seedType,
+      planetId: activePlanetId,
     };
     
     setNotes([note, ...notes]);
     setNewNote({ title: '', content: '', dueDate: '', seedType: 'idea' });
     setIsAdding(false);
+    setSelectedNoteId(note.id);
+    setView('garden');
   };
 
   const addQuickNote = () => {
@@ -1328,10 +1681,12 @@ export default function App() {
       wateringIntervalDays: defaultWateringInterval,
       inbox: true,
       seedType: 'idea',
+      planetId: activePlanetId,
     };
 
     setNotes([note, ...notes]);
     setQuickNote('');
+    setView('inbox');
   };
 
   const deleteNote = (id: string) => {
@@ -1394,7 +1749,22 @@ export default function App() {
   };
 
   const cultivateInboxNote = (id: string) => {
-    setNotes(notes.map(n => n.id === id ? cultivateNote(n) : n));
+    setNotes(notes.map(n => {
+      if (n.id !== id) return n;
+      const cultivated = cultivateNote(n);
+      return {
+        ...cultivated,
+        isGrowth: true,
+        growthStage: cultivated.growthStage === 'seed' ? 'sprout' : cultivated.growthStage,
+        tasks: cultivated.tasks.length > 0
+          ? cultivated.tasks
+          : [{ id: crypto.randomUUID(), text: 'Dar el primer paso de 5 minutos', completed: false }],
+      };
+    }));
+    setSelectedNoteId(id);
+    setFilterStage('all');
+    setSearch('');
+    setView('garden');
   };
 
   const saveInboxForLater = (id: string) => {
@@ -1418,6 +1788,9 @@ export default function App() {
     }));
     recordWateringRitual();
     markRecentlyWatered(id);
+    setFocusNoteId(id);
+    setSelectedNoteId(null);
+    setView('focus');
     setWateringNoteId(null);
     setWateringNote('');
   };
@@ -1514,13 +1887,21 @@ export default function App() {
     }));
   };
 
+  const activePlanet = useMemo(() => {
+    return planets.find(planet => planet.id === activePlanetId) || planets[0] || DEFAULT_PLANETS[0];
+  }, [activePlanetId, planets]);
+
+  const planetNotes = useMemo(() => {
+    return notes.filter(note => (note.planetId || DEFAULT_PLANET_ID) === activePlanet.id);
+  }, [activePlanet.id, notes]);
+
   const filteredNotes = useMemo(() => {
     const normalizedSearch = search.toLowerCase().trim();
-    return notes.filter(n => {
+    return planetNotes.filter(n => {
       if (n.inbox) return false;
       const matchesSpecialSearch =
         normalizedSearch === 'pausadas' ? Boolean(n.paused) :
-        normalizedSearch === 'riego' ? wateringDue(n) :
+        normalizedSearch === 'riego' ? !n.paused && n.growthStage !== 'bloom' && wateringDue(n) :
         normalizedSearch === 'activas' ? !n.paused && n.growthStage !== 'bloom' :
         false;
       const matchesSearch = !normalizedSearch ||
@@ -1531,28 +1912,23 @@ export default function App() {
       const matchesStage = filterStage === 'all' || n.growthStage === filterStage;
       return matchesSearch && matchesStage;
     });
-  }, [notes, search, filterStage]);
+  }, [planetNotes, search, filterStage]);
 
   const selectedNote = useMemo(() => 
-    notes.find(n => n.id === selectedNoteId), 
-  [notes, selectedNoteId]);
+    planetNotes.find(n => n.id === selectedNoteId), 
+  [planetNotes, selectedNoteId]);
 
-  const growingNotes = useMemo(() => notes.filter(n => n.isGrowth && !n.inbox && !n.paused && n.growthStage !== 'bloom'), [notes]);
+  const growingNotes = useMemo(() => planetNotes.filter(n => n.isGrowth && !n.inbox && !n.paused && n.growthStage !== 'bloom'), [planetNotes]);
 
   const gardenStats = useMemo(() => {
-    const completed = notes.filter(n => !n.inbox && n.growthStage === 'bloom').length;
-    const active = notes.filter(n => !n.inbox && n.growthStage === 'sprout').length;
-    const seeds = notes.filter(n => !n.inbox && n.growthStage === 'seed').length;
+    const total = planetNotes.filter(n => !n.inbox).length;
+    const completed = planetNotes.filter(n => !n.inbox && n.growthStage === 'bloom').length;
+    const active = planetNotes.filter(n => !n.inbox && n.growthStage === 'sprout').length;
+    const seeds = planetNotes.filter(n => !n.inbox && n.growthStage === 'seed').length;
+    const watering = planetNotes.filter(n => !n.inbox && !n.paused && n.growthStage !== 'bloom' && wateringDue(n)).length;
 
-    return { completed, active, seeds };
-  }, [notes]);
-
-  const upcomingDeadlines = useMemo(() => {
-    return notes
-      .filter(n => !n.inbox && n.dueDate && n.growthStage !== 'bloom' && !n.paused)
-      .sort((a, b) => (a.dueDate || 0) - (b.dueDate || 0))
-      .slice(0, 3);
-  }, [notes]);
+    return { total, completed, active, seeds, watering };
+  }, [planetNotes]);
 
   const getProgress = (note: SeedNote) => {
     if (!note.tasks.length) return 0;
@@ -1561,8 +1937,8 @@ export default function App() {
   };
 
   const exportGarden = () => {
-    const markdown = notes.map(note => {
-      const status = note.inbox ? 'Inbox' : note.paused ? 'Pausada' : STAGE_META[note.growthStage].label;
+    const markdown = planetNotes.map(note => {
+      const status = note.inbox ? 'Semillero' : note.paused ? 'Pausada' : STAGE_META[note.growthStage].label;
       const tasks = note.tasks.length ? `\n\n${note.tasks.map(task => `- [${task.completed ? 'x' : ' '}] ${task.text}`).join('\n')}` : '';
       const reflection = note.reflection ? `\n\nReflexión: ${note.reflection}` : '';
       return `# ${note.title}\n\nEstado: ${status}\nTipo: ${note.seedType || 'idea'}\n\n${note.content}${tasks}${reflection}`;
@@ -1571,7 +1947,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `seed-export-${format(Date.now(), 'yyyy-MM-dd')}.md`;
+    link.download = `seed-${activePlanet.name.toLowerCase().replace(/\s+/g, '-')}-${format(Date.now(), 'yyyy-MM-dd')}.md`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -1615,6 +1991,137 @@ export default function App() {
     setShowOnboarding(false);
   };
 
+  const startPlanting = () => {
+    setSelectedNoteId(null);
+    setFilterStage('all');
+    setSearch('');
+    setView('garden');
+    setIsAdding(true);
+  };
+
+  const showWateringQueue = () => {
+    setSelectedNoteId(null);
+    setFilterStage('all');
+    setSearch('riego');
+    setView('garden');
+  };
+
+  const switchPlanet = (id: string) => {
+    setActivePlanetId(id);
+    setSelectedNoteId(null);
+    setFocusNoteId(null);
+    setSearch('');
+    setFilterStage('all');
+    setView('today');
+  };
+
+  const addPlanet = () => {
+    const name = newPlanetName.trim();
+    if (!name) return;
+    const planet: Planet = {
+      id: crypto.randomUUID(),
+      name,
+      description: 'Nuevo espacio para cultivar ideas.',
+      theme,
+      createdAt: Date.now(),
+    };
+    setPlanets([...planets, planet]);
+    setNewPlanetName('');
+    setIsAddingPlanet(false);
+    switchPlanet(planet.id);
+  };
+
+  const openPlanetSettings = () => {
+    setEditingPlanetName(activePlanet.name);
+    setShowPlanetSettings(!showPlanetSettings);
+    setIsAddingPlanet(false);
+  };
+
+  const renameActivePlanet = () => {
+    const name = editingPlanetName.trim();
+    if (!name) return;
+    setPlanets(current => current.map(planet => planet.id === activePlanet.id ? { ...planet, name } : planet));
+    setShowPlanetSettings(false);
+  };
+
+  const deleteActivePlanet = () => {
+    if (planets.length <= 1) {
+      window.alert('Necesitas al menos un planeta para guardar tus ideas.');
+      return;
+    }
+
+    const ideasInPlanet = notes.filter(note => (note.planetId || DEFAULT_PLANET_ID) === activePlanet.id).length;
+    if (!window.confirm(`Borrar el planeta "${activePlanet.name}"? Se eliminarán ${ideasInPlanet} ideas de este planeta. Esta acción no se puede deshacer.`)) return;
+    if (!window.confirm('Confirmación final: borrar este planeta y sus ideas permanentemente?')) return;
+
+    const nextPlanet = planets.find(planet => planet.id !== activePlanet.id) || DEFAULT_PLANETS[0];
+    setNotes(current => current.filter(note => (note.planetId || DEFAULT_PLANET_ID) !== activePlanet.id));
+    setPlanets(current => current.filter(planet => planet.id !== activePlanet.id));
+    setShowPlanetSettings(false);
+    switchPlanet(nextPlanet.id);
+  };
+
+  const signUpWithEmail = async () => {
+    if (!supabase) {
+      setAuthStatus('Supabase no está configurado.');
+      return;
+    }
+
+    setAuthStatus('Creando cuenta...');
+    const { error } = await supabase.auth.signUp({
+      email: authEmail.trim(),
+      password: authPassword,
+    });
+    setAuthStatus(error ? formatAuthError(error.message) : 'Cuenta creada. Revisa tu correo si Supabase pide confirmación.');
+  };
+
+  const signInWithEmail = async () => {
+    if (!supabase) {
+      setAuthStatus('Supabase no está configurado.');
+      return;
+    }
+
+    setAuthStatus('Iniciando sesión...');
+    const { error } = await supabase.auth.signInWithPassword({
+      email: authEmail.trim(),
+      password: authPassword,
+    });
+    setAuthStatus(error ? formatAuthError(error.message) : 'Sesión iniciada.');
+  };
+
+  const signOut = async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setSession(null);
+    setAuthPassword('');
+    setAuthStatus('Sesión cerrada.');
+  };
+
+  const syncGarden = async () => {
+    if (!session?.user) {
+      setSyncStatus('Inicia sesión para sincronizar.');
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncStatus('Sincronizando jardín...');
+    try {
+      const synced = await syncGardenWithSupabase({ planets, notes }, session.user);
+      if (synced.planets.length > 0) setPlanets(synced.planets);
+      setNotes(synced.notes);
+      setSyncStatus(`Sincronizado: ${synced.planets.length} planetas y ${synced.notes.length} ideas.`);
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : 'No se pudo sincronizar.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const enterApp = () => {
+    localStorage.setItem('seed-landing-seen', 'true');
+    setShowLanding(false);
+  };
+
   const runCardAction = (note: SeedNote, action: ReturnType<typeof getIdeaGuidance>['kind']) => {
     if (action === 'grow') {
       growNote(note.id);
@@ -1640,6 +2147,10 @@ export default function App() {
     setSelectedNoteId(note.id);
   };
 
+  if (showLanding) {
+    return <LandingPage onEnter={enterApp} />;
+  }
+
   return (
     <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-transparent text-[var(--text-main)] font-sans">
       {/* Sidebar Navigation */}
@@ -1647,7 +2158,7 @@ export default function App() {
         <motion.div 
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-4 mb-6 md:mb-12 group cursor-pointer"
+          className="flex items-center gap-4 mb-6 group cursor-pointer"
         >
           <div className="relative">
             <div className="absolute inset-0 bg-[var(--seed-primary)] rounded-2xl blur-lg opacity-20 group-hover:opacity-40 transition-opacity" />
@@ -1661,109 +2172,163 @@ export default function App() {
           </div>
         </motion.div>
 
-        <div className="space-y-4 mb-8 md:mb-12">
-          <p className="text-[10px] uppercase font-black text-[var(--seed-accent)] px-4 mb-2 tracking-[0.25em] opacity-50">Explora</p>
-          <div className="space-y-1">
-            {[
-              { id: 'today', label: 'Hoy', icon: Droplets },
-              { id: 'inbox', label: 'Inbox', icon: Inbox },
-              { id: 'focus', label: 'Enfoque', icon: Target },
-              { id: 'garden', label: 'El Jardín', icon: LayoutGrid },
-              { id: 'harvest', label: 'Cosechas', icon: Archive },
-              { id: '3D', label: 'Ecosistema 3D', icon: Box },
-              { id: 'calendar', label: 'Ciclo Vital', icon: CalendarIcon },
-            ].map((item) => (
-              <button 
-                key={item.id}
-                onClick={() => setView(item.id as any)}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl soft-interaction relative group ${
-                  view === item.id 
-                    ? 'bg-[var(--surface-strong)] shadow-xl shadow-black/5 text-[var(--sage)] ring-1 ring-black/5' 
-                    : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'
-                }`}
+        <div className="space-y-3 mb-8">
+          <div className="flex items-center justify-between px-4">
+            <p className="text-[10px] uppercase font-black text-[var(--seed-accent)] tracking-[0.25em] opacity-50">Planetas</p>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={openPlanetSettings}
+                className="h-7 w-7 rounded-full bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors"
+                aria-label="Editar planeta activo"
+                title="Editar planeta activo"
               >
-                {view === item.id && (
-                  <motion.div 
-                    layoutId="active-pill"
-                    className="absolute left-2 w-1 h-5 bg-[var(--sage)] rounded-full"
-                  />
-                )}
-                <item.icon size={18} className={view === item.id ? 'text-[var(--sage)]' : 'text-[var(--earth)] opacity-70'} />
-                <span className="font-bold tracking-tight text-sm">{item.label}</span>
+                <Settings size={14} />
               </button>
-            ))}
+              <button
+                onClick={() => { setIsAddingPlanet(!isAddingPlanet); setShowPlanetSettings(false); }}
+                className="h-7 w-7 rounded-full bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors"
+                aria-label="Agregar planeta"
+                title="Agregar planeta"
+              >
+                <Plus size={15} />
+              </button>
+            </div>
+          </div>
+
+          {isAddingPlanet && (
+            <div className="rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] p-3">
+              <input
+                autoFocus
+                value={newPlanetName}
+                onChange={(event) => setNewPlanetName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') addPlanet();
+                  if (event.key === 'Escape') setIsAddingPlanet(false);
+                }}
+                placeholder="Nombre del planeta..."
+                className="w-full bg-[var(--surface-strong)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+              />
+              <button
+                onClick={addPlanet}
+                disabled={!newPlanetName.trim()}
+                className="mt-2 w-full rounded-xl bg-[var(--sage)] disabled:opacity-40 text-white py-2 text-xs font-black"
+              >
+                Crear planeta
+              </button>
+            </div>
+          )}
+
+          {showPlanetSettings && (
+            <div className="rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-[var(--seed-accent)] mb-2">Planeta activo</p>
+              <input
+                autoFocus
+                value={editingPlanetName}
+                onChange={(event) => setEditingPlanetName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') renameActivePlanet();
+                  if (event.key === 'Escape') setShowPlanetSettings(false);
+                }}
+                className="w-full bg-[var(--surface-strong)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+              />
+              <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+                <button
+                  onClick={renameActivePlanet}
+                  disabled={!editingPlanetName.trim()}
+                  className="rounded-xl bg-[var(--sage)] disabled:opacity-40 text-white py-2 text-xs font-black"
+                >
+                  Guardar nombre
+                </button>
+                <button
+                  onClick={deleteActivePlanet}
+                  className="rounded-xl bg-red-50 text-red-500 px-3 py-2 text-xs font-black border border-red-100 hover:bg-red-100 transition-colors"
+                  title="Borrar planeta"
+                  aria-label="Borrar planeta activo"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2 overflow-x-auto pb-2 px-1 app-scrollbar snap-x snap-mandatory">
+            {planets.map((planet) => {
+              const count = notes.filter(note => (note.planetId || DEFAULT_PLANET_ID) === planet.id).length;
+              return (
+                <button
+                  key={planet.id}
+                  onClick={() => switchPlanet(planet.id)}
+                  className={`snap-start shrink-0 w-28 rounded-2xl px-3 py-3 soft-interaction text-left ${
+                    activePlanet.id === planet.id
+                      ? 'bg-[var(--surface-strong)] shadow-xl shadow-black/5 text-[var(--sage)] ring-1 ring-black/5'
+                      : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'
+                  }`}
+                >
+                  <span className="h-9 w-9 rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center font-serif font-black text-sm">
+                    {planet.name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="block min-w-0 mt-3">
+                    <span className="block text-sm font-black truncate">{planet.name}</span>
+                    <span className="block text-[10px] font-bold text-[var(--text-muted)]">{count} ideas</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="space-y-4 mb-8 md:mb-12">
-          <p className="text-[10px] uppercase font-black text-[var(--seed-accent)] px-4 mb-2 tracking-[0.25em] opacity-50">Filtros</p>
-          <div className="space-y-1">
-            <button 
-              onClick={() => { setFilterStage('all'); setSelectedNoteId(null); setView('garden'); }}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl soft-interaction ${filterStage === 'all' && view === 'garden' ? 'bg-[var(--surface-strong)] shadow-sm text-[var(--sage)] ring-1 ring-black/5' : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'}`}
-            >
-              <Palette size={18} className="opacity-70" />
-              <span className="font-bold tracking-tight text-sm">Colección Total</span>
-            </button>
-            
-            {[
-              { id: 'seed', label: 'Semillas', color: 'var(--seed-accent)' },
-              { id: 'sprout', label: 'Brotes', color: 'var(--sage)' },
-              { id: 'bloom', label: 'Cosechas', color: 'var(--earth)' },
-            ].map((stage) => (
-              <button 
-                key={stage.id}
-                onClick={() => { setFilterStage(stage.id as any); setSelectedNoteId(null); }}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl soft-interaction ${filterStage === stage.id ? 'bg-[var(--surface-strong)] shadow-sm text-[var(--sage)] ring-1 ring-black/5' : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'}`}
-              >
-                <div 
-                  className="w-2.5 h-2.5 rounded-full shadow-inner" 
-                  style={{ backgroundColor: stage.color }} 
-                />
-                <span className="font-bold tracking-tight text-sm">{stage.label}</span>
-              </button>
-            ))}
-          </div>
+        <div className="space-y-5 mb-8 md:mb-12">
+          {[
+            {
+              title: 'Trabajo',
+              items: [
+                { id: 'today', label: 'Hoy', icon: Droplets },
+                { id: 'garden', label: 'Jardín de ideas', icon: LayoutGrid },
+                { id: 'focus', label: 'Concentración', icon: Target },
+              ],
+            },
+            {
+              title: 'Espacios',
+              items: [
+                { id: '3D', label: 'Planeta', icon: Box },
+                { id: 'calendar', label: 'Calendario', icon: CalendarIcon },
+                { id: 'harvest', label: 'Cosechas', icon: Archive },
+              ],
+            },
+          ].map((section) => (
+            <div key={section.title} className="space-y-1.5">
+              <p className="text-[10px] uppercase font-black text-[var(--seed-accent)] px-4 mb-2 tracking-[0.25em] opacity-50">{section.title}</p>
+              {section.items.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setView(item.id as any)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl soft-interaction relative group ${
+                    view === item.id
+                      ? 'bg-[var(--surface-strong)] shadow-xl shadow-black/5 text-[var(--sage)] ring-1 ring-black/5'
+                      : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'
+                  }`}
+                >
+                  {view === item.id && (
+                    <motion.div
+                      layoutId="active-pill"
+                      className="absolute left-2 w-1 h-5 bg-[var(--sage)] rounded-full"
+                    />
+                  )}
+                  <item.icon size={18} className={view === item.id ? 'text-[var(--sage)]' : 'text-[var(--earth)] opacity-70'} />
+                  <span className="font-bold tracking-tight text-sm">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          ))}
         </div>
 
         <button 
-          onClick={() => setIsAdding(true)}
-          className="mb-12 bg-[var(--sage)] hover:bg-[var(--ink)] text-white w-full py-4.5 rounded-[2rem] font-black shadow-2xl shadow-[var(--sage)]/30 soft-interaction items-center justify-center gap-3 hidden md:flex active:translate-y-px active:shadow-inner"
+          onClick={startPlanting}
+          className="mb-8 bg-[var(--sage)] hover:bg-[var(--ink)] text-white w-full py-4.5 rounded-[2rem] font-black shadow-2xl shadow-[var(--sage)]/30 soft-interaction items-center justify-center gap-3 hidden md:flex active:translate-y-px active:shadow-inner"
         >
           <Plus size={20} strokeWidth={3} />
           <span className="tracking-tight">Plantar Idea</span>
         </button>
-
-        {upcomingDeadlines.length > 0 && (
-          <div className="mb-12">
-            <p className="text-[10px] uppercase font-black text-[var(--seed-accent)] px-4 mb-5 tracking-[0.25em] opacity-50 flex items-center gap-2">
-              <Clock size={12} strokeWidth={3} /> Próximas Cosechas
-            </p>
-            <div className="space-y-3">
-              {upcomingDeadlines.map(note => (
-                <button 
-                  key={note.id}
-                  onClick={() => setSelectedNoteId(note.id)}
-                  className="w-full text-left p-4 rounded-3xl bg-[var(--surface-soft)] hover:bg-[var(--surface-strong)] shadow-sm hover:shadow-md hover:shadow-black/5 soft-interaction group border border-[var(--border)]"
-                >
-                  <p className="text-xs font-serif font-black text-[var(--earth)] truncate group-hover:text-[var(--sage)] transition-colors">{note.title}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <div className="flex-1 h-1 bg-black/5 rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${getProgress(note)}%` }}
-                        className="h-full bg-[var(--sage)]"
-                      />
-                    </div>
-                    <span className="text-[9px] text-[var(--sage)] font-black uppercase tabular-nums">
-                      {new Date(note.dueDate!).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         <div className="mt-auto space-y-6">
           <div className="flex items-center gap-4 px-2 py-4 border-t border-[var(--border)]">
@@ -1794,7 +2359,7 @@ export default function App() {
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         <section className={`flex-1 p-4 sm:p-6 md:p-10 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${selectedNoteId ? 'md:mr-[400px]' : ''}`}>
           <div className="max-w-4xl mx-auto">
-            <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <header className="mb-10 flex flex-col md:flex-row justify-between items-start gap-5 md:gap-6">
               <div className="w-full">
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -1802,25 +2367,31 @@ export default function App() {
                   className="flex items-end justify-between gap-4"
                 >
                   <div>
-                    <h2 className="text-3xl md:text-4xl font-serif font-semibold text-[var(--earth)] leading-none">Tus Semillas</h2>
-                    <p className="text-xs text-[var(--text-muted)] mt-2 italic">Cada nota es el comienzo de algo grande.</p>
+                    <h2 className="text-3xl md:text-4xl font-serif font-semibold text-[var(--earth)] leading-none">{activePlanet.name}</h2>
+                    <p className="text-xs text-[var(--text-muted)] mt-2 italic">{activePlanet.description || 'Cada nota es el comienzo de algo grande.'}</p>
                   </div>
                   <div className="hidden sm:flex items-center gap-2 rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-2 shadow-sm">
                     <TrendingUp size={16} className="text-[var(--sage)]" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">{notes.length} ideas</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">{planetNotes.length} ideas</span>
                   </div>
                 </motion.div>
                 <div className="grid grid-cols-3 gap-3 mt-6">
                   {[
-                    { label: 'Semillas', value: gardenStats.seeds, tone: 'bg-amber-100 text-amber-700' },
-                    { label: 'Brotes', value: gardenStats.active, tone: 'bg-emerald-100 text-emerald-700' },
-                    { label: 'Cosechas', value: gardenStats.completed, tone: 'bg-green-100 text-green-700' },
+                    { id: 'seed', label: 'Semillas', value: gardenStats.seeds, tone: 'bg-amber-100 text-amber-700' },
+                    { id: 'sprout', label: 'Brotes', value: gardenStats.active, tone: 'bg-emerald-100 text-emerald-700' },
+                    { id: 'bloom', label: 'Cosechas', value: gardenStats.completed, tone: 'bg-green-100 text-green-700' },
                   ].map((stat) => (
-                    <motion.div
+                    <motion.button
                       key={stat.label}
+                      type="button"
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] px-4 py-3 shadow-sm"
+                      onClick={() => {
+                        setFilterStage(filterStage === stat.id ? 'all' : stat.id as SeedNote['growthStage']);
+                        setSelectedNoteId(null);
+                        setView('garden');
+                      }}
+                      className={`rounded-2xl border px-4 py-3 shadow-sm text-left soft-interaction ${filterStage === stat.id ? 'bg-[var(--surface-strong)] border-[var(--sage)] ring-1 ring-[var(--sage)]/30' : 'bg-[var(--surface-soft)] border-[var(--border)] hover:bg-[var(--surface-strong)]'}`}
                     >
                       <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{stat.label}</p>
                       <div className="mt-2 flex items-center justify-between">
@@ -1829,7 +2400,7 @@ export default function App() {
                           <Circle size={10} fill="currentColor" />
                         </span>
                       </div>
-                    </motion.div>
+                    </motion.button>
                   ))}
                 </div>
                 {growingNotes.length > 7 && (
@@ -1845,14 +2416,14 @@ export default function App() {
                   </motion.div>
                 )}
               </div>
-              <div className="relative w-full md:w-64">
+              <div className="relative w-full md:w-64 md:mt-[5.75rem]">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" size={16} />
                 <input
                   type="text"
                   placeholder="Buscar en el jardín..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-soft)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-1 focus:ring-[var(--sage)] focus:bg-[var(--surface-strong)] transition-all text-sm"
+                  className="w-full h-11 pl-10 pr-4 bg-[var(--surface-soft)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-1 focus:ring-[var(--sage)] focus:bg-[var(--surface-strong)] transition-all text-sm"
                 />
               </div>
             </header>
@@ -1860,22 +2431,27 @@ export default function App() {
             <AnimatePresence mode="popLayout" initial={false}>
               {view === 'today' ? (
                 <TodayView
-                  notes={notes}
+                  notes={planetNotes}
                   quickNote={quickNote}
                   setQuickNote={setQuickNote}
                   onQuickCapture={addQuickNote}
                   onOpenWatering={openWatering}
                   onSelectNote={setSelectedNoteId}
                   onToggleTask={toggleTask}
+                  onFocusNote={(id) => {
+                    setFocusNoteId(id);
+                    setView('focus');
+                  }}
                   onEnableNotifications={enableNotifications}
                   onNavigate={setView}
+                  onShowWateringQueue={showWateringQueue}
                   wateredToday={wateredToday}
                   wateringStreak={wateringRitual.streak}
                   getProgress={getProgress}
                 />
               ) : view === 'inbox' ? (
                 <InboxView
-                  notes={notes}
+                  notes={planetNotes}
                   onCultivate={cultivateInboxNote}
                   onSaveLater={saveInboxForLater}
                   onDelete={deleteNote}
@@ -1883,7 +2459,8 @@ export default function App() {
                 />
               ) : view === 'focus' ? (
                 <FocusView
-                  notes={notes}
+                  notes={planetNotes}
+                  theme={activePlanet.theme || theme}
                   focusNoteId={focusNoteId}
                   onAddTinyStep={addTinyStep}
                   onOpenWatering={openWatering}
@@ -1895,7 +2472,7 @@ export default function App() {
                   onExit={() => setView('today')}
                 />
               ) : view === 'harvest' ? (
-                <HarvestView notes={notes} onSelectNote={setSelectedNoteId} />
+                <HarvestView notes={planetNotes} onSelectNote={setSelectedNoteId} />
               ) : view === 'garden' ? (
                 <motion.div
                   key="garden-view"
@@ -1904,6 +2481,48 @@ export default function App() {
                   exit={{ opacity: 0, x: 20 }}
                   transition={{ duration: 0.3 }}
                 >
+                  <div className="mb-5 flex gap-2 overflow-x-auto pb-2 app-scrollbar">
+                    {[
+                      { id: 'all', label: 'Todo el jardín', count: gardenStats.total },
+                      { id: 'water', label: 'Por regar', count: gardenStats.watering },
+                      { id: 'seed', label: 'Semillas', count: gardenStats.seeds },
+                      { id: 'sprout', label: 'Brotes', count: gardenStats.active },
+                      { id: 'bloom', label: 'Cosechas', count: gardenStats.completed },
+                    ].map(item => {
+                      const isActive =
+                        item.id === 'all' ? !search.trim() && filterStage === 'all' :
+                        item.id === 'water' ? search.trim().toLowerCase() === 'riego' :
+                        filterStage === item.id && search.trim().toLowerCase() !== 'riego';
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedNoteId(null);
+                            if (item.id === 'all') {
+                              setSearch('');
+                              setFilterStage('all');
+                            } else if (item.id === 'water') {
+                              setSearch('riego');
+                              setFilterStage('all');
+                            } else {
+                              setSearch('');
+                              setFilterStage(item.id as SeedNote['growthStage']);
+                            }
+                          }}
+                          className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black transition-colors ${
+                            isActive
+                              ? 'bg-[var(--sage)] text-white border-[var(--sage)] shadow-lg shadow-[var(--sage)]/20'
+                              : 'bg-[var(--surface-soft)] text-[var(--earth)] border-[var(--border)] hover:bg-[var(--surface-strong)]'
+                          }`}
+                        >
+                          {item.label} <span className={isActive ? 'text-white/70' : 'text-[var(--text-muted)]'}>{item.count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   {isAdding && (
                     <motion.div
                       layout
@@ -1915,6 +2534,7 @@ export default function App() {
                       <button onClick={() => setIsAdding(false)} className="absolute top-6 right-6 text-[var(--text-muted)] hover:text-red-500" aria-label="Cerrar formulario">
                         <X size={20} />
                       </button>
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)] mb-4">Plantando en {activePlanet.name}</p>
                       <input
                         autoFocus
                         type="text"
@@ -2019,6 +2639,7 @@ export default function App() {
                               stage={note.growthStage} 
                               progress={progress} 
                               isGrowth={note.isGrowth} 
+                              theme={activePlanet.theme || theme}
                             />
                           </motion.div>
                         </div>
@@ -2128,7 +2749,7 @@ export default function App() {
                   key="calendar-view"
                   currentMonth={currentMonth} 
                   setCurrentMonth={setCurrentMonth} 
-                  notes={notes} 
+                  notes={planetNotes} 
                   onSelectNote={setSelectedNoteId} 
                 />
               ) : (
@@ -2149,7 +2770,8 @@ export default function App() {
                   }>
                     <Garden3D 
                       notes={filteredNotes} 
-                      theme={theme}
+                      theme={activePlanet.theme || theme}
+                      planetName={activePlanet.name}
                       onSelectNote={setSelectedNoteId} 
                       onReviewNote={openWatering}
                       onFocusNote={(id) => {
@@ -2184,9 +2806,7 @@ export default function App() {
                   whileHover={{ y: -2 }}
                   whileTap={{ y: 0 }}
                   onClick={() => {
-                    setSearch('');
-                    setFilterStage('all');
-                    setIsAdding(true);
+                    startPlanting();
                   }}
                   className="mt-10 bg-[var(--sage)] text-white px-10 py-4 rounded-2xl font-bold shadow-xl shadow-[var(--sage)]/20 soft-interaction hover:brightness-110"
                 >
@@ -2214,7 +2834,7 @@ export default function App() {
                     selectedNote.growthStage === 'withered' ? 'bg-red-500' : 'bg-[var(--seed)]'
                   }`} />
                   <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
-                    {selectedNote.inbox ? 'Semilla en Inbox' :
+                    {selectedNote.inbox ? 'Semilla en semillero' :
                      selectedNote.growthStage === 'bloom' ? 'Idea Cosechada' : 
                      selectedNote.growthStage === 'withered' ? 'Idea Marchita' :
                      selectedNote.isGrowth ? 'Idea en Brote' : 'Semilla'}
@@ -2234,6 +2854,7 @@ export default function App() {
                     stage={selectedNote.growthStage} 
                     progress={getProgress(selectedNote)} 
                     isGrowth={selectedNote.isGrowth} 
+                    theme={activePlanet.theme || theme}
                   />
                 </div>
 
@@ -2319,7 +2940,7 @@ export default function App() {
                   
                   {isLinking ? (
                     <div className="space-y-1 mb-4 max-h-40 overflow-y-auto p-2 bg-slate-50 rounded-xl">
-                      {notes.filter(n => n.id !== selectedNote.id).map(n => {
+                      {planetNotes.filter(n => n.id !== selectedNote.id).map(n => {
                         const isConnected = selectedNote.connections?.includes(n.id);
                         return (
                           <button
@@ -2336,7 +2957,7 @@ export default function App() {
                   ) : (
                     <div className="flex flex-wrap gap-2 mb-4">
                       {selectedNote.connections?.map(id => {
-                        const target = notes.find(n => n.id === id);
+                        const target = planetNotes.find(n => n.id === id);
                         if (!target) return null;
                         return (
                           <button 
@@ -2550,22 +3171,22 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => addTinyStep(note.id)}
-                      className="w-full rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] px-4 py-3 font-black flex items-center justify-center gap-2 hover:bg-[var(--surface-strong)] transition-colors"
+                      className="w-full rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] px-4 py-3 font-black flex items-center justify-center gap-2 border border-[var(--border)] hover:bg-[var(--surface-strong)] transition-colors"
                     >
-                      <Plus size={17} /> Añadir micro-paso
+                      <Plus size={17} /> Crear micro-paso y enfocar
                     </button>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="flex items-center justify-between px-2 pt-1 text-[11px] font-black">
                       <button
                         onClick={() => { togglePauseNote(note.id); recordWateringRitual(); markRecentlyWatered(note.id); setWateringNoteId(null); }}
-                        className="rounded-2xl bg-stone-100 text-stone-600 px-4 py-3 font-black flex items-center justify-center gap-2"
+                        className="text-stone-500 hover:text-[var(--sage)] transition-colors flex items-center justify-center gap-1.5"
                       >
-                        <Pause size={16} /> Pausar sin culpa
+                        <Pause size={13} /> Pausar sin culpa
                       </button>
                       <button
                         onClick={() => { setSelectedNoteId(note.id); setWateringNoteId(null); }}
-                        className="rounded-2xl bg-stone-100 text-stone-600 px-4 py-3 font-black flex items-center justify-center gap-2"
+                        className="text-stone-500 hover:text-[var(--sage)] transition-colors flex items-center justify-center gap-1.5"
                       >
-                        <ArrowRight size={16} /> Abrir
+                        <ArrowRight size={13} /> Abrir detalle
                       </button>
                     </div>
                   </div>
@@ -2683,7 +3304,12 @@ export default function App() {
                         {accountInitials}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)] mb-3">Cuenta local</p>
+                        <div className="mb-3 flex flex-wrap items-center gap-2">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Cuenta local</p>
+                          <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${isSupabaseConfigured ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {isSupabaseConfigured ? 'Supabase listo' : 'Sin Supabase'}
+                          </span>
+                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <label className="block">
                             <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Nombre</span>
@@ -2728,8 +3354,72 @@ export default function App() {
                         </div>
                       ))}
                     </div>
+                    <div className="mt-4 rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Sync Supabase</p>
+                          <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">
+                            {session?.user ? `Conectado como ${session.user.email}` : 'Crea una cuenta o inicia sesión para sincronizar entre dispositivos.'}
+                          </p>
+                        </div>
+                        {session?.user && (
+                          <button onClick={signOut} className="rounded-xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2 text-xs font-black text-[var(--sage)]">
+                            Cerrar sesión
+                          </button>
+                        )}
+                      </div>
+
+                      {!session?.user && (
+                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <input
+                            type="email"
+                            value={authEmail}
+                            onChange={(event) => setAuthEmail(event.target.value)}
+                            placeholder="correo@email.com"
+                            className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                          />
+                          <input
+                            type="password"
+                            value={authPassword}
+                            onChange={(event) => setAuthPassword(event.target.value)}
+                            placeholder="Contraseña"
+                            className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                          />
+                          <button
+                            onClick={signInWithEmail}
+                            disabled={!isSupabaseConfigured || !authEmail.trim() || authPassword.length < 6}
+                            className="rounded-2xl bg-[var(--sage)] disabled:opacity-40 text-white py-3 text-xs font-black"
+                          >
+                            Iniciar sesión
+                          </button>
+                          <button
+                            onClick={signUpWithEmail}
+                            disabled={!isSupabaseConfigured || !authEmail.trim() || authPassword.length < 6}
+                            className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] text-[var(--sage)] py-3 text-xs font-black"
+                          >
+                            Crear cuenta
+                          </button>
+                        </div>
+                      )}
+
+                      {session?.user && (
+                        <button
+                          onClick={syncGarden}
+                          disabled={isSyncing}
+                          className="mt-4 w-full rounded-2xl bg-[var(--sage)] disabled:opacity-50 text-white py-3 text-xs font-black"
+                        >
+                          {isSyncing ? 'Sincronizando...' : 'Sincronizar jardín'}
+                        </button>
+                      )}
+
+                      {(authStatus || syncStatus) && (
+                        <p className="mt-3 text-xs font-semibold text-[var(--text-muted)]">{syncStatus || authStatus}</p>
+                      )}
+                    </div>
                     <p className="mt-3 text-xs font-semibold text-[var(--text-muted)]">
-                      Esta cuenta vive en este dispositivo. Para sincronizar entre usuarios o equipos hará falta añadir autenticación y backend más adelante.
+                      {isSupabaseConfigured
+                        ? 'Supabase ya esta configurado. El sync es manual por ahora para mantener control sobre los datos locales.'
+                        : 'Esta cuenta vive en este dispositivo. Para sincronizar entre usuarios o equipos hará falta añadir Supabase.'}
                     </p>
                   </section>
 
@@ -2739,8 +3429,11 @@ export default function App() {
                       {THEMES.map(item => (
                         <button
                           key={item.id}
-                          onClick={() => setTheme(item.id)}
-                          className={`rounded-2xl border px-3 py-4 text-center transition-all ${theme === item.id ? 'bg-[var(--sage)] text-white border-[var(--sage)]' : 'bg-[var(--bg-app)] text-[var(--earth)] border-[var(--border)]'}`}
+                          onClick={() => {
+                            setTheme(item.id);
+                            setPlanets(current => current.map(planet => planet.id === activePlanet.id ? { ...planet, theme: item.id } : planet));
+                          }}
+                          className={`rounded-2xl border px-3 py-4 text-center transition-all ${(activePlanet.theme || theme) === item.id ? 'bg-[var(--sage)] text-white border-[var(--sage)]' : 'bg-[var(--bg-app)] text-[var(--earth)] border-[var(--border)]'}`}
                         >
                           <span className="block text-xl mb-2">{item.icon}</span>
                           <span className="text-[10px] font-black">{item.label}</span>
@@ -2881,8 +3574,7 @@ export default function App() {
                   <button
                     onClick={() => {
                       finishOnboarding();
-                      setView('today');
-                      setIsAdding(false);
+                      startPlanting();
                     }}
                     className="rounded-2xl bg-[var(--sage)] text-white py-4 px-5 font-black shadow-lg shadow-[var(--sage)]/20 flex items-center justify-center gap-2 active:translate-y-px soft-interaction"
                   >
@@ -2909,7 +3601,7 @@ export default function App() {
             whileTap={{ y: 1 }}
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            onClick={() => setIsAdding(true)}
+            onClick={startPlanting}
             className="fixed bottom-8 right-8 w-14 h-14 bg-[var(--sage)] text-white rounded-full shadow-2xl flex items-center justify-center z-50 overflow-hidden hover:shadow-[0_18px_45px_rgba(47,62,51,0.28)] soft-interaction"
           >
             <Leaf size={28} />
