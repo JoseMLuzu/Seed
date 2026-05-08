@@ -1,5 +1,5 @@
 import { User } from '@supabase/supabase-js';
-import { Planet, PlanetMember, SeedNote, SyncSnapshot } from './types';
+import { Planet, SeedNote, SyncSnapshot } from './types';
 import { supabase } from './supabase';
 
 type PlanetRow = {
@@ -9,14 +9,6 @@ type PlanetRow = {
   description: string | null;
   theme: Planet['theme'];
   created_at_ms: number;
-};
-
-type PlanetMemberRow = {
-  planet_id: string;
-  owner_id: string;
-  member_email: string;
-  role: PlanetMember['role'];
-  invited_at_ms: number;
 };
 
 type NoteRow = {
@@ -44,16 +36,6 @@ function normalizeRemotePlanet(row: PlanetRow): Planet {
     description: row.description || '',
     theme: row.theme,
     createdAt: row.created_at_ms || Date.now(),
-    ownerId: row.user_id,
-  };
-}
-
-function normalizeMember(row: PlanetMemberRow): PlanetMember {
-  return {
-    planetId: row.planet_id,
-    email: row.member_email,
-    role: row.role,
-    invitedAt: row.invited_at_ms || Date.now(),
   };
 }
 
@@ -82,26 +64,8 @@ export async function fetchGardenFromSupabase(): Promise<SyncSnapshot> {
 
   if (notesError) throw notesError;
 
-  const { data: remoteMembers } = await supabase
-    .from('seed_planet_members')
-    .select('planet_id,owner_id,member_email,role,invited_at_ms');
-
-  const members = ((remoteMembers || []) as PlanetMemberRow[]).map(normalizeMember);
-  const memberMap = new Map<string, PlanetMember[]>();
-  members.forEach(member => {
-    memberMap.set(member.planetId, [...(memberMap.get(member.planetId) || []), member]);
-  });
-
   return {
-    planets: (remotePlanets || []).map(row => {
-      const planet = normalizeRemotePlanet(row as PlanetRow);
-      const planetMembers = memberMap.get(planet.id) || [];
-      return {
-        ...planet,
-        shared: planetMembers.length > 0,
-        members: planetMembers,
-      };
-    }),
+    planets: (remotePlanets || []).map(row => normalizeRemotePlanet(row as PlanetRow)),
     notes: dedupeNotes((remoteNotes || []).map(row => normalizeRemoteNote(row as NoteRow))),
   };
 }
@@ -109,9 +73,7 @@ export async function fetchGardenFromSupabase(): Promise<SyncSnapshot> {
 export async function pushGardenToSupabase(snapshot: SyncSnapshot, user: User) {
   if (!supabase) throw new Error('Supabase no está configurado.');
 
-  const planetRows: PlanetRow[] = snapshot.planets
-    .filter(planet => !planet.ownerId || planet.ownerId === user.id)
-    .map(planet => ({
+  const planetRows: PlanetRow[] = snapshot.planets.map(planet => ({
     id: planet.id,
     user_id: user.id,
     name: planet.name,
@@ -150,12 +112,13 @@ export async function syncGardenWithSupabase(snapshot: SyncSnapshot, user: User)
   return fetchGardenFromSupabase();
 }
 
-export async function deleteNoteFromSupabase(id: string, _user: User) {
+export async function deleteNoteFromSupabase(id: string, user: User) {
   if (!supabase) throw new Error('Supabase no está configurado.');
   const { error } = await supabase
     .from('seed_notes')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', user.id);
   if (error) throw error;
 }
 
@@ -173,35 +136,5 @@ export async function deletePlanetFromSupabase(id: string, user: User) {
     .delete()
     .eq('id', id)
     .eq('user_id', user.id);
-  if (error) throw error;
-}
-
-export async function invitePlanetMember(planet: Planet, email: string, user: User, role: PlanetMember['role'] = 'editor') {
-  if (!supabase) throw new Error('Supabase no está configurado.');
-  const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail) throw new Error('Escribe un correo para invitar.');
-  if (normalizedEmail === user.email?.toLowerCase()) throw new Error('No necesitas invitarte a tu propio planeta.');
-  if (planet.ownerId && planet.ownerId !== user.id) throw new Error('Solo el dueño puede compartir este planeta.');
-
-  const row: PlanetMemberRow = {
-    planet_id: planet.id,
-    owner_id: user.id,
-    member_email: normalizedEmail,
-    role,
-    invited_at_ms: Date.now(),
-  };
-
-  const { error } = await supabase.from('seed_planet_members').upsert(row, { onConflict: 'planet_id,member_email' });
-  if (error) throw error;
-}
-
-export async function removePlanetMember(planetId: string, email: string, user: User) {
-  if (!supabase) throw new Error('Supabase no está configurado.');
-  const { error } = await supabase
-    .from('seed_planet_members')
-    .delete()
-    .eq('planet_id', planetId)
-    .eq('owner_id', user.id)
-    .eq('member_email', email.toLowerCase());
   if (error) throw error;
 }

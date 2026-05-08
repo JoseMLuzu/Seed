@@ -14,8 +14,6 @@ import {
   format, 
   startOfMonth, 
   endOfMonth, 
-  startOfWeek, 
-  endOfWeek, 
   eachDayOfInterval, 
   isSameMonth, 
   isSameDay, 
@@ -50,14 +48,15 @@ import {
   Target,
   Download,
   Sparkles,
-  User
+  User,
+  Maximize2
 } from 'lucide-react';
 import { Theme, SeedNote, Planet } from './types';
 import { addFocusMinutes, cultivateInboxNote as cultivateNote, DAY_MS, daysSince, toggleTaskForNote, wateringDue, waterNote as waterSeedNote } from './seedLogic';
 import { loadNotesFromDb, migrateLocalNotesToDb, saveNotesToDb } from './storage';
 import { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';
-import { deleteNoteFromSupabase, deletePlanetFromSupabase, invitePlanetMember, pushGardenToSupabase, removePlanetMember, syncGardenWithSupabase } from './supabaseSync';
+import { deleteNoteFromSupabase, deletePlanetFromSupabase, pushGardenToSupabase, syncGardenWithSupabase } from './supabaseSync';
 
 const Garden3D = lazy(() => import('./components/Garden3D'));
 
@@ -252,118 +251,445 @@ function CalendarView({
   currentMonth, 
   setCurrentMonth, 
   notes, 
-  onSelectNote 
+  onSelectNote,
+  onExit,
 }: { 
   currentMonth: Date; 
   setCurrentMonth: (d: Date) => void; 
   notes: SeedNote[]; 
   onSelectNote: (id: string) => void;
+  onExit: () => void;
   key?: string;
 }) {
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(monthStart);
-  const startDate = startOfWeek(monthStart);
-  const endDate = endOfWeek(monthEnd);
-
-  const calendarDays = eachDayOfInterval({
-    start: startDate,
-    end: endDate,
+  const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const [selectedDay, setSelectedDay] = useState(() => {
+    const now = new Date();
+    return isSameMonth(now, monthStart) ? now : monthStart;
   });
 
-  const notesByDay = useMemo(() => {
-    const map: Record<string, SeedNote[]> = {};
+  useEffect(() => {
+    const now = new Date();
+    setSelectedDay(isSameMonth(now, monthStart) ? now : monthStart);
+  }, [currentMonth]);
+
+  const activityByDay = useMemo(() => {
+    type DayActivity = {
+      planted: SeedNote[];
+      watered: SeedNote[];
+      harvested: SeedNote[];
+      advanced: SeedNote[];
+      due: SeedNote[];
+    };
+
+    const map: Record<string, DayActivity> = {};
+    const ensureDay = (date: number | Date) => {
+      const key = format(date, 'yyyy-MM-dd');
+      if (!map[key]) map[key] = { planted: [], watered: [], harvested: [], advanced: [], due: [] };
+      return map[key];
+    };
+
     notes.forEach(note => {
-      if (note.dueDate) {
-        const dateKey = format(note.dueDate, 'yyyy-MM-dd');
-        if (!map[dateKey]) map[dateKey] = [];
-        map[dateKey].push(note);
+      ensureDay(note.createdAt).planted.push(note);
+      if (note.lastWateredAt) ensureDay(note.lastWateredAt).watered.push(note);
+      if (note.harvestedAt) ensureDay(note.harvestedAt).harvested.push(note);
+      if (note.dueDate) ensureDay(note.dueDate).due.push(note);
+      if (note.updatedAt && !isSameDay(note.updatedAt, note.createdAt) && (!note.lastWateredAt || !isSameDay(note.updatedAt, note.lastWateredAt))) {
+        ensureDay(note.updatedAt).advanced.push(note);
       }
     });
     return map;
   }, [notes]);
 
-  const daysOfWeek = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const selectedKey = format(selectedDay, 'yyyy-MM-dd');
+  const selectedActivity = activityByDay[selectedKey] || { planted: [], watered: [], harvested: [], advanced: [], due: [] };
+  const selectedEvents = [
+    ...selectedActivity.planted.map(note => ({ note, type: 'planted', label: note.growthStage === 'seed' ? 'Semilla plantada' : 'Idea creada', icon: Sprout, tone: 'bg-amber-50 text-amber-700 border-amber-100' })),
+    ...selectedActivity.watered.map(note => ({ note, type: 'watered', label: 'Idea regada', icon: Droplets, tone: 'bg-sky-50 text-sky-700 border-sky-100' })),
+    ...selectedActivity.advanced.map(note => ({ note, type: 'advanced', label: 'Idea avanzada', icon: TrendingUp, tone: 'bg-emerald-50 text-emerald-700 border-emerald-100' })),
+    ...selectedActivity.harvested.map(note => ({ note, type: 'harvested', label: 'Cosecha lograda', icon: CheckCircle2, tone: 'bg-green-50 text-green-700 border-green-100' })),
+    ...selectedActivity.due.map(note => ({ note, type: 'due', label: 'Fecha objetivo', icon: Target, tone: 'bg-violet-50 text-violet-700 border-violet-100' })),
+  ];
+
+  const monthSummary = monthDays.reduce((summary, day) => {
+    const activity = activityByDay[format(day, 'yyyy-MM-dd')];
+    if (!activity) return summary;
+    return {
+      planted: summary.planted + activity.planted.length,
+      watered: summary.watered + activity.watered.length,
+      harvested: summary.harvested + activity.harvested.length,
+      activeDays: summary.activeDays + (activity.planted.length + activity.watered.length + activity.harvested.length + activity.advanced.length > 0 ? 1 : 0),
+    };
+  }, { planted: 0, watered: 0, harvested: 0, activeDays: 0 });
+  const activeDayKeys = new Set(monthDays
+    .filter(day => {
+      const activity = activityByDay[format(day, 'yyyy-MM-dd')];
+      return activity && activity.planted.length + activity.watered.length + activity.harvested.length + activity.advanced.length > 0;
+    })
+    .map(day => format(day, 'yyyy-MM-dd')));
+  const activeStreak = (() => {
+    let cursor = new Date();
+    if (!isSameMonth(cursor, monthStart)) return 0;
+    let streak = 0;
+    while (isSameMonth(cursor, monthStart) && activeDayKeys.has(format(cursor, 'yyyy-MM-dd'))) {
+      streak += 1;
+      cursor = new Date(cursor.getTime() - DAY_MS);
+    }
+    return streak;
+  })();
+  const monthProgress = Math.round((monthSummary.activeDays / Math.max(1, monthDays.length)) * 100);
+  const daySummary = selectedEvents.length === 0
+    ? 'Un claro libre en tu jardín. Puedes usarlo para plantar algo nuevo o descansar sin culpa.'
+    : selectedActivity.harvested.length > 0
+      ? `Día de cosecha: cerraste ${selectedActivity.harvested.length} idea${selectedActivity.harvested.length === 1 ? '' : 's'} y dejaste evidencia de avance.`
+      : selectedActivity.watered.length > 0
+        ? `Día de cuidado: regaste ${selectedActivity.watered.length} idea${selectedActivity.watered.length === 1 ? '' : 's'} para que no se pierdan.`
+        : selectedActivity.planted.length > 0
+          ? `Día de siembra: plantaste ${selectedActivity.planted.length} semilla${selectedActivity.planted.length === 1 ? '' : 's'} nueva${selectedActivity.planted.length === 1 ? '' : 's'}.`
+          : `Día de avance: moviste ${selectedActivity.advanced.length} idea${selectedActivity.advanced.length === 1 ? '' : 's'} hacia adelante.`;
+  const checkpointLabels = ['Preparar tierra', 'Cultivar', 'Podar', 'Cosechar', 'Cerrar mes'];
+
+  const mapColumns = 6;
+  const mapRows = Math.ceil(monthDays.length / mapColumns);
+  const mapHeight = Math.max(760, mapRows * 172 + 220);
+  const mapNodes = monthDays.map((day, idx) => {
+    const row = Math.floor(idx / mapColumns);
+    const columnIndex = idx % mapColumns;
+    const column = row % 2 === 0 ? columnIndex : mapColumns - 1 - columnIndex;
+    const lanes = [10, 26, 42, 58, 74, 90];
+    const x = lanes[column] + Math.sin((row + 1) * 0.8) * 1.8;
+    const y = 112 + row * 172 + (column % 2) * 18;
+    return { day, x: Math.max(8, Math.min(92, x)), y };
+  });
+  const mapPath = mapNodes.reduce((path, node, index) => {
+    if (index === 0) return `M ${node.x} ${node.y}`;
+    const previous = mapNodes[index - 1];
+    const midY = (previous.y + node.y) / 2;
+    return `${path} C ${previous.x} ${midY}, ${node.x} ${midY}, ${node.x} ${node.y}`;
+  }, '');
+  const mapSegments = mapNodes.slice(1).map((node, index) => {
+    const previous = mapNodes[index];
+    const midY = (previous.y + node.y) / 2;
+    return {
+      id: `${format(previous.day, 'yyyy-MM-dd')}-${format(node.day, 'yyyy-MM-dd')}`,
+      path: `M ${previous.x} ${previous.y} C ${previous.x} ${midY}, ${node.x} ${midY}, ${node.x} ${node.y}`,
+      completed: node.day.getTime() <= Date.now(),
+    };
+  });
+  const checkpoints = mapNodes
+    .map((node, index) => ({ ...node, index }))
+    .filter(item => item.index === 0 || (item.index + 1) % 7 === 0 || item.index === mapNodes.length - 1);
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }} 
-      animate={{ opacity: 1 }} 
-      className="pb-20"
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-[#eef7ef] text-[var(--text-main)]"
     >
-      <div className="flex items-center justify-between mb-8 bg-[var(--surface-strong)] p-4 rounded-2xl shadow-sm border border-[var(--border)]">
-        <h3 className="text-xl font-serif font-bold text-[var(--earth)] capitalize">
-          {format(currentMonth, 'MMMM yyyy', { locale: es })}
-        </h3>
-        <div className="flex gap-2">
-          <button 
-            onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-            className="p-2 hover:bg-[var(--surface-hover)] rounded-lg transition-colors text-[var(--sage)]"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <button 
-            onClick={() => setCurrentMonth(new Date())}
-            className="px-3 py-1 text-xs font-bold uppercase tracking-wider text-[var(--sage)] hover:bg-[var(--sage)]/10 rounded-lg transition-colors"
-          >
-            Hoy
-          </button>
-          <button 
-            onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-            className="p-2 hover:bg-[var(--surface-hover)] rounded-lg transition-colors text-[var(--sage)]"
-          >
-            <ChevronRight size={20} />
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-[var(--surface-strong)] rounded-3xl shadow-xl border border-[var(--border)] overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-[var(--border)] bg-[var(--surface-soft)]">
-          {daysOfWeek.map(day => (
-            <div key={day} className="py-4 text-center text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] border-r border-[var(--border)] last:border-r-0">
-              {day}
+      <header className="relative z-20 border-b border-white/50 bg-white/70 px-4 py-3 shadow-sm backdrop-blur-2xl sm:px-6">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Camino del jardinero</p>
+            <div className="mt-1 flex flex-wrap items-end gap-x-4 gap-y-1">
+              <h3 className="font-serif text-3xl font-black capitalize leading-none text-[var(--earth)] sm:text-4xl">
+                {format(currentMonth, 'MMMM yyyy', { locale: es })}
+              </h3>
+              <p className="max-w-2xl pb-1 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
+                Un mapa de tu mes: dias plantados, riegos, avances y cosechas.
+              </p>
             </div>
-          ))}
+            <div className="mt-3 flex max-w-xl items-center gap-3">
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-emerald-100">
+                <div className="h-full rounded-full bg-[linear-gradient(90deg,#7aa95c,#e3b64b)]" style={{ width: `${monthProgress}%` }} />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">{monthProgress}% cultivado</span>
+              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase text-amber-700">{activeStreak} racha</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { label: 'Dias', value: monthSummary.activeDays, icon: CalendarIcon, tone: 'text-[var(--sage)]' },
+              { label: 'Plantadas', value: monthSummary.planted, icon: Sprout, tone: 'text-amber-600' },
+              { label: 'Riegos', value: monthSummary.watered, icon: Droplets, tone: 'text-sky-600' },
+              { label: 'Cosechas', value: monthSummary.harvested, icon: CheckCircle2, tone: 'text-green-600' },
+            ].map(item => (
+              <div key={item.label} className="flex h-11 items-center gap-2 rounded-2xl border border-white/60 bg-white/65 px-3 shadow-sm">
+                <item.icon size={15} className={item.tone} />
+                <span className="font-serif text-xl font-black text-[var(--earth)]">{item.value}</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</span>
+              </div>
+            ))}
+            <div className="ml-0 flex items-center gap-2 xl:ml-2">
+              <button
+                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                className="grid h-11 w-11 place-items-center rounded-2xl border border-[var(--border)] bg-white/75 text-[var(--sage)] transition-colors hover:bg-white"
+                aria-label="Mes anterior"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <button
+                onClick={() => setCurrentMonth(new Date())}
+                className="h-11 rounded-2xl border border-[var(--border)] bg-white/75 px-4 text-xs font-black uppercase text-[var(--sage)] transition-colors hover:bg-white"
+              >
+                Hoy
+              </button>
+              <button
+                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                className="grid h-11 w-11 place-items-center rounded-2xl border border-[var(--border)] bg-white/75 text-[var(--sage)] transition-colors hover:bg-white"
+                aria-label="Mes siguiente"
+              >
+                <ChevronRight size={20} />
+              </button>
+              <button
+                onClick={onExit}
+                className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--earth)] text-white shadow-lg shadow-black/10 transition-colors hover:bg-[var(--sage)]"
+                aria-label="Cerrar mapa"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="grid grid-cols-7">
-          {calendarDays.map((day, idx) => {
+      </header>
+
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="relative min-h-0 overflow-hidden bg-[#edf5ee]">
+          <div className="relative h-full overflow-auto app-scrollbar">
+            <div className="relative mx-auto min-w-[860px] max-w-[1280px]" style={{ height: mapHeight }}>
+              <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,#cfe9f1_0%,#eaf4e8_34%,#d6e7bf_58%,#8db06f_100%)]" />
+                <div className="absolute inset-x-0 top-0 h-[34%] bg-[radial-gradient(circle_at_18%_18%,rgba(255,247,214,0.95)_0_5%,rgba(255,247,214,0.42)_8%,transparent_18%),linear-gradient(180deg,rgba(255,255,255,0.52),rgba(255,255,255,0))]" />
+                <div className="absolute left-[-18%] top-[28%] h-[28%] w-[68%] rounded-[50%] bg-[#d8e6c4] shadow-[inset_-50px_-20px_80px_rgba(72,97,58,0.10)]" />
+                <div className="absolute right-[-22%] top-[24%] h-[32%] w-[76%] rounded-[50%] bg-[#c5dcaa] shadow-[inset_48px_-22px_90px_rgba(72,97,58,0.12)]" />
+                <div className="absolute inset-x-[-6%] top-[44%] h-[32%] rounded-[50%] bg-[#aac883] shadow-[inset_0_24px_90px_rgba(255,255,255,0.18)]" />
+                <div className="absolute inset-x-0 top-[62%] bottom-0 bg-[linear-gradient(180deg,#93b672_0%,#668957_56%,#3f6043_100%)]" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_70%,rgba(255,255,255,0.16)_0_1.4%,transparent_1.8%),radial-gradient(circle_at_73%_52%,rgba(255,255,255,0.13)_0_1.1%,transparent_1.5%),radial-gradient(circle_at_42%_86%,rgba(255,238,173,0.16)_0_1.3%,transparent_1.7%)] bg-[length:180px_150px] opacity-80" />
+                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(21,43,29,0.04)_1px,transparent_1px),linear-gradient(180deg,rgba(21,43,29,0.035)_1px,transparent_1px)] bg-[length:72px_72px] opacity-40" />
+                {[
+                  { left: '6%', top: '30%', scale: 0.76 },
+                  { left: '88%', top: '29%', scale: 0.88 },
+                  { left: '9%', top: '57%', scale: 1.0 },
+                  { left: '84%', top: '66%', scale: 0.82 },
+                  { left: '47%', top: '80%', scale: 0.68 },
+                ].map((tree, index) => (
+                  <div key={index} className="absolute" style={{ left: tree.left, top: tree.top, transform: `scale(${tree.scale})` }}>
+                    <div className="mx-auto h-20 w-5 rounded-t-full bg-[#6f5138]" />
+                    <div className="-mt-32 h-32 w-36 rounded-[48%] bg-[#335f3f] opacity-85 shadow-[inset_-20px_-14px_0_rgba(0,0,0,0.08)]" />
+                  </div>
+                ))}
+                {[
+                  { left: '20%', top: '58%' },
+                  { left: '64%', top: '68%' },
+                  { left: '35%', top: '82%' },
+                  { left: '90%', top: '52%' },
+                  { left: '8%', top: '78%' },
+                ].map((flower, index) => (
+                  <div key={index} className="absolute grid h-8 w-8 place-items-center rounded-full bg-white/40 text-[#d28b74] shadow-sm backdrop-blur" style={{ left: flower.left, top: flower.top }}>
+                    <Sparkles size={13} />
+                  </div>
+                ))}
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,transparent_0_42%,rgba(30,55,34,0.16)_100%)]" />
+              </div>
+
+              <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 100 ${mapHeight}`} preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <filter id="seedPathShadow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="0" dy="8" stdDeviation="5" floodColor="#1f2d23" floodOpacity="0.18" />
+                  </filter>
+                </defs>
+                <path d={mapPath} fill="none" stroke="rgba(47,62,51,0.18)" strokeWidth="15" strokeLinecap="round" filter="url(#seedPathShadow)" />
+                <path d={mapPath} fill="none" stroke="rgba(92,76,56,0.28)" strokeWidth="11" strokeLinecap="round" />
+                <path d={mapPath} fill="none" stroke="rgba(242,230,202,0.82)" strokeWidth="8.5" strokeLinecap="round" />
+                {mapSegments.map(segment => (
+                  <path
+                    key={segment.id}
+                    d={segment.path}
+                    fill="none"
+                    stroke={segment.completed ? 'rgba(144,122,78,0.88)' : 'rgba(245,235,212,0.22)'}
+                    strokeWidth="6.8"
+                    strokeLinecap="round"
+                  />
+                ))}
+                {mapSegments.map(segment => (
+                  <path
+                    key={`${segment.id}-dash`}
+                    d={segment.path}
+                    fill="none"
+                    stroke={segment.completed ? 'rgba(255,251,238,0.42)' : 'rgba(133,95,55,0.10)'}
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeDasharray="2 13"
+                  />
+                ))}
+              </svg>
+
+              {mapNodes.map(({ day, x, y }, idx) => {
             const dateKey = format(day, 'yyyy-MM-dd');
-            const dayNotes = notesByDay[dateKey] || [];
+            const activity = activityByDay[dateKey] || { planted: [], watered: [], harvested: [], advanced: [], due: [] };
+            const activityCount = activity.planted.length + activity.watered.length + activity.harvested.length + activity.advanced.length;
+            const hasActivity = activityCount > 0;
+            const isSelected = isSameDay(day, selectedDay);
             const isTodayDay = isToday(day);
-            const isCurrentMonth = isSameMonth(day, monthStart);
+            const isCheckpoint = idx === 0 || (idx + 1) % 7 === 0 || idx === monthDays.length - 1;
+            const strongest =
+              activity.harvested.length > 0 ? 'harvested' :
+              activity.watered.length > 0 ? 'watered' :
+              activity.advanced.length > 0 ? 'advanced' :
+              activity.planted.length > 0 ? 'planted' : 'empty';
+            const NodeIcon =
+              strongest === 'harvested' ? CheckCircle2 :
+              strongest === 'watered' ? Droplets :
+              strongest === 'advanced' ? TrendingUp :
+              strongest === 'planted' ? Sprout :
+              Leaf;
 
             return (
-              <div 
-                key={dateKey} 
-                className={`min-h-[120px] p-2 border-r border-b border-[var(--border)] group transition-all ${idx % 7 === 6 ? 'border-r-0' : ''} ${!isCurrentMonth ? 'bg-[var(--surface-soft)]' : 'bg-[var(--surface-strong)]'}`}
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <span className={`text-[11px] font-bold w-6 h-6 flex items-center justify-center rounded-full transition-colors ${isTodayDay ? 'bg-[var(--sage)] text-white shadow-sm' : isCurrentMonth ? 'text-[var(--earth)]' : 'text-[var(--text-muted)]'}`}>
-                    {format(day, 'd')}
-                  </span>
-                  {dayNotes.length > 0 && (
-                    <div className="w-2 h-2 rounded-full bg-[var(--seed-accent)] animate-pulse" />
-                  )}
+                <div
+                  key={dateKey}
+                  className="absolute"
+                  style={{ left: `${x}%`, top: y, transform: 'translate(-50%, -50%)' }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDay(day)}
+                    className={`group relative grid h-20 w-20 place-items-center rounded-full border-[5px] text-center shadow-xl transition-all hover:-translate-y-1 sm:h-24 sm:w-24 ${
+                      isSelected
+                        ? 'border-white bg-[var(--sage)] text-white ring-4 ring-white/50'
+                        : isTodayDay
+                          ? 'border-white bg-[var(--earth)] text-white'
+                          : strongest === 'harvested'
+                            ? 'border-white bg-green-500 text-white'
+                            : strongest === 'watered'
+                              ? 'border-white bg-sky-500 text-white'
+                              : strongest === 'advanced'
+                                ? 'border-white bg-emerald-500 text-white'
+                                : strongest === 'planted'
+                                  ? 'border-white bg-amber-400 text-amber-950'
+                                  : 'border-white bg-[var(--surface-strong)] text-[var(--text-muted)]'
+                    } ${isCheckpoint ? 'scale-110 shadow-2xl' : ''}`}
+                    aria-label={`Dia ${format(day, 'd')}`}
+                  >
+                    <span className="absolute -top-2 -right-2 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[var(--earth)] text-[10px] font-black text-white shadow-md">
+                      {format(day, 'd')}
+                    </span>
+                    <NodeIcon size={26} />
+                    {hasActivity && (
+                      <span className="absolute -bottom-2 rounded-full border-2 border-white bg-white px-2 py-0.5 text-[9px] font-black uppercase text-[var(--earth)] shadow">
+                        {activityCount}
+                      </span>
+                    )}
+                    {activity.due.length > 0 && (
+                      <span className="absolute -left-2 top-2 h-4 w-4 rounded-full border-2 border-white bg-violet-500 shadow" />
+                    )}
+                    {(activity.harvested.length > 0 || activityCount >= 3) && (
+                      <span className="absolute -right-3 bottom-3 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-yellow-300 text-yellow-900 shadow-lg">
+                        <Sparkles size={13} />
+                      </span>
+                    )}
+                  </button>
+                  <div className={`mt-3 w-32 -translate-x-4 rounded-2xl border border-white/70 bg-white/80 px-2 py-1.5 text-center shadow-sm backdrop-blur ${isSelected ? 'opacity-100' : 'opacity-0 transition-opacity group-hover:opacity-100'}`}>
+                    <p className="truncate text-[10px] font-black uppercase text-[var(--earth)]">
+                      {hasActivity ? `${activityCount} evento${activityCount === 1 ? '' : 's'}` : 'Dia libre'}
+                    </p>
+                    <div className="mt-1 flex justify-center gap-1">
+                      {activity.planted.length > 0 && <Sprout size={11} className="text-amber-600" />}
+                      {activity.watered.length > 0 && <Droplets size={11} className="text-sky-600" />}
+                      {activity.advanced.length > 0 && <TrendingUp size={11} className="text-emerald-600" />}
+                      {activity.harvested.length > 0 && <CheckCircle2 size={11} className="text-green-600" />}
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  {dayNotes.map(note => (
-                    <button
-                      key={note.id}
-                      onClick={() => onSelectNote(note.id)}
-                      className={`w-full text-left p-1.5 rounded-lg text-[10px] font-bold truncate transition-all border ${
-                        note.growthStage === 'bloom' ? 'bg-green-50 text-green-700 border-green-100 hover:bg-green-100' :
-                        note.growthStage === 'withered' ? 'bg-red-50 text-red-700 border-red-100 hover:bg-red-100' :
-                        'bg-[var(--bg-app)] text-[var(--sage)] border-[var(--border)] hover:bg-[var(--surface-strong)] hover:shadow-sm'
-                      }`}
-                    >
-                      {note.growthStage === 'withered' ? '🥀 ' : note.growthStage === 'bloom' ? '🌸 ' : '🌱 '}
-                      {note.title}
-                    </button>
-                  ))}
+              );
+            })}
+
+              {checkpoints.map((checkpoint, checkpointIndex) => (
+                <div
+                  key={`checkpoint-${checkpoint.index}`}
+                  className="pointer-events-none absolute hidden w-40 rounded-[1.4rem] border border-white/70 bg-white/72 px-3 py-2 shadow-lg backdrop-blur-md md:block"
+                  style={{
+                    left: `${checkpoint.x > 58 ? checkpoint.x - 22 : checkpoint.x + 6}%`,
+                    top: checkpoint.y + 54,
+                    transform: 'translateX(-50%)',
+                  }}
+                >
+                  <p className="text-[9px] font-black uppercase tracking-widest text-[var(--seed-accent)]">Checkpoint</p>
+                  <p className="mt-1 text-sm font-black leading-tight text-[var(--earth)]">
+                    {checkpointLabels[Math.min(checkpointIndex, checkpointLabels.length - 1)]}
+                  </p>
                 </div>
+              ))}
+
+              <div className="pointer-events-none absolute left-8 top-28 hidden rounded-[2rem] border border-white/60 bg-white/60 p-4 shadow-lg backdrop-blur sm:block">
+                <Sprout className="text-amber-600" size={22} />
+                <p className="mt-2 max-w-32 text-xs font-black leading-tight text-[var(--earth)]">Inicio del mes</p>
               </div>
-            );
-          })}
+            </div>
+          </div>
         </div>
+
+        <aside className="min-h-0 overflow-y-auto border-l border-white/60 bg-white/74 p-5 shadow-2xl backdrop-blur-2xl app-scrollbar">
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Dia seleccionado</p>
+          <h4 className="mt-2 font-serif text-3xl font-black capitalize text-[var(--earth)]">
+            {format(selectedDay, "d 'de' MMMM", { locale: es })}
+          </h4>
+          <div className="mt-4 rounded-[1.5rem] border border-[var(--border)] bg-[var(--bg-app)] p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--sage)]">Resumen del día</p>
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--earth)]">{daySummary}</p>
+          </div>
+
+          <div className="mt-5 grid grid-cols-4 gap-2 text-center">
+            {[
+              { label: 'Plant', value: selectedActivity.planted.length, tone: 'text-amber-600' },
+              { label: 'Riego', value: selectedActivity.watered.length, tone: 'text-sky-600' },
+              { label: 'Avance', value: selectedActivity.advanced.length, tone: 'text-emerald-600' },
+              { label: 'Cosecha', value: selectedActivity.harvested.length, tone: 'text-green-600' },
+            ].map(item => (
+              <div key={item.label} className="rounded-2xl bg-[var(--bg-app)] px-2 py-3">
+                <p className={`text-lg font-black ${item.tone}`}>{item.value}</p>
+                <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 space-y-2">
+            {selectedEvents.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-app)] p-5 text-center">
+                <Leaf className="mx-auto text-[var(--sage)] opacity-50" size={26} />
+                <p className="mt-3 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
+                  No hay actividad guardada en este dia. Buen espacio para plantar una idea nueva.
+                </p>
+              </div>
+            ) : selectedEvents.map((event, index) => (
+              <button
+                key={`${event.type}-${event.note.id}-${index}`}
+                type="button"
+                onClick={() => {
+                  onSelectNote(event.note.id);
+                  onExit();
+                }}
+                className={`w-full rounded-2xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${event.tone}`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/70">
+                    <event.icon size={17} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-black uppercase tracking-widest opacity-70">{event.label}</p>
+                    <p className="mt-1 truncate text-sm font-black">{event.note.title}</p>
+                    <p className="mt-1 text-xs font-semibold opacity-70">{STAGE_META[event.note.growthStage].shortLabel}</p>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+          <div className="mt-5 rounded-2xl border border-[var(--border)] bg-white/60 px-4 py-3">
+            <p className="text-xs font-semibold leading-relaxed text-[var(--text-muted)]">
+              El mapa usa las fechas guardadas de tus ideas. Luego podemos guardar un historial exacto de cada paso y riego.
+            </p>
+          </div>
+        </aside>
       </div>
     </motion.div>
   );
@@ -1568,66 +1894,55 @@ function LandingPage({
   const [activeEcosystem, setActiveEcosystem] = useState(ecosystems[0]);
   const ecosystemPreviewNotes = useMemo<SeedNote[]>(() => {
     const now = Date.now();
+    const makePreviewNote = (
+      id: string,
+      title: string,
+      growthStage: SeedNote['growthStage'],
+      ageDays: number,
+      seedType: SeedNote['seedType'],
+      taskCount = 3,
+      completedCount = growthStage === 'bloom' ? taskCount : 1,
+    ): SeedNote => ({
+      id,
+      title,
+      content: growthStage === 'bloom'
+        ? 'Una idea que ya creció con el tiempo.'
+        : 'Una idea tomando forma dentro de tu jardín.',
+      createdAt: now - DAY_MS * ageDays,
+      updatedAt: now - DAY_MS * Math.max(1, Math.floor(ageDays / 3)),
+      tags: [],
+      isGrowth: growthStage !== 'seed',
+      tasks: Array.from({ length: taskCount }, (_, index) => ({
+        id: `${id}-task-${index}`,
+        text: index === 0 ? 'Elegir el siguiente paso' : `Avance ${index + 1}`,
+        completed: index < completedCount,
+      })),
+      growthStage,
+      lastWateredAt: now - DAY_MS,
+      wateringIntervalDays: 7,
+      seedType,
+      harvestedAt: growthStage === 'bloom' ? now - DAY_MS * Math.max(1, Math.floor(ageDays / 5)) : undefined,
+    });
+
     return [
-      {
-        id: 'preview-seed',
-        title: 'Idea nueva',
-        content: 'Una semilla lista para crecer.',
-        createdAt: now - DAY_MS,
-        updatedAt: now - DAY_MS,
-        tags: [],
-        isGrowth: false,
-        tasks: [],
-        growthStage: 'seed',
-        seedType: 'idea',
-      },
-      {
-        id: 'preview-sprout',
-        title: 'Proyecto en marcha',
-        content: 'Algo que ya empezó a tomar forma.',
-        createdAt: now - DAY_MS * 6,
-        updatedAt: now - DAY_MS,
-        tags: [],
-        isGrowth: true,
-        tasks: [
-          { id: 'preview-task-1', text: 'Elegir el siguiente paso', completed: true },
-          { id: 'preview-task-2', text: 'Avanzar 25 minutos', completed: false },
-        ],
-        growthStage: 'sprout',
-        lastWateredAt: now - DAY_MS * 4,
-        seedType: 'project',
-      },
-      {
-        id: 'preview-bloom',
-        title: 'Idea cosechada',
-        content: 'Una idea que ya dejó aprendizaje.',
-        createdAt: now - DAY_MS * 12,
-        updatedAt: now - DAY_MS,
-        tags: [],
-        isGrowth: true,
-        tasks: [
-          { id: 'preview-task-3', text: 'Cerrar ciclo', completed: true },
-        ],
-        growthStage: 'bloom',
-        harvestedAt: now - DAY_MS,
-        seedType: 'goal',
-      },
-      {
-        id: 'preview-water',
-        title: 'Idea por cuidar',
-        content: 'Algo valioso que merece otra mirada.',
-        createdAt: now - DAY_MS * 9,
-        updatedAt: now - DAY_MS * 8,
-        tags: [],
-        isGrowth: true,
-        tasks: [
-          { id: 'preview-task-4', text: 'Revisarla sin presión', completed: false },
-        ],
-        growthStage: 'sprout',
-        lastWateredAt: now - DAY_MS * 8,
-        wateringIntervalDays: 3,
-        seedType: 'learning',
-      },
+      makePreviewNote('preview-canopy-1', 'Curso terminado', 'bloom', 48, 'learning', 4, 4),
+      makePreviewNote('preview-canopy-2', 'Proyecto lanzado', 'bloom', 42, 'project', 5, 5),
+      makePreviewNote('preview-canopy-3', 'Rutina creada', 'bloom', 36, 'goal', 3, 3),
+      makePreviewNote('preview-canopy-4', 'Idea convertida en plan', 'bloom', 31, 'idea', 4, 4),
+      makePreviewNote('preview-canopy-5', 'Propuesta enviada', 'bloom', 27, 'project', 3, 3),
+      makePreviewNote('preview-canopy-6', 'Aprendizaje aplicado', 'bloom', 22, 'learning', 3, 3),
+      makePreviewNote('preview-canopy-7', 'Sistema ordenado', 'bloom', 19, 'goal', 4, 4),
+      makePreviewNote('preview-canopy-8', 'Idea publicada', 'bloom', 17, 'project', 3, 3),
+      makePreviewNote('preview-sprout-1', 'Proyecto en marcha', 'sprout', 14, 'project', 4, 2),
+      makePreviewNote('preview-sprout-2', 'Nueva habilidad', 'sprout', 11, 'learning', 3, 1),
+      makePreviewNote('preview-sprout-3', 'Meta personal', 'sprout', 9, 'goal', 3, 2),
+      makePreviewNote('preview-sprout-4', 'Experimento creativo', 'sprout', 7, 'idea', 2, 1),
+      makePreviewNote('preview-sprout-5', 'Plan de lectura', 'sprout', 6, 'learning', 3, 1),
+      makePreviewNote('preview-sprout-6', 'Mejora pendiente', 'sprout', 5, 'project', 2, 1),
+      makePreviewNote('preview-seed-1', 'Idea nueva', 'seed', 2, 'idea', 0, 0),
+      makePreviewNote('preview-seed-2', 'Algo por explorar', 'seed', 1, 'learning', 0, 0),
+      makePreviewNote('preview-seed-3', 'Pregunta interesante', 'seed', 1, 'idea', 0, 0),
+      makePreviewNote('preview-seed-4', 'Posible proyecto', 'seed', 1, 'project', 0, 0),
     ];
   }, []);
 
@@ -1728,7 +2043,7 @@ function LandingPage({
             <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {[
                 { title: 'Encuentra tu idea rápido', text: 'Tocas una planta y el mundo se acerca a ella, para que no tengas que buscar entre listas interminables.' },
-                { title: 'El jardín también respira', text: 'El clima, la luz y la lluvia hacen que volver a tus ideas se sienta menos como una tarea y más como un ritual.' },
+                { title: 'El jardín también respira', text: 'La luz, el movimiento y los ecosistemas hacen que volver a tus ideas se sienta menos como una tarea y más como un ritual.' },
                 { title: 'Cada planeta tiene personalidad', text: 'Puedes tener un jardín para trabajo, otro para estudio y otro para tus proyectos personales.' },
                 { title: 'Ves cómo va creciendo', text: 'Una idea empieza como semilla, se vuelve brote y puede terminar como árbol cuando la haces avanzar.' },
               ].map((item) => (
@@ -2066,7 +2381,6 @@ export default function App() {
   const [newPlanetName, setNewPlanetName] = useState('');
   const [showPlanetSettings, setShowPlanetSettings] = useState(false);
   const [editingPlanetName, setEditingPlanetName] = useState('');
-  const [shareEmail, setShareEmail] = useState('');
   
   const [theme, setTheme] = useState<Theme>(() => {
     return (localStorage.getItem('seed-theme') as Theme) || 'earth';
@@ -2075,6 +2389,7 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [filterStage, setFilterStage] = useState<SeedNote['growthStage'] | 'all'>('all');
   const [view, setView] = useState<'today' | 'inbox' | 'focus' | 'garden' | 'harvest' | 'calendar' | '3D'>('today');
+  const [showGardenFullscreen, setShowGardenFullscreen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [isAdding, setIsAdding] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
@@ -2285,8 +2600,6 @@ export default function App() {
   useEffect(() => {
     if (!supabase || !session?.user) return;
     const userId = session.user.id;
-    const userEmail = session.user.email?.toLowerCase() || '';
-    const sharedPlanetIds = planets.filter(planet => planet.ownerId && planet.ownerId !== userId).map(planet => planet.id);
     const markRemoteApplyDone = () => window.setTimeout(() => { applyingRemoteSyncRef.current = false; }, 0);
 
     const handleNotePayload = (payload: any) => {
@@ -2339,13 +2652,11 @@ export default function App() {
         description: row.description || '',
         theme: row.theme,
         createdAt: row.created_at_ms || Date.now(),
-        ownerId: row.user_id,
-        shared: row.user_id !== userId,
       };
 
       setPlanets(current => {
         const existing = current.find(planet => planet.id === incoming.id);
-        if (existing) return current.map(planet => planet.id === incoming.id ? { ...planet, ...incoming, members: planet.members } : planet);
+        if (existing) return current.map(planet => planet.id === incoming.id ? { ...planet, ...incoming } : planet);
         return [...current, incoming];
       });
       markRemoteApplyDone();
@@ -2360,15 +2671,6 @@ export default function App() {
       )
       .subscribe();
 
-    const sharedNoteChannels = sharedPlanetIds.map(planetId => supabase
-      .channel(`seed-notes-shared-${userId}-${planetId}`)
-      .on(
-        'postgres_changes' as never,
-        { event: '*', schema: 'public', table: 'seed_notes', filter: `planet_id=eq.${planetId}` } as never,
-        handleNotePayload,
-      )
-      .subscribe());
-
     const planetsChannel = supabase
       .channel(`seed-planets-${userId}`)
       .on(
@@ -2378,62 +2680,11 @@ export default function App() {
       )
       .subscribe();
 
-    const sharedPlanetChannels = sharedPlanetIds.map(planetId => supabase
-      .channel(`seed-planets-shared-${userId}-${planetId}`)
-      .on(
-        'postgres_changes' as never,
-        { event: '*', schema: 'public', table: 'seed_planets', filter: `id=eq.${planetId}` } as never,
-        handlePlanetPayload,
-      )
-      .subscribe());
-
-    const membersChannel = supabase
-      .channel(`seed-planet-members-${userId}`)
-      .on(
-        'postgres_changes' as never,
-        { event: '*', schema: 'public', table: 'seed_planet_members', filter: `member_email=eq.${userEmail}` } as never,
-        (payload: any) => {
-          const row = payload.new || payload.old;
-          const isRelevant = row?.owner_id === userId || row?.member_email?.toLowerCase?.() === userEmail;
-          if (!isRelevant) return;
-
-          applyingRemoteSyncRef.current = true;
-          syncGardenWithSupabase({ planets, notes }, session.user)
-            .then(synced => {
-              setPlanets(synced.planets.length > 0 ? synced.planets : planets);
-              setNotes(synced.notes);
-            })
-            .finally(markRemoteApplyDone);
-        },
-      )
-      .subscribe();
-
-    const ownedMembersChannel = supabase
-      .channel(`seed-planet-members-owned-${userId}`)
-      .on(
-        'postgres_changes' as never,
-        { event: '*', schema: 'public', table: 'seed_planet_members', filter: `owner_id=eq.${userId}` } as never,
-        () => {
-          applyingRemoteSyncRef.current = true;
-          syncGardenWithSupabase({ planets, notes }, session.user)
-            .then(synced => {
-              setPlanets(synced.planets.length > 0 ? synced.planets : planets);
-              setNotes(synced.notes);
-            })
-            .finally(markRemoteApplyDone);
-        },
-      )
-      .subscribe();
-
     return () => {
       supabase.removeChannel(notesChannel);
       supabase.removeChannel(planetsChannel);
-      sharedNoteChannels.forEach(channel => supabase.removeChannel(channel));
-      sharedPlanetChannels.forEach(channel => supabase.removeChannel(channel));
-      supabase.removeChannel(membersChannel);
-      supabase.removeChannel(ownedMembersChannel);
     };
-  }, [notes, planets, session?.user?.id, session?.user?.email]);
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (!session?.user || !notesLoaded || !remoteSyncReadyRef.current || applyingRemoteSyncRef.current) return;
@@ -2925,44 +3176,6 @@ export default function App() {
     switchPlanet(nextPlanet.id);
   };
 
-  const shareActivePlanet = async () => {
-    if (!session?.user) {
-      setSyncStatus('Inicia sesión para compartir un planeta.');
-      return;
-    }
-    try {
-      await invitePlanetMember(activePlanet, shareEmail, session.user, 'editor');
-      const normalizedEmail = shareEmail.trim().toLowerCase();
-      setPlanets(current => current.map(planet => {
-        if (planet.id !== activePlanet.id) return planet;
-        const members = planet.members || [];
-        const nextMembers = members.some(member => member.email === normalizedEmail)
-          ? members.map(member => member.email === normalizedEmail ? { ...member, role: 'editor' as const } : member)
-          : [...members, { planetId: planet.id, email: normalizedEmail, role: 'editor' as const, invitedAt: Date.now() }];
-        return { ...planet, shared: true, ownerId: session.user.id, members: nextMembers };
-      }));
-      setShareEmail('');
-      setSyncStatus(`Planeta compartido con ${normalizedEmail}.`);
-    } catch (error) {
-      setSyncStatus(error instanceof Error ? error.message : 'No se pudo compartir el planeta.');
-    }
-  };
-
-  const unshareActivePlanet = async (email: string) => {
-    if (!session?.user) return;
-    try {
-      await removePlanetMember(activePlanet.id, email, session.user);
-      setPlanets(current => current.map(planet => {
-        if (planet.id !== activePlanet.id) return planet;
-        const members = (planet.members || []).filter(member => member.email !== email);
-        return { ...planet, shared: members.length > 0, members };
-      }));
-      setSyncStatus(`Se quitó el acceso de ${email}.`);
-    } catch (error) {
-      setSyncStatus(error instanceof Error ? error.message : 'No se pudo quitar el miembro.');
-    }
-  };
-
   const signUpWithEmail = async () => {
     if (!supabase) {
       setAuthStatus('Supabase no está configurado.');
@@ -3165,11 +3378,6 @@ export default function App() {
           {showPlanetSettings && (
             <div className="rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] p-3">
               <p className="text-[10px] font-black uppercase tracking-widest text-[var(--seed-accent)] mb-2">Planeta activo</p>
-              {activePlanet.shared && (
-                <span className="mb-2 inline-flex rounded-full bg-green-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-green-700">
-                  Compartido
-                </span>
-              )}
               <input
                 autoFocus
                 value={editingPlanetName}
@@ -3197,54 +3405,6 @@ export default function App() {
                   <Trash2 size={14} />
                 </button>
               </div>
-              <div className="mt-3 rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] p-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Compartir planeta</p>
-                <p className="mt-1 text-[11px] font-semibold leading-relaxed text-[var(--text-muted)]">
-                  Invita a alguien por email para cultivar este planeta en equipo.
-                </p>
-                <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-                  <input
-                    value={shareEmail}
-                    onChange={(event) => setShareEmail(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') shareActivePlanet();
-                    }}
-                    type="email"
-                    placeholder="persona@email.com"
-                    className="min-w-0 bg-[var(--bg-app)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                  />
-                  <button
-                    onClick={shareActivePlanet}
-                    disabled={!shareEmail.trim() || !session?.user}
-                    className="rounded-xl bg-[var(--sage)] disabled:opacity-40 px-3 py-2 text-xs font-black text-white"
-                  >
-                    Invitar
-                  </button>
-                </div>
-                {!session?.user && (
-                  <p className="mt-2 text-[11px] font-semibold text-[var(--text-muted)]">Inicia sesión para compartir planetas.</p>
-                )}
-                {(activePlanet.members || []).length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {(activePlanet.members || []).map(member => (
-                      <div key={member.email} className="flex items-center justify-between gap-2 rounded-xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-black text-[var(--earth)]">{member.email}</p>
-                          <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{member.role}</p>
-                        </div>
-                        {(!activePlanet.ownerId || activePlanet.ownerId === session?.user?.id) && (
-                          <button
-                            onClick={() => unshareActivePlanet(member.email)}
-                            className="rounded-lg bg-red-50 px-2 py-1 text-[10px] font-black text-red-500"
-                          >
-                            Quitar
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           )}
 
@@ -3265,10 +3425,7 @@ export default function App() {
                     {planet.name.slice(0, 1).toUpperCase()}
                   </span>
                   <span className="block min-w-0 mt-3">
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      <span className="block truncate text-sm font-black">{planet.name}</span>
-                      {planet.shared && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" title="Planeta compartido" />}
-                    </span>
+                    <span className="block truncate text-sm font-black">{planet.name}</span>
                     <span className="block text-[10px] font-bold text-[var(--text-muted)]">{count} ideas</span>
                   </span>
                 </button>
@@ -3357,22 +3514,23 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-        <section className={`flex-1 p-4 sm:p-6 md:p-10 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${selectedNoteId ? 'md:mr-[400px]' : ''}`}>
-          <div className="max-w-4xl mx-auto">
+        <section className={`flex-1 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${view === 'calendar' ? 'p-3 sm:p-5 md:p-6' : 'p-4 sm:p-6 md:p-10'} ${selectedNoteId ? 'md:mr-[400px]' : ''}`}>
+          <div className={`${view === 'calendar' ? 'mx-auto max-w-[100rem]' : 'max-w-4xl mx-auto'}`}>
             <header className="mb-10 flex flex-col md:flex-row justify-between items-start gap-5 md:gap-6">
               <div className="w-full">
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex items-end justify-between gap-4"
                 >
                   <div>
-                    <h2 className="text-3xl md:text-4xl font-serif font-semibold text-[var(--earth)] leading-none">{activePlanet.name}</h2>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h2 className="text-3xl md:text-4xl font-serif font-semibold text-[var(--earth)] leading-none">{activePlanet.name}</h2>
+                      <span className="inline-flex items-center gap-2 rounded-full bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-1.5 shadow-sm">
+                        <TrendingUp size={14} className="text-[var(--sage)]" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">{planetNotes.length} ideas</span>
+                      </span>
+                    </div>
                     <p className="text-xs text-[var(--text-muted)] mt-2 italic">{activePlanet.description || 'Cada nota es el comienzo de algo grande.'}</p>
-                  </div>
-                  <div className="hidden sm:flex items-center gap-2 rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-2 shadow-sm">
-                    <TrendingUp size={16} className="text-[var(--sage)]" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">{planetNotes.length} ideas</span>
                   </div>
                 </motion.div>
                 <div className="grid grid-cols-3 gap-3 mt-6">
@@ -3416,7 +3574,7 @@ export default function App() {
                   </motion.div>
                 )}
               </div>
-              <div className="relative w-full md:w-64 md:mt-[5.75rem]">
+              <div className="relative w-full md:w-64 md:mt-[6.45rem]">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" size={16} />
                 <input
                   type="text"
@@ -3751,6 +3909,7 @@ export default function App() {
                   setCurrentMonth={setCurrentMonth} 
                   notes={planetNotes} 
                   onSelectNote={setSelectedNoteId} 
+                  onExit={() => setView('today')}
                 />
               ) : (
                 <motion.div
@@ -3758,7 +3917,17 @@ export default function App() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
+                  className="relative"
                 >
+                  <button
+                    type="button"
+                    onClick={() => setShowGardenFullscreen(true)}
+                    className="absolute left-1/2 top-5 z-20 grid h-11 w-11 -translate-x-1/2 place-items-center rounded-2xl border border-white/20 bg-black/25 text-white shadow-2xl backdrop-blur-xl transition-colors hover:bg-black/35"
+                    aria-label="Ver planeta en pantalla completa"
+                    title="Pantalla completa"
+                  >
+                    <Maximize2 size={18} />
+                  </button>
                   <Suspense fallback={
                     <div className="h-[75vh] rounded-[3rem] border border-[var(--border)] bg-[var(--surface-soft)] flex items-center justify-center text-center p-8">
                       <div>
@@ -3775,6 +3944,57 @@ export default function App() {
                       onSelectNote={setSelectedNoteId} 
                       onReviewNote={openWatering}
                       onFocusNote={(id) => {
+                        setFocusNoteId(id);
+                        setView('focus');
+                      }}
+                      recentlyWateredId={recentlyWateredId}
+                    />
+                  </Suspense>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {showGardenFullscreen && (
+                <motion.div
+                  key="garden-fullscreen"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-40 bg-black"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setShowGardenFullscreen(false)}
+                    className="absolute right-5 top-5 z-50 grid h-12 w-12 place-items-center rounded-2xl border border-white/20 bg-black/35 text-white shadow-2xl backdrop-blur-xl transition-colors hover:bg-black/50"
+                    aria-label="Cerrar pantalla completa"
+                    title="Cerrar"
+                  >
+                    <X size={20} />
+                  </button>
+                  <Suspense fallback={
+                    <div className="grid h-screen place-items-center bg-[var(--earth)] text-center text-white">
+                      <div>
+                        <Box className="mx-auto mb-4 animate-pulse text-white/70" size={44} />
+                        <p className="font-serif text-3xl font-black">Cargando planeta</p>
+                      </div>
+                    </div>
+                  }>
+                    <Garden3D
+                      notes={filteredNotes}
+                      theme={activePlanet.theme || theme}
+                      planetName={activePlanet.name}
+                      fullscreen
+                      onSelectNote={(id) => {
+                        setSelectedNoteId(id);
+                        setShowGardenFullscreen(false);
+                      }}
+                      onReviewNote={(id) => {
+                        setShowGardenFullscreen(false);
+                        openWatering(id);
+                      }}
+                      onFocusNote={(id) => {
+                        setShowGardenFullscreen(false);
                         setFocusNoteId(id);
                         setView('focus');
                       }}
