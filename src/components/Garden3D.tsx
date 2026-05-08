@@ -1,7 +1,7 @@
 import { useRef, useMemo, useState, Suspense, useEffect } from 'react';
 import type { MutableRefObject } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Environment, Line, Sparkles, Stars } from '@react-three/drei';
+import { OrbitControls, Environment, Html, Line, Sparkles, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { SeedNote, Theme } from '../types';
 import { daysSince, wateringDue } from '../seedLogic';
@@ -1047,7 +1047,7 @@ function DaySun({ raining }: { raining: boolean }) {
         <meshStandardMaterial
           color={raining ? '#ffe1a6' : '#ffd166'}
           emissive={raining ? '#ffc86b' : '#ffb703'}
-          emissiveIntensity={raining ? 0.55 : 1.2}
+          emissiveIntensity={raining ? 0.38 : 0.72}
           roughness={0.45}
         />
       </mesh>
@@ -1056,12 +1056,12 @@ function DaySun({ raining }: { raining: boolean }) {
         <meshStandardMaterial
           color="#fff3b0"
           transparent
-          opacity={raining ? 0.08 : 0.16}
+          opacity={raining ? 0.05 : 0.09}
           side={THREE.BackSide}
           depthWrite={false}
         />
       </mesh>
-      <pointLight color="#ffdca3" intensity={raining ? 0.85 : 1.8} distance={120} />
+      <pointLight color="#ffdca3" intensity={raining ? 0.55 : 1.15} distance={120} />
     </group>
   );
 }
@@ -1088,6 +1088,55 @@ function RainClouds({ palette }: { palette: GardenPalette }) {
           <sphereGeometry args={[1, 24, 16]} />
           <meshStandardMaterial color={palette.skyNight} transparent opacity={0.28} roughness={0.9} depthWrite={false} />
         </mesh>
+      ))}
+    </group>
+  );
+}
+
+function AmbientClouds({ palette, compact }: { palette: GardenPalette; compact: boolean }) {
+  const cloudRef = useRef<THREE.Group>(null);
+  const clouds = useMemo(() => {
+    const base = [
+      { position: [-30, 23, -34] as [number, number, number], scale: 1.1, speed: 0.07 },
+      { position: [28, 18, -38] as [number, number, number], scale: 0.82, speed: 0.05 },
+      { position: [-18, 30, -46] as [number, number, number], scale: 0.7, speed: 0.045 },
+      { position: [8, 27, -50] as [number, number, number], scale: 0.95, speed: 0.058 },
+      { position: [38, 31, -30] as [number, number, number], scale: 0.62, speed: 0.04 },
+    ];
+    return compact ? base.slice(0, 3) : base;
+  }, [compact]);
+
+  useFrame((state) => {
+    if (!cloudRef.current) return;
+    const t = state.clock.elapsedTime;
+    cloudRef.current.children.forEach((child, index) => {
+      const cloud = clouds[index];
+      child.position.x = cloud.position[0] + Math.sin(t * cloud.speed + index) * 1.2;
+      child.position.y = cloud.position[1] + Math.cos(t * cloud.speed * 1.4 + index) * 0.35;
+    });
+  });
+
+  return (
+    <group ref={cloudRef}>
+      {clouds.map((cloud, index) => (
+        <group key={index} position={cloud.position} scale={[cloud.scale, cloud.scale, cloud.scale]}>
+          {[
+            { position: [-2.1, 0, 0] as [number, number, number], scale: [2.8, 0.78, 1] as [number, number, number] },
+            { position: [0, 0.35, 0] as [number, number, number], scale: [3.4, 1.05, 1.15] as [number, number, number] },
+            { position: [2.2, 0.05, 0] as [number, number, number], scale: [2.6, 0.72, 0.95] as [number, number, number] },
+          ].map((part, partIndex) => (
+            <mesh key={partIndex} position={part.position} scale={part.scale}>
+              <sphereGeometry args={[1, 16, 10]} />
+              <meshStandardMaterial
+                color={palette.sparkles}
+                transparent
+                opacity={0.18}
+                roughness={1}
+                depthWrite={false}
+              />
+            </mesh>
+          ))}
+        </group>
       ))}
     </group>
   );
@@ -1142,6 +1191,7 @@ function Plant3D({
   nourished,
   routeActive,
   dimmed,
+  showLabel,
   onClick,
 }: {
   note: SeedNote;
@@ -1152,6 +1202,7 @@ function Plant3D({
   nourished: boolean;
   routeActive: boolean;
   dimmed: boolean;
+  showLabel: boolean;
   onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
@@ -1268,8 +1319,36 @@ function Plant3D({
         <IdeaPotModel palette={palette} stage={growthStage} selected={selected} needsWater={needsWater} />
         {renderModel()}
       </group>
+      {showLabel && (
+        <Html position={[0, growthStage === 'bloom' ? 3.45 : growthStage === 'sprout' ? 2.45 : 1.75, 0]} center distanceFactor={compactLabelDistance(growthStage)}>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onClick();
+            }}
+            className={`max-w-32 rounded-full border px-2.5 py-1 text-[10px] font-black leading-tight shadow-xl backdrop-blur-xl transition ${
+              selected
+                ? 'border-white bg-white text-slate-950'
+                : routeActive
+                  ? 'border-yellow-200/80 bg-yellow-100/90 text-yellow-950'
+                  : needsWater
+                    ? 'border-sky-200/80 bg-sky-100/90 text-sky-950'
+                    : 'border-white/25 bg-black/35 text-white'
+            }`}
+          >
+            <span className="block truncate">{note.title}</span>
+          </button>
+        </Html>
+      )}
     </group>
   );
+}
+
+function compactLabelDistance(stage: SeedNote['growthStage']) {
+  if (stage === 'bloom') return 13;
+  if (stage === 'sprout') return 15;
+  return 17;
 }
 
 function ConnectionLine({ start, end, color }: { start: [number, number, number]; end: [number, number, number]; color: string }) {
@@ -1329,7 +1408,7 @@ function Atmosphere({ isDay, palette }: { isDay: boolean; palette: GardenPalette
       atmosphereRef.current.scale.set(scale, scale, scale);
       
       if (atmosphereRef.current.material instanceof THREE.MeshStandardMaterial) {
-        atmosphereRef.current.material.opacity = (isDay ? 0.3 : 0.4) + Math.sin(t * 0.8) * 0.1;
+        atmosphereRef.current.material.opacity = (isDay ? 0.18 : 0.28) + Math.sin(t * 0.8) * 0.055;
       }
     }
   });
@@ -1340,7 +1419,7 @@ function Atmosphere({ isDay, palette }: { isDay: boolean; palette: GardenPalette
       <meshStandardMaterial 
         color={palette.atmosphere} 
         transparent 
-        opacity={0.26} 
+        opacity={0.18} 
         side={THREE.BackSide} 
       />
     </mesh>
@@ -1356,6 +1435,7 @@ function PlanetSystem({
   routeIds,
   recentlyWateredId,
   compact,
+  showLabels,
   controlsRef,
   onSelectNote,
 }: {
@@ -1367,6 +1447,7 @@ function PlanetSystem({
   routeIds: string[];
   recentlyWateredId?: string | null;
   compact: boolean;
+  showLabels: boolean;
   controlsRef: MutableRefObject<any>;
   onSelectNote: (id: string) => void;
 }) {
@@ -1428,17 +1509,26 @@ function PlanetSystem({
       ))}
       
       {plants.map(({ note, position }) => (
-        <Plant3D 
-          key={note.id} 
-          note={note} 
-          position={position} 
+        <Plant3D
+          key={note.id}
+          note={note}
+          position={position}
           palette={palette}
           selected={selectedId === note.id}
           needsWater={wateringDue(note) && note.growthStage !== 'bloom' && !note.paused}
           nourished={recentlyWateredId === note.id}
           routeActive={routeIds.includes(note.id)}
           dimmed={routeIds.length > 0 && !routeIds.includes(note.id)}
-          onClick={() => onSelectNote(note.id)} 
+          showLabel={
+            showLabels && (
+              plants.length <= 18
+              || selectedId === note.id
+              || routeIds.includes(note.id)
+              || wateringDue(note)
+              || note.growthStage === 'bloom'
+            )
+          }
+          onClick={() => onSelectNote(note.id)}
         />
       ))}
     </group>
@@ -1459,6 +1549,30 @@ function formatDue(date?: number) {
   return new Date(date).toLocaleDateString('es', { day: 'numeric', month: 'short' });
 }
 
+function formatWatered(note: SeedNote) {
+  const source = note.lastWateredAt || note.updatedAt || note.createdAt;
+  const days = daysSince(source);
+  if (days <= 0) return 'Hoy';
+  if (days === 1) return 'Ayer';
+  return `Hace ${days} dias`;
+}
+
+function stageLabel(note: SeedNote) {
+  if (note.paused) return 'Pausada';
+  if (wateringDue(note) && note.growthStage !== 'bloom') return 'Pide riego';
+  if (note.growthStage === 'bloom') return 'Lista para cosechar';
+  if (note.growthStage === 'sprout') return 'En crecimiento';
+  if (note.growthStage === 'withered') return 'Marchita';
+  return 'Semilla nueva';
+}
+
+function seedTypeLabel(note: SeedNote) {
+  if (note.seedType === 'project') return 'Proyecto';
+  if (note.seedType === 'goal') return 'Meta';
+  if (note.seedType === 'learning') return 'Aprendizaje';
+  return 'Idea';
+}
+
 export default function Garden3D({
   notes,
   theme,
@@ -1468,6 +1582,7 @@ export default function Garden3D({
   onFocusNote,
   recentlyWateredId,
   variant = 'app',
+  fullscreen = false,
 }: {
   notes: SeedNote[];
   theme: Theme;
@@ -1477,12 +1592,14 @@ export default function Garden3D({
   onFocusNote?: (id: string) => void;
   recentlyWateredId?: string | null;
   variant?: 'app' | 'preview';
+  fullscreen?: boolean;
 }) {
   const palette = GARDEN_PALETTES[theme];
   const isPreview = variant === 'preview';
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<GardenFilter>('all');
   const [routeIds, setRouteIds] = useState<string[]>([]);
+  const [showLabels, setShowLabels] = useState(true);
   const [compact3D, setCompact3D] = useState(() => typeof window !== 'undefined' && window.innerWidth < 760);
   const controlsRef = useRef<any>(null);
 
@@ -1505,7 +1622,7 @@ export default function Garden3D({
     harvest: notes.filter(note => note.growthStage === 'bloom').length,
   }), [notes]);
 
-  const isRaining = stats.water >= 3 || (stats.progress >= 4 && stats.water / stats.progress >= 0.45);
+  const isRaining = !isPreview && (stats.water >= 3 || (stats.progress >= 4 && stats.water / stats.progress >= 0.45));
   const skyColor = isDay ? (isRaining ? '#6fa6c9' : palette.skyDay) : palette.skyNight;
   const weatherCopy = isRaining
     ? 'Lluvia suave: revisa solo lo esencial'
@@ -1551,15 +1668,19 @@ export default function Garden3D({
   }, [notes, selectedId]);
 
   const plants = useMemo(() => {
-    return visibleNotes.map((note) => {
-      // Spherical distribution
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+    const count = Math.max(visibleNotes.length, 1);
+
+    return visibleNotes.map((note, index) => {
       const seed = note.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const phi = Math.acos(-1 + (2 * (seed % 100)) / 100);
-      const theta = Math.sqrt(100 * Math.PI) * phi;
-      
-      const x = PLANET_RADIUS * Math.sin(phi) * Math.cos(theta);
-      const y = PLANET_RADIUS * Math.sin(phi) * Math.sin(theta);
-      const z = PLANET_RADIUS * Math.cos(phi);
+      const jitter = ((seed % 37) / 37 - 0.5) * 0.16;
+      const yUnit = THREE.MathUtils.clamp(1 - (2 * (index + 0.5)) / count + jitter, -0.96, 0.96);
+      const radiusAtY = Math.sqrt(1 - yUnit * yUnit);
+      const theta = index * goldenAngle + ((seed % 997) / 997) * Math.PI * 2;
+
+      const x = PLANET_RADIUS * radiusAtY * Math.cos(theta);
+      const y = PLANET_RADIUS * yUnit;
+      const z = PLANET_RADIUS * radiusAtY * Math.sin(theta);
       
       return { note, position: [x, y, z] as [number, number, number] };
     });
@@ -1578,16 +1699,23 @@ export default function Garden3D({
   }, [plants]);
 
   return (
-    <div className={`w-full overflow-hidden shadow-2xl relative border-white/10 backdrop-blur-md transition-colors duration-1000 ${isPreview ? 'h-[31rem] min-h-[31rem] rounded-[2.5rem] border-[8px]' : 'h-[68vh] min-h-[520px] sm:h-[75vh] rounded-[2rem] sm:rounded-[3rem] border-[8px] sm:border-[12px]'}`}>
+    <div className={`w-full overflow-hidden shadow-2xl relative border-white/10 backdrop-blur-md transition-colors duration-1000 ${
+      fullscreen
+        ? 'h-screen min-h-screen rounded-none border-0'
+        : isPreview
+          ? 'h-[31rem] min-h-[31rem] rounded-[2.5rem] border-[8px]'
+          : 'h-[68vh] min-h-[520px] sm:h-[75vh] rounded-[2rem] sm:rounded-[3rem] border-[8px] sm:border-[12px]'
+    }`}>
       <Canvas shadows camera={{ position: [40, 30, 40], fov: 45 }}>
         <color attach="background" args={[skyColor]} />
         
-        <ambientLight intensity={isDay ? (isRaining ? 1 : 1.28) : 0.8} />
-        <pointLight position={[50, 50, 50]} intensity={isRaining ? 1.25 : 2} castShadow />
-        <directionalLight position={[-50, 50, -50]} intensity={isRaining ? 0.95 : 1.5} color={isDay ? "#fff1c7" : "#48cae4"} />
-        <hemisphereLight intensity={1} color={isRaining ? "#cfefff" : "#ffffff"} groundColor="#000000" />
+        <ambientLight intensity={isDay ? (isRaining ? 0.78 : 0.92) : 0.62} />
+        <pointLight position={[50, 50, 50]} intensity={isRaining ? 0.92 : 1.35} castShadow />
+        <directionalLight position={[-50, 50, -50]} intensity={isRaining ? 0.72 : 1.05} color={isDay ? "#fff1c7" : "#48cae4"} />
+        <hemisphereLight intensity={0.78} color={isRaining ? "#cfefff" : "#ffffff"} groundColor="#11170f" />
         
         {isDay && <DaySun raining={isRaining} />}
+        {isDay && !isRaining && <AmbientClouds palette={palette} compact={compact3D} />}
         {!isDay && (
           <>
             <Stars radius={150} depth={50} count={compact3D ? 1800 : 5000} factor={4} saturation={0} fade speed={1} />
@@ -1610,6 +1738,7 @@ export default function Garden3D({
           routeIds={routeIds}
           recentlyWateredId={recentlyWateredId}
           compact={compact3D}
+          showLabels={showLabels}
           controlsRef={controlsRef}
           onSelectNote={(id) => setSelectedId(id)}
         />
@@ -1644,25 +1773,37 @@ export default function Garden3D({
 
       <div className={`absolute grid grid-cols-3 gap-2 text-white ${isPreview ? 'right-6 top-6' : 'top-5 right-5 sm:top-10 sm:right-10'}`}>
         {[
-          { label: 'Riego', value: stats.water },
-          { label: 'Activas', value: stats.progress },
-          { label: 'Cosechas', value: stats.harvest },
+          { id: 'water', label: 'Riego', value: stats.water },
+          { id: 'progress', label: 'Activas', value: stats.progress },
+          { id: 'harvest', label: 'Cosechas', value: stats.harvest },
         ].map(item => (
-          <div key={item.label} className="rounded-2xl border border-white/15 bg-black/20 backdrop-blur-xl px-3 py-2 text-center shadow-xl">
+          <button
+            key={item.label}
+            type="button"
+            disabled={isPreview || item.value === 0}
+            onClick={() => {
+              setFilter(filter === item.id ? 'all' : item.id as GardenFilter);
+              setRouteIds([]);
+              setSelectedId(null);
+            }}
+            className={`rounded-2xl border border-white/15 bg-black/20 px-3 py-2 text-center shadow-xl backdrop-blur-xl transition ${
+              !isPreview && filter === item.id ? 'ring-2 ring-white/70 bg-white/18' : ''
+            } ${!isPreview && item.value > 0 ? 'hover:bg-white/12' : 'cursor-default'}`}
+          >
             <p className="text-lg font-black leading-none">{item.value}</p>
             <p className="mt-1 text-[8px] font-black uppercase tracking-[0.22em] text-white/55">{item.label}</p>
-          </div>
+          </button>
         ))}
       </div>
 
       {!isPreview && (
-      <div className="absolute left-4 right-4 bottom-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-[1.75rem] border border-white/20 bg-black/25 p-2 shadow-2xl backdrop-blur-2xl text-white">
-        <div className="grid grid-cols-4 gap-1">
+      <div className="absolute left-3 right-3 bottom-3 sm:left-1/2 sm:right-auto sm:w-[min(94vw,46rem)] sm:-translate-x-1/2 grid grid-cols-1 gap-2 rounded-[1.35rem] border border-white/20 bg-black/25 p-2 shadow-2xl backdrop-blur-2xl text-white sm:grid-cols-[1fr_auto]">
+        <div className="grid min-w-0 grid-cols-4 gap-1">
           {[
             { id: 'all', label: 'Todo' },
             { id: 'water', label: 'Riego' },
             { id: 'progress', label: 'Activas' },
-            { id: 'harvest', label: 'Cosechas' },
+            { id: 'harvest', label: 'Cosecha' },
           ].map(item => (
             <button
               key={item.id}
@@ -1671,32 +1812,42 @@ export default function Garden3D({
                 setFilter(item.id as GardenFilter);
                 setRouteIds([]);
               }}
-              className={`rounded-2xl px-3 py-3 text-[10px] font-black uppercase tracking-[0.18em] transition ${filter === item.id ? 'bg-white text-slate-950' : 'text-white/65 hover:bg-white/10 hover:text-white'}`}
+              className={`h-11 min-w-0 rounded-2xl px-2 text-[10px] font-black uppercase leading-none transition ${filter === item.id ? 'bg-white text-slate-950' : 'text-white/65 hover:bg-white/10 hover:text-white'}`}
             >
-              {item.label}
+              <span className="block truncate">{item.label}</span>
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setFilter('all');
-            setRouteIds(routeIds.length ? [] : routeCandidates.map(note => note.id));
-          }}
-          disabled={routeCandidates.length === 0}
-          className={`rounded-2xl px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] transition ${routeIds.length ? 'bg-[var(--accent)] text-white' : 'bg-white/10 text-white hover:bg-white/18'} disabled:opacity-40 disabled:cursor-not-allowed`}
-        >
-          {isRaining ? 'Ruta suave' : 'Ruta de hoy'}
-        </button>
+        <div className="grid grid-cols-2 gap-1 sm:w-56">
+          <button
+            type="button"
+            onClick={() => {
+              setFilter('all');
+              setRouteIds(routeIds.length ? [] : routeCandidates.map(note => note.id));
+              setSelectedId(routeIds.length ? null : routeCandidates[0]?.id || null);
+            }}
+            disabled={routeCandidates.length === 0}
+            className={`h-11 min-w-0 rounded-2xl px-2 text-[10px] font-black uppercase leading-none transition ${routeIds.length ? 'bg-[var(--accent)] text-white' : 'bg-white/10 text-white hover:bg-white/18'} disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            <span className="block truncate">{isRaining ? 'Ruta suave' : 'Ruta hoy'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowLabels(current => !current)}
+            className={`h-11 min-w-0 rounded-2xl px-2 text-[10px] font-black uppercase leading-none transition ${showLabels ? 'bg-white text-slate-950' : 'bg-white/10 text-white/65 hover:bg-white/18 hover:text-white'}`}
+          >
+            <span className="block truncate">Nombres</span>
+          </button>
+        </div>
       </div>
       )}
 
       {selectedNote && !isPreview && (
-        <div className="absolute left-4 right-4 bottom-28 sm:left-auto sm:right-8 sm:top-28 sm:bottom-auto sm:w-80 rounded-[2rem] border border-white/20 bg-white/92 p-5 shadow-2xl backdrop-blur-2xl text-[var(--earth)]">
+        <div className="absolute left-4 right-4 bottom-32 sm:left-auto sm:right-8 sm:top-28 sm:bottom-auto sm:w-[22rem] sm:max-w-[22rem] rounded-[2rem] border border-white/20 bg-white/92 p-5 shadow-2xl backdrop-blur-2xl text-[var(--earth)]">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[var(--text-muted)]">
-                {wateringDue(selectedNote) ? 'Necesita revisión' : selectedNote.growthStage === 'bloom' ? 'Cosechada' : 'En crecimiento'}
+                {seedTypeLabel(selectedNote)} · {stageLabel(selectedNote)}
               </p>
               <h5 className="mt-2 text-2xl font-serif font-bold leading-tight">{selectedNote.title}</h5>
             </div>
@@ -1720,8 +1871,19 @@ export default function Garden3D({
               <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Pasos</p>
             </div>
             <div className="rounded-2xl bg-[var(--paper-soft)] px-2 py-3">
-              <p className="text-sm font-black leading-5">{formatDue(selectedNote.dueDate)}</p>
+              <p className="text-sm font-black leading-5">{formatWatered(selectedNote)}</p>
+              <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Riego</p>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+            <div className="rounded-2xl bg-white/70 px-3 py-2">
+              <p className="text-xs font-black">{formatDue(selectedNote.dueDate)}</p>
               <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Fecha</p>
+            </div>
+            <div className="rounded-2xl bg-white/70 px-3 py-2">
+              <p className="text-xs font-black">{selectedNote.connections?.length || 0} enlaces</p>
+              <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Mapa</p>
             </div>
           </div>
 

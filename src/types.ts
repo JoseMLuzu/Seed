@@ -42,20 +42,9 @@ export interface Planet {
   theme: Theme;
   createdAt: number;
   updatedAt?: number;
-  ownerId?: string;
-  shared?: boolean;
-  memberRole?: 'owner' | 'editor' | 'viewer';
-  members?: PlanetMember[];
 }
 
 export interface SyncSnapshot {
   planets: Planet[];
   notes: SeedNote[];
-}
-
-export interface PlanetMember {
-  planetId: string;
-  email: string;
-  role: 'owner' | 'editor' | 'viewer';
-  invitedAt?: number;
 }
