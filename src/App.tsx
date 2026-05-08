@@ -247,6 +247,13 @@ function formatAuthError(message: string) {
   return message;
 }
 
+function passwordPolicyError(password: string) {
+  if (password.length < 6) return 'La contraseña debe tener al menos 6 caracteres.';
+  if (!/[A-ZÁÉÍÓÚÑ]/.test(password)) return 'La contraseña debe incluir al menos una mayúscula.';
+  if (!/\d/.test(password)) return 'La contraseña debe incluir al menos un número.';
+  return '';
+}
+
 function CalendarView({ 
   currentMonth, 
   setCurrentMonth, 
@@ -2159,6 +2166,8 @@ function AuthEntryPage({
   setAuthEmail,
   authPassword,
   setAuthPassword,
+  authConfirmPassword,
+  setAuthConfirmPassword,
   authDisabledReason,
   authStatus,
   onSignIn,
@@ -2174,6 +2183,8 @@ function AuthEntryPage({
   setAuthEmail: (value: string) => void;
   authPassword: string;
   setAuthPassword: (value: string) => void;
+  authConfirmPassword: string;
+  setAuthConfirmPassword: (value: string) => void;
   authDisabledReason: string;
   authStatus: string;
   onSignIn: () => void;
@@ -2181,7 +2192,12 @@ function AuthEntryPage({
 }) {
   const isRegister = mode === 'register';
   const nameMissing = isRegister && !accountName.trim();
-  const disabledReason = nameMissing ? 'Escribe tu nombre para crear tu jardín.' : authDisabledReason;
+  const registerPasswordIssue = isRegister ? passwordPolicyError(authPassword) : '';
+  const confirmPasswordMissing = isRegister && !authConfirmPassword ? 'Confirma tu contraseña para crear tu jardín.' : '';
+  const confirmPasswordIssue = isRegister && authConfirmPassword && authPassword !== authConfirmPassword ? 'Las contraseñas no coinciden.' : '';
+  const disabledReason =
+    nameMissing ? 'Escribe tu nombre para crear tu jardín.' :
+    authDisabledReason || registerPasswordIssue || confirmPasswordMissing || confirmPasswordIssue;
   const submit = () => {
     if (disabledReason) return;
     if (isRegister) onSignUp();
@@ -2326,10 +2342,33 @@ function AuthEntryPage({
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') submit();
                   }}
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="Mayúscula, número y mínimo 6 caracteres"
                   className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
                 />
               </label>
+              {isRegister && (
+                <>
+                  <label className="block">
+                    <span className="text-xs font-black uppercase text-[#536f45]">Confirmar contraseña</span>
+                    <input
+                      type="password"
+                      value={authConfirmPassword}
+                      onChange={(event) => setAuthConfirmPassword(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') submit();
+                      }}
+                      placeholder="Repite tu contraseña"
+                      className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
+                    />
+                  </label>
+                  <div className="rounded-2xl bg-[#f8faf7] px-4 py-3">
+                    <p className="text-[10px] font-black uppercase text-[#7a8f63]">Contraseña segura</p>
+                    <p className="mt-1 text-xs font-semibold leading-relaxed text-[#667466]">
+                      Usa mínimo 6 caracteres, una mayúscula y un número.
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
             <button onClick={submit} disabled={Boolean(disabledReason)} className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1f2d23] px-5 py-4 font-black text-white shadow-[0_18px_50px_rgba(31,45,35,0.22)] transition-colors hover:bg-[#324434] disabled:cursor-not-allowed disabled:opacity-45">
@@ -2405,6 +2444,7 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [authConfirmPassword, setAuthConfirmPassword] = useState('');
   const [authStatus, setAuthStatus] = useState('');
   const [syncStatus, setSyncStatus] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -3181,19 +3221,37 @@ export default function App() {
       setAuthStatus('Supabase no está configurado.');
       return;
     }
+    const passwordIssue = passwordPolicyError(authPassword);
+    if (passwordIssue) {
+      setAuthStatus(passwordIssue);
+      return;
+    }
+    if (!authConfirmPassword) {
+      setAuthStatus('Confirma tu contraseña para crear tu jardín.');
+      return;
+    }
+    if (authPassword !== authConfirmPassword) {
+      setAuthStatus('Las contraseñas no coinciden.');
+      return;
+    }
 
     setAuthStatus('Creando cuenta...');
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: authEmail.trim(),
       password: authPassword,
       options: {
+        emailRedirectTo: window.location.origin,
         data: {
           name: account.name,
           role: account.role,
         },
       },
     });
-    setAuthStatus(error ? formatAuthError(error.message) : 'Cuenta creada. Revisa tu correo si Supabase pide confirmación.');
+    setAuthStatus(error
+      ? formatAuthError(error.message)
+      : data.session
+        ? 'Cuenta creada. Tu sesión ya está activa.'
+        : 'Cuenta creada. Te enviamos un correo para confirmar tu registro.');
   };
 
   const signInWithEmail = async () => {
@@ -3291,6 +3349,8 @@ export default function App() {
           }}
           authPassword={authPassword}
           setAuthPassword={setAuthPassword}
+          authConfirmPassword={authConfirmPassword}
+          setAuthConfirmPassword={setAuthConfirmPassword}
           authDisabledReason={authDisabledReason}
           authStatus={authStatus}
           onSignIn={signInWithEmail}
@@ -4650,10 +4710,17 @@ export default function App() {
                           placeholder="Contraseña"
                           className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
                         />
+                        <input
+                          type="password"
+                          value={authConfirmPassword}
+                          onChange={(event) => setAuthConfirmPassword(event.target.value)}
+                          placeholder="Confirmar contraseña"
+                          className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                        />
                         <button
                           onClick={signInWithEmail}
                           disabled={Boolean(authDisabledReason)}
-                          className="sm:col-span-2 rounded-2xl bg-[var(--sage)] disabled:opacity-40 text-white py-3 text-xs font-black"
+                          className="rounded-2xl bg-[var(--sage)] disabled:opacity-40 text-white py-3 text-xs font-black"
                         >
                           Entrar y sincronizar
                         </button>
