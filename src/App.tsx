@@ -275,11 +275,31 @@ function CalendarView({
     const now = new Date();
     return isSameMonth(now, monthStart) ? now : monthStart;
   });
+  const [mapWidth, setMapWidth] = useState(() => typeof window === 'undefined' ? 1280 : window.innerWidth);
+  const [mapContainerWidth, setMapContainerWidth] = useState(() => typeof window === 'undefined' ? 1280 : Math.min(window.innerWidth, 1280));
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const now = new Date();
     setSelectedDay(isSameMonth(now, monthStart) ? now : monthStart);
   }, [currentMonth]);
+
+  useEffect(() => {
+    const update = () => setMapWidth(window.innerWidth);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  useEffect(() => {
+    const element = mapContainerRef.current;
+    if (!element) return;
+    const update = () => setMapContainerWidth(element.getBoundingClientRect().width);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const activityByDay = useMemo(() => {
     type DayActivity = {
@@ -355,19 +375,23 @@ function CalendarView({
         : selectedActivity.planted.length > 0
           ? `Día de siembra: plantaste ${selectedActivity.planted.length} semilla${selectedActivity.planted.length === 1 ? '' : 's'} nueva${selectedActivity.planted.length === 1 ? '' : 's'}.`
           : `Día de avance: moviste ${selectedActivity.advanced.length} idea${selectedActivity.advanced.length === 1 ? '' : 's'} hacia adelante.`;
-  const checkpointLabels = ['Preparar tierra', 'Cultivar', 'Podar', 'Cosechar', 'Cerrar mes'];
-
-  const mapColumns = 6;
+  const mapColumns = mapWidth < 720 ? 3 : mapWidth < 1100 ? 4 : 6;
+  const mapStepY = mapWidth < 720 ? 154 : mapWidth < 1100 ? 162 : 172;
+  const mapTopPadding = mapWidth < 720 ? 92 : 108;
   const mapRows = Math.ceil(monthDays.length / mapColumns);
-  const mapHeight = Math.max(760, mapRows * 172 + 220);
+  const mapHeight = Math.max(mapWidth < 720 ? 1120 : 760, mapRows * mapStepY + 220);
+  const mapCanvasWidth = Math.max(352, mapContainerWidth || Math.min(mapWidth, 1280));
+  const mapSidePadding = mapCanvasWidth < 720 ? 64 : 92;
+  const lanes = Array.from({ length: mapColumns }, (_, index) => {
+    return mapSidePadding + ((mapCanvasWidth - mapSidePadding * 2) / (mapColumns - 1)) * index;
+  });
   const mapNodes = monthDays.map((day, idx) => {
     const row = Math.floor(idx / mapColumns);
     const columnIndex = idx % mapColumns;
     const column = row % 2 === 0 ? columnIndex : mapColumns - 1 - columnIndex;
-    const lanes = [10, 26, 42, 58, 74, 90];
-    const x = lanes[column] + Math.sin((row + 1) * 0.8) * 1.8;
-    const y = 112 + row * 172 + (column % 2) * 18;
-    return { day, x: Math.max(8, Math.min(92, x)), y };
+    const x = lanes[column] + Math.sin((row + 1) * 0.74) * (mapColumns < 5 ? 8 : 14);
+    const y = mapTopPadding + row * mapStepY + (column % 2) * (mapWidth < 720 ? 8 : 16);
+    return { day, x: Math.max(mapSidePadding * 0.72, Math.min(mapCanvasWidth - mapSidePadding * 0.72, x)), y };
   });
   const mapPath = mapNodes.reduce((path, node, index) => {
     if (index === 0) return `M ${node.x} ${node.y}`;
@@ -384,9 +408,6 @@ function CalendarView({
       completed: node.day.getTime() <= Date.now(),
     };
   });
-  const checkpoints = mapNodes
-    .map((node, index) => ({ ...node, index }))
-    .filter(item => item.index === 0 || (item.index + 1) % 7 === 0 || item.index === mapNodes.length - 1);
 
   return (
     <motion.div
@@ -462,28 +483,28 @@ function CalendarView({
       </header>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_24rem]">
-        <div className="relative min-h-0 overflow-hidden bg-[#edf5ee]">
+        <div className="relative min-h-0 overflow-hidden bg-[#eef5ef]">
           <div className="relative h-full overflow-auto app-scrollbar">
-            <div className="relative mx-auto min-w-[860px] max-w-[1280px]" style={{ height: mapHeight }}>
+            <div ref={mapContainerRef} className="relative mx-auto w-full min-w-[22rem] max-w-[1280px]" style={{ height: mapHeight }}>
               <div className="pointer-events-none absolute inset-0 overflow-hidden">
-                <div className="absolute inset-0 bg-[linear-gradient(180deg,#cfe9f1_0%,#eaf4e8_34%,#d6e7bf_58%,#8db06f_100%)]" />
-                <div className="absolute inset-x-0 top-0 h-[34%] bg-[radial-gradient(circle_at_18%_18%,rgba(255,247,214,0.95)_0_5%,rgba(255,247,214,0.42)_8%,transparent_18%),linear-gradient(180deg,rgba(255,255,255,0.52),rgba(255,255,255,0))]" />
-                <div className="absolute left-[-18%] top-[28%] h-[28%] w-[68%] rounded-[50%] bg-[#d8e6c4] shadow-[inset_-50px_-20px_80px_rgba(72,97,58,0.10)]" />
-                <div className="absolute right-[-22%] top-[24%] h-[32%] w-[76%] rounded-[50%] bg-[#c5dcaa] shadow-[inset_48px_-22px_90px_rgba(72,97,58,0.12)]" />
-                <div className="absolute inset-x-[-6%] top-[44%] h-[32%] rounded-[50%] bg-[#aac883] shadow-[inset_0_24px_90px_rgba(255,255,255,0.18)]" />
-                <div className="absolute inset-x-0 top-[62%] bottom-0 bg-[linear-gradient(180deg,#93b672_0%,#668957_56%,#3f6043_100%)]" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_70%,rgba(255,255,255,0.16)_0_1.4%,transparent_1.8%),radial-gradient(circle_at_73%_52%,rgba(255,255,255,0.13)_0_1.1%,transparent_1.5%),radial-gradient(circle_at_42%_86%,rgba(255,238,173,0.16)_0_1.3%,transparent_1.7%)] bg-[length:180px_150px] opacity-80" />
-                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(21,43,29,0.04)_1px,transparent_1px),linear-gradient(180deg,rgba(21,43,29,0.035)_1px,transparent_1px)] bg-[length:72px_72px] opacity-40" />
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,#d8edf2_0%,#f7f7ef_30%,#dfe9c8_56%,#8cad77_100%)]" />
+                <div className="absolute inset-x-0 top-0 h-[36%] bg-[radial-gradient(circle_at_18%_16%,rgba(255,246,208,0.86)_0_4.5%,rgba(255,246,208,0.28)_8%,transparent_20%),radial-gradient(ellipse_at_68%_18%,rgba(255,255,255,0.48)_0_12%,transparent_38%)]" />
+                <div className="absolute left-[-18%] top-[26%] h-[30%] w-[70%] rounded-[50%] bg-[#dbe7cd] shadow-[inset_-60px_-28px_90px_rgba(50,75,45,0.10)]" />
+                <div className="absolute right-[-18%] top-[22%] h-[34%] w-[72%] rounded-[50%] bg-[#c9ddb8] shadow-[inset_52px_-28px_90px_rgba(50,75,45,0.11)]" />
+                <div className="absolute inset-x-[-8%] top-[45%] h-[34%] rounded-[50%] bg-[#b0ca90] shadow-[inset_0_34px_90px_rgba(255,255,255,0.20)]" />
+                <div className="absolute inset-x-0 top-[63%] bottom-0 bg-[linear-gradient(180deg,#95b575_0%,#71965f_52%,#49694c_100%)]" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_72%,rgba(255,255,255,0.14)_0_1.3%,transparent_1.8%),radial-gradient(circle_at_73%_54%,rgba(255,255,255,0.12)_0_1.1%,transparent_1.6%),radial-gradient(circle_at_42%_86%,rgba(255,235,188,0.12)_0_1.2%,transparent_1.7%)] bg-[length:190px_160px] opacity-70" />
+                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(25,45,31,0.035)_1px,transparent_1px),linear-gradient(180deg,rgba(25,45,31,0.028)_1px,transparent_1px)] bg-[length:80px_80px] opacity-35" />
                 {[
-                  { left: '6%', top: '30%', scale: 0.76 },
-                  { left: '88%', top: '29%', scale: 0.88 },
-                  { left: '9%', top: '57%', scale: 1.0 },
-                  { left: '84%', top: '66%', scale: 0.82 },
-                  { left: '47%', top: '80%', scale: 0.68 },
+                  { left: '5%', top: '30%', scale: 0.62 },
+                  { left: '90%', top: '28%', scale: 0.72 },
+                  { left: '9%', top: '58%', scale: 0.86 },
+                  { left: '86%', top: '68%', scale: 0.72 },
+                  { left: '48%', top: '82%', scale: 0.58 },
                 ].map((tree, index) => (
                   <div key={index} className="absolute" style={{ left: tree.left, top: tree.top, transform: `scale(${tree.scale})` }}>
                     <div className="mx-auto h-20 w-5 rounded-t-full bg-[#6f5138]" />
-                    <div className="-mt-32 h-32 w-36 rounded-[48%] bg-[#335f3f] opacity-85 shadow-[inset_-20px_-14px_0_rgba(0,0,0,0.08)]" />
+                    <div className="-mt-32 h-32 w-36 rounded-[48%] bg-[#335f3f] opacity-70 shadow-[inset_-20px_-14px_0_rgba(0,0,0,0.08)]" />
                   </div>
                 ))}
                 {[
@@ -497,39 +518,45 @@ function CalendarView({
                     <Sparkles size={13} />
                   </div>
                 ))}
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,transparent_0_42%,rgba(30,55,34,0.16)_100%)]" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,transparent_0_42%,rgba(30,55,34,0.14)_100%)]" />
               </div>
 
-              <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 100 ${mapHeight}`} preserveAspectRatio="none" aria-hidden="true">
+              <svg
+                className="pointer-events-none absolute inset-0 h-full w-full"
+                viewBox={`0 0 ${mapCanvasWidth} ${mapHeight}`}
+                aria-hidden="true"
+              >
                 <defs>
-                  <filter id="seedPathShadow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feDropShadow dx="0" dy="8" stdDeviation="5" floodColor="#1f2d23" floodOpacity="0.18" />
+                  <filter id="calendarPathLift" x="-8%" y="-8%" width="116%" height="116%">
+                    <feDropShadow dx="0" dy="12" stdDeviation="7" floodColor="#263725" floodOpacity="0.22" />
+                    <feDropShadow dx="0" dy="2" stdDeviation="1.5" floodColor="#ffffff" floodOpacity="0.42" />
                   </filter>
+                  <linearGradient id="calendarPathSurface" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="rgba(255,255,255,0.96)" />
+                    <stop offset="54%" stopColor="rgba(255,255,255,0.72)" />
+                    <stop offset="100%" stopColor="rgba(231,239,221,0.78)" />
+                  </linearGradient>
+                  <linearGradient id="calendarPathProgress" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#fff1a8" />
+                    <stop offset="50%" stopColor="#9fbc73" />
+                    <stop offset="100%" stopColor="#6e945d" />
+                  </linearGradient>
                 </defs>
-                <path d={mapPath} fill="none" stroke="rgba(47,62,51,0.18)" strokeWidth="15" strokeLinecap="round" filter="url(#seedPathShadow)" />
-                <path d={mapPath} fill="none" stroke="rgba(92,76,56,0.28)" strokeWidth="11" strokeLinecap="round" />
-                <path d={mapPath} fill="none" stroke="rgba(242,230,202,0.82)" strokeWidth="8.5" strokeLinecap="round" />
+                <path d={mapPath} fill="none" stroke="rgba(37,54,39,0.12)" strokeWidth="34" strokeLinecap="round" filter="url(#calendarPathLift)" />
+                <path d={mapPath} fill="none" stroke="rgba(255,255,255,0.64)" strokeWidth="28" strokeLinecap="round" />
+                <path d={mapPath} fill="none" stroke="rgba(126,153,105,0.16)" strokeWidth="23" strokeLinecap="round" transform="translate(0 5)" />
+                <path d={mapPath} fill="none" stroke="url(#calendarPathSurface)" strokeWidth="22" strokeLinecap="round" />
                 {mapSegments.map(segment => (
                   <path
                     key={segment.id}
                     d={segment.path}
                     fill="none"
-                    stroke={segment.completed ? 'rgba(144,122,78,0.88)' : 'rgba(245,235,212,0.22)'}
-                    strokeWidth="6.8"
+                    stroke={segment.completed ? 'url(#calendarPathProgress)' : 'rgba(255,255,255,0.18)'}
+                    strokeWidth="13"
                     strokeLinecap="round"
                   />
                 ))}
-                {mapSegments.map(segment => (
-                  <path
-                    key={`${segment.id}-dash`}
-                    d={segment.path}
-                    fill="none"
-                    stroke={segment.completed ? 'rgba(255,251,238,0.42)' : 'rgba(133,95,55,0.10)'}
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeDasharray="2 13"
-                  />
-                ))}
+                <path d={mapPath} fill="none" stroke="rgba(255,255,255,0.72)" strokeWidth="3" strokeLinecap="round" strokeDasharray="1 18" />
               </svg>
 
               {mapNodes.map(({ day, x, y }, idx) => {
@@ -539,7 +566,6 @@ function CalendarView({
             const hasActivity = activityCount > 0;
             const isSelected = isSameDay(day, selectedDay);
             const isTodayDay = isToday(day);
-            const isCheckpoint = idx === 0 || (idx + 1) % 7 === 0 || idx === monthDays.length - 1;
             const strongest =
               activity.harvested.length > 0 ? 'harvested' :
               activity.watered.length > 0 ? 'watered' :
@@ -556,12 +582,12 @@ function CalendarView({
                 <div
                   key={dateKey}
                   className="absolute"
-                  style={{ left: `${x}%`, top: y, transform: 'translate(-50%, -50%)' }}
+                  style={{ left: x, top: y, transform: 'translate(-50%, -50%)' }}
                 >
                   <button
                     type="button"
                     onClick={() => setSelectedDay(day)}
-                    className={`group relative grid h-20 w-20 place-items-center rounded-full border-[5px] text-center shadow-xl transition-all hover:-translate-y-1 sm:h-24 sm:w-24 ${
+                    className={`group relative grid h-[clamp(4rem,7.2vw,5.7rem)] w-[clamp(4rem,7.2vw,5.7rem)] place-items-center rounded-full border-[5px] text-center shadow-[0_18px_45px_rgba(31,45,35,0.18)] transition-all hover:-translate-y-1 ${
                       isSelected
                         ? 'border-white bg-[var(--sage)] text-white ring-4 ring-white/50'
                         : isTodayDay
@@ -575,13 +601,13 @@ function CalendarView({
                                 : strongest === 'planted'
                                   ? 'border-white bg-amber-400 text-amber-950'
                                   : 'border-white bg-[var(--surface-strong)] text-[var(--text-muted)]'
-                    } ${isCheckpoint ? 'scale-110 shadow-2xl' : ''}`}
+                    }`}
                     aria-label={`Dia ${format(day, 'd')}`}
                   >
                     <span className="absolute -top-2 -right-2 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[var(--earth)] text-[10px] font-black text-white shadow-md">
                       {format(day, 'd')}
                     </span>
-                    <NodeIcon size={26} />
+                    <NodeIcon size={24} />
                     {hasActivity && (
                       <span className="absolute -bottom-2 rounded-full border-2 border-white bg-white px-2 py-0.5 text-[9px] font-black uppercase text-[var(--earth)] shadow">
                         {activityCount}
@@ -610,23 +636,6 @@ function CalendarView({
                 </div>
               );
             })}
-
-              {checkpoints.map((checkpoint, checkpointIndex) => (
-                <div
-                  key={`checkpoint-${checkpoint.index}`}
-                  className="pointer-events-none absolute hidden w-40 rounded-[1.4rem] border border-white/70 bg-white/72 px-3 py-2 shadow-lg backdrop-blur-md md:block"
-                  style={{
-                    left: `${checkpoint.x > 58 ? checkpoint.x - 22 : checkpoint.x + 6}%`,
-                    top: checkpoint.y + 54,
-                    transform: 'translateX(-50%)',
-                  }}
-                >
-                  <p className="text-[9px] font-black uppercase tracking-widest text-[var(--seed-accent)]">Checkpoint</p>
-                  <p className="mt-1 text-sm font-black leading-tight text-[var(--earth)]">
-                    {checkpointLabels[Math.min(checkpointIndex, checkpointLabels.length - 1)]}
-                  </p>
-                </div>
-              ))}
 
               <div className="pointer-events-none absolute left-8 top-28 hidden rounded-[2rem] border border-white/60 bg-white/60 p-4 shadow-lg backdrop-blur sm:block">
                 <Sprout className="text-amber-600" size={22} />
