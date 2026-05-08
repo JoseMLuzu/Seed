@@ -1467,6 +1467,7 @@ export default function Garden3D({
   onReviewNote,
   onFocusNote,
   recentlyWateredId,
+  variant = 'app',
 }: {
   notes: SeedNote[];
   theme: Theme;
@@ -1475,8 +1476,10 @@ export default function Garden3D({
   onReviewNote?: (id: string) => void;
   onFocusNote?: (id: string) => void;
   recentlyWateredId?: string | null;
+  variant?: 'app' | 'preview';
 }) {
   const palette = GARDEN_PALETTES[theme];
+  const isPreview = variant === 'preview';
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<GardenFilter>('all');
   const [routeIds, setRouteIds] = useState<string[]>([]);
@@ -1575,7 +1578,7 @@ export default function Garden3D({
   }, [plants]);
 
   return (
-    <div className="w-full h-[68vh] min-h-[520px] sm:h-[75vh] rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-2xl relative border-[8px] sm:border-[12px] border-white/10 backdrop-blur-md transition-colors duration-1000">
+    <div className={`w-full overflow-hidden shadow-2xl relative border-white/10 backdrop-blur-md transition-colors duration-1000 ${isPreview ? 'h-[31rem] min-h-[31rem] rounded-[2.5rem] border-[8px]' : 'h-[68vh] min-h-[520px] sm:h-[75vh] rounded-[2rem] sm:rounded-[3rem] border-[8px] sm:border-[12px]'}`}>
       <Canvas shadows camera={{ position: [40, 30, 40], fov: 45 }}>
         <color attach="background" args={[skyColor]} />
         
@@ -1615,10 +1618,10 @@ export default function Garden3D({
           <Environment preset={isDay ? "park" : "city"} />
         </Suspense>
 
-        <OrbitControls 
+        <OrbitControls
           ref={controlsRef}
-          enablePan={false} 
-          enableZoom={true} 
+          enablePan={false}
+          enableZoom={!isPreview}
           enableRotate={true}
           autoRotate={!selectedId}
           autoRotateSpeed={0.5}
@@ -1628,18 +1631,18 @@ export default function Garden3D({
         />
       </Canvas>
       
-      <div className="absolute top-5 left-5 sm:top-10 sm:left-10 pointer-events-none max-w-[55%]">
+      <div className={`absolute pointer-events-none max-w-[55%] ${isPreview ? 'left-6 top-6' : 'top-5 left-5 sm:top-10 sm:left-10'}`}>
         <div className="flex items-center gap-3 mb-2">
           <div className={`w-3 h-3 rounded-full ${isRaining ? 'bg-sky-300 shadow-[0_0_12px_rgba(125,211,252,0.7)]' : 'bg-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.7)]'} animate-pulse`} />
           <p className="text-[11px] font-black uppercase tracking-[0.4em] text-white/45">{planetName || 'Galaxy Garden'}</p>
         </div>
-        <h4 className="text-3xl sm:text-5xl font-serif text-white tracking-tight leading-none drop-shadow-xl">
+        <h4 className={`${isPreview ? 'text-4xl' : 'text-3xl sm:text-5xl'} font-serif text-white tracking-tight leading-none drop-shadow-xl`}>
           {palette.label}<br/><span className={`${isRaining ? 'text-sky-200/70' : 'text-yellow-200/70'} italic`}>{isRaining ? 'Lluvia' : 'Vivo'}</span>
         </h4>
         <p className="mt-3 hidden max-w-xs text-xs font-semibold leading-relaxed text-white/65 drop-shadow sm:block">{weatherCopy}</p>
       </div>
 
-      <div className="absolute top-5 right-5 sm:top-10 sm:right-10 grid grid-cols-3 gap-2 text-white">
+      <div className={`absolute grid grid-cols-3 gap-2 text-white ${isPreview ? 'right-6 top-6' : 'top-5 right-5 sm:top-10 sm:right-10'}`}>
         {[
           { label: 'Riego', value: stats.water },
           { label: 'Activas', value: stats.progress },
@@ -1652,6 +1655,7 @@ export default function Garden3D({
         ))}
       </div>
 
+      {!isPreview && (
       <div className="absolute left-4 right-4 bottom-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-[1.75rem] border border-white/20 bg-black/25 p-2 shadow-2xl backdrop-blur-2xl text-white">
         <div className="grid grid-cols-4 gap-1">
           {[
@@ -1685,8 +1689,9 @@ export default function Garden3D({
           {isRaining ? 'Ruta suave' : 'Ruta de hoy'}
         </button>
       </div>
+      )}
 
-      {selectedNote && (
+      {selectedNote && !isPreview && (
         <div className="absolute left-4 right-4 bottom-28 sm:left-auto sm:right-8 sm:top-28 sm:bottom-auto sm:w-80 rounded-[2rem] border border-white/20 bg-white/92 p-5 shadow-2xl backdrop-blur-2xl text-[var(--earth)]">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -1751,9 +1756,11 @@ export default function Garden3D({
         </div>
       )}
 
+      {!isPreview && (
       <div className="absolute left-5 bottom-24 hidden text-[10px] font-bold uppercase tracking-[0.22em] text-white/45 sm:block">
         {isRaining ? 'La lluvia no riega sola: reduce el ruido y prioriza revisiones' : 'Arrastra para explorar · toca una planta para actuar'}
       </div>
+      )}
     </div>
   );
 }
