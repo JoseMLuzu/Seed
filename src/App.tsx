@@ -57,7 +57,7 @@ import { addFocusMinutes, cultivateInboxNote as cultivateNote, DAY_MS, daysSince
 import { loadNotesFromDb, migrateLocalNotesToDb, saveNotesToDb } from './storage';
 import { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';
-import { deleteNoteFromSupabase, deletePlanetFromSupabase, pushGardenToSupabase, syncGardenWithSupabase } from './supabaseSync';
+import { deleteNoteFromSupabase, deletePlanetFromSupabase, invitePlanetMember, pushGardenToSupabase, removePlanetMember, syncGardenWithSupabase } from './supabaseSync';
 
 const Garden3D = lazy(() => import('./components/Garden3D'));
 
@@ -65,6 +65,8 @@ type AccountProfile = {
   name: string;
   email: string;
   role: string;
+  purpose?: string;
+  mantra?: string;
 };
 
 const THEMES: { id: Theme; label: string; icon: string }[] = [
@@ -103,6 +105,14 @@ const SEED_TYPES: { id: NonNullable<SeedNote['seedType']>; label: string; task: 
   { id: 'project', label: 'Proyecto', task: 'Definir el primer entregable pequeño' },
   { id: 'goal', label: 'Meta', task: 'Elegir una acción medible para esta semana' },
   { id: 'learning', label: 'Aprendizaje', task: 'Practicar o resumir el primer concepto' },
+];
+
+const PROFILE_PURPOSES = [
+  'Trabajo',
+  'Estudios',
+  'Proyectos creativos',
+  'Ideas personales',
+  'Todo un poco',
 ];
 
 const STAGE_META: Record<SeedNote['growthStage'], { label: string; shortLabel: string; color: string; bg: string; aura: string }> = {
@@ -1546,16 +1556,80 @@ function LandingPage({
     { icon: Box, title: 'Un planeta para cada parte de ti', text: 'Trabajo, estudio, vida personal o proyectos creativos pueden vivir separados, cada uno con su propio jardín.' },
   ];
   const ecosystems = [
-    { name: 'Pradera', mood: 'Claro, fresco y tranquilo', sky: '#dff2ff', planet: '#93bd6b', land: '#cfe7a7', accent: '#f5d36c', plant: 'Pasto suave' },
-    { name: 'Bosque', mood: 'Profundo, calmado y enfocado', sky: '#dce9ef', planet: '#5f7f55', land: '#2f5b3e', accent: '#b8d69c', plant: 'Pinos pequeños' },
-    { name: 'Floración', mood: 'Creativo, amable y luminoso', sky: '#ffeaf1', planet: '#f0b6c8', land: '#83b86b', accent: '#fff0a8', plant: 'Cerezos rosados' },
-    { name: 'Nocturno', mood: 'Silencioso, íntimo y mental', sky: '#172338', planet: '#526a84', land: '#9fb6d8', accent: '#f7e9a0', plant: 'Brotes lunares' },
-    { name: 'Jungla', mood: 'Vivo, intenso y explorador', sky: '#d8f5e2', planet: '#2e8a57', land: '#8fd46a', accent: '#ffd166', plant: 'Hojas tropicales' },
-    { name: 'Alien', mood: 'Extraño, divertido y experimental', sky: '#e9ddff', planet: '#7251a7', land: '#8df2c2', accent: '#f3ff6b', plant: 'Setas brillantes' },
-    { name: 'Desierto', mood: 'Minimal, cálido y despejado', sky: '#fff0d9', planet: '#d8a35f', land: '#f4cf8d', accent: '#7cb7d8', plant: 'Cactus ideas' },
-    { name: 'Ártico', mood: 'Limpio, sereno y sin ruido', sky: '#e5f7fb', planet: '#a9d7e4', land: '#f8ffff', accent: '#8aa7d8', plant: 'Cristales verdes' },
+    { name: 'Pradera', theme: 'earth' as Theme, mood: 'Claro, fresco y tranquilo', sky: '#dff2ff', planet: '#93bd6b', accent: '#f5d36c', plant: 'Pasto suave' },
+    { name: 'Bosque', theme: 'forest' as Theme, mood: 'Profundo, calmado y enfocado', sky: '#dce9ef', planet: '#5f7f55', accent: '#b8d69c', plant: 'Pinos pequeños' },
+    { name: 'Floración', theme: 'bloom' as Theme, mood: 'Creativo, amable y luminoso', sky: '#ffeaf1', planet: '#f0b6c8', accent: '#fff0a8', plant: 'Cerezos rosados' },
+    { name: 'Nocturno', theme: 'night' as Theme, mood: 'Silencioso, íntimo y mental', sky: '#172338', planet: '#526a84', accent: '#f7e9a0', plant: 'Brotes lunares' },
+    { name: 'Jungla', theme: 'jungle' as Theme, mood: 'Vivo, intenso y explorador', sky: '#d8f5e2', planet: '#2e8a57', accent: '#ffd166', plant: 'Hojas tropicales' },
+    { name: 'Alien', theme: 'alien' as Theme, mood: 'Extraño, divertido y experimental', sky: '#e9ddff', planet: '#7251a7', accent: '#f3ff6b', plant: 'Setas brillantes' },
+    { name: 'Desierto', theme: 'desert' as Theme, mood: 'Minimal, cálido y despejado', sky: '#fff0d9', planet: '#d8a35f', accent: '#7cb7d8', plant: 'Cactus ideas' },
+    { name: 'Ártico', theme: 'arctic' as Theme, mood: 'Limpio, sereno y sin ruido', sky: '#e5f7fb', planet: '#a9d7e4', accent: '#8aa7d8', plant: 'Cristales verdes' },
   ];
   const [activeEcosystem, setActiveEcosystem] = useState(ecosystems[0]);
+  const ecosystemPreviewNotes = useMemo<SeedNote[]>(() => {
+    const now = Date.now();
+    return [
+      {
+        id: 'preview-seed',
+        title: 'Idea nueva',
+        content: 'Una semilla lista para crecer.',
+        createdAt: now - DAY_MS,
+        updatedAt: now - DAY_MS,
+        tags: [],
+        isGrowth: false,
+        tasks: [],
+        growthStage: 'seed',
+        seedType: 'idea',
+      },
+      {
+        id: 'preview-sprout',
+        title: 'Proyecto en marcha',
+        content: 'Algo que ya empezó a tomar forma.',
+        createdAt: now - DAY_MS * 6,
+        updatedAt: now - DAY_MS,
+        tags: [],
+        isGrowth: true,
+        tasks: [
+          { id: 'preview-task-1', text: 'Elegir el siguiente paso', completed: true },
+          { id: 'preview-task-2', text: 'Avanzar 25 minutos', completed: false },
+        ],
+        growthStage: 'sprout',
+        lastWateredAt: now - DAY_MS * 4,
+        seedType: 'project',
+      },
+      {
+        id: 'preview-bloom',
+        title: 'Idea cosechada',
+        content: 'Una idea que ya dejó aprendizaje.',
+        createdAt: now - DAY_MS * 12,
+        updatedAt: now - DAY_MS,
+        tags: [],
+        isGrowth: true,
+        tasks: [
+          { id: 'preview-task-3', text: 'Cerrar ciclo', completed: true },
+        ],
+        growthStage: 'bloom',
+        harvestedAt: now - DAY_MS,
+        seedType: 'goal',
+      },
+      {
+        id: 'preview-water',
+        title: 'Idea por cuidar',
+        content: 'Algo valioso que merece otra mirada.',
+        createdAt: now - DAY_MS * 9,
+        updatedAt: now - DAY_MS * 8,
+        tags: [],
+        isGrowth: true,
+        tasks: [
+          { id: 'preview-task-4', text: 'Revisarla sin presión', completed: false },
+        ],
+        growthStage: 'sprout',
+        lastWateredAt: now - DAY_MS * 8,
+        wateringIntervalDays: 3,
+        seedType: 'learning',
+      },
+    ];
+  }, []);
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#f8faf7] text-[#162019]">
@@ -1712,62 +1786,29 @@ function LandingPage({
             </div>
           </div>
 
-          <motion.div
-            key={activeEcosystem.name}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.24 }}
-            className="relative min-h-[31rem] overflow-hidden rounded-[2.5rem] border border-[#dfe8dd] shadow-[0_34px_120px_rgba(17,34,23,0.12)]"
-            style={{ background: `linear-gradient(180deg, ${activeEcosystem.sky} 0%, #f8faf7 78%)` }}
-          >
-            <div className="absolute inset-x-6 top-6 flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[10px] font-black uppercase text-[#536159]">Preview de ecosistema</p>
-                <h3 className="mt-1 font-serif text-4xl font-black text-[#162019]">{activeEcosystem.name}</h3>
-                <p className="mt-2 max-w-sm text-sm font-bold leading-relaxed text-[#536159]">{activeEcosystem.mood}</p>
-              </div>
-              <span className="rounded-full bg-white/82 px-4 py-2 text-xs font-black text-[#49623e] shadow-sm backdrop-blur">
-                {activeEcosystem.plant}
-              </span>
-            </div>
-
-            <div
-              className="absolute left-1/2 top-[60%] h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-[inset_-28px_-34px_70px_rgba(25,47,30,0.24),0_34px_90px_rgba(75,105,63,0.22)]"
-              style={{ backgroundColor: activeEcosystem.planet }}
-            >
-              <div className="absolute left-12 top-16 h-16 w-28 rotate-[-20deg] rounded-full" style={{ backgroundColor: activeEcosystem.land }} />
-              <div className="absolute bottom-14 right-12 h-20 w-32 rotate-[18deg] rounded-full opacity-80" style={{ backgroundColor: activeEcosystem.land }} />
-              <div className="absolute right-20 top-24 h-10 w-16 rotate-[28deg] rounded-full opacity-80" style={{ backgroundColor: activeEcosystem.accent }} />
-              {[
-                { left: '47%', top: '18%', size: 1, delay: 0 },
-                { left: '69%', top: '39%', size: 0.86, delay: 0.1 },
-                { left: '31%', top: '45%', size: 0.92, delay: 0.2 },
-                { left: '56%', top: '68%', size: 1.08, delay: 0.3 },
-              ].map((plant) => (
-                <motion.div
-                  key={`${activeEcosystem.name}-${plant.left}`}
-                  className="absolute h-14 w-14 -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: plant.left, top: plant.top, scale: plant.size }}
-                  animate={{ y: [0, -5, 0] }}
-                  transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', delay: plant.delay }}
-                >
-                  <div className="absolute bottom-0 left-1/2 h-6 w-9 -translate-x-1/2 rounded-b-xl rounded-t-md border border-black/10" style={{ backgroundColor: activeEcosystem.accent }} />
-                  <div className="absolute bottom-5 left-1/2 h-8 w-2 -translate-x-1/2 rounded-full bg-[#2f4f35]" />
-                  <div className="absolute bottom-9 left-1 h-5 w-8 rounded-full" style={{ backgroundColor: activeEcosystem.land }} />
-                  <div className="absolute bottom-10 right-0 h-5 w-8 rounded-full bg-white/45" />
-                </motion.div>
-              ))}
-            </div>
-
-            <div className="absolute bottom-6 left-6 right-6 grid grid-cols-3 gap-3">
-              {['Ideas', 'Riego', 'Foco'].map((item, index) => (
-                <div key={item} className="rounded-2xl bg-white/84 px-4 py-3 shadow-sm backdrop-blur">
-                  <p className="text-[9px] font-black uppercase text-[#7b8278]">{item}</p>
-                  <p className="mt-1 font-serif text-2xl font-black text-[#162019]">{[12, 3, '25m'][index]}</p>
+          <div className="relative">
+            <Suspense fallback={
+              <div className="grid h-[31rem] place-items-center rounded-[2.5rem] border border-[#dfe8dd] bg-[#f8faf7] text-center shadow-[0_34px_120px_rgba(17,34,23,0.12)]">
+                <div>
+                  <Box className="mx-auto text-[#6e9b58]" size={36} />
+                  <p className="mt-4 font-serif text-3xl font-black text-[#162019]">Cargando mundo 3D</p>
+                  <p className="mt-2 text-sm font-semibold text-[#667466]">El mismo planeta que verás dentro de Seed.</p>
                 </div>
-              ))}
+              </div>
+            }>
+              <Garden3D
+                notes={ecosystemPreviewNotes}
+                theme={activeEcosystem.theme}
+                planetName={activeEcosystem.name}
+                onSelectNote={() => undefined}
+                variant="preview"
+              />
+            </Suspense>
+            <div className="pointer-events-none absolute bottom-6 left-6 right-6 rounded-2xl border border-white/20 bg-black/25 px-5 py-4 text-white shadow-2xl backdrop-blur-xl">
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/55">Así se ve en la app</p>
+              <p className="mt-1 text-sm font-semibold leading-relaxed text-white/78">{activeEcosystem.mood}. {activeEcosystem.plant} para tus ideas.</p>
             </div>
-          </motion.div>
+          </div>
         </div>
       </section>
 
@@ -2025,6 +2066,7 @@ export default function App() {
   const [newPlanetName, setNewPlanetName] = useState('');
   const [showPlanetSettings, setShowPlanetSettings] = useState(false);
   const [editingPlanetName, setEditingPlanetName] = useState('');
+  const [shareEmail, setShareEmail] = useState('');
   
   const [theme, setTheme] = useState<Theme>(() => {
     return (localStorage.getItem('seed-theme') as Theme) || 'earth';
@@ -2076,6 +2118,26 @@ export default function App() {
   const todayKey = format(Date.now(), 'yyyy-MM-dd');
   const wateredToday = wateringRitual.lastDate === todayKey;
   const accountInitials = getAccountInitials(account.name, account.email);
+  const profileStats = useMemo(() => {
+    const totalFocus = notes.reduce((sum, note) => sum + (note.focusedMinutes || 0), 0);
+    const harvests = notes.filter(note => note.growthStage === 'bloom').length;
+    const active = notes.filter(note => note.isGrowth && note.growthStage !== 'bloom' && !note.paused).length;
+    const needsWater = notes.filter(note => wateringDue(note) && note.growthStage !== 'bloom' && !note.paused).length;
+    const season = harvests >= 5
+      ? 'Temporada de cosecha'
+      : active >= 4
+        ? 'Temporada de crecimiento'
+        : needsWater > 0
+          ? 'Temporada de riego'
+          : 'Temporada de siembra';
+    return { totalFocus, harvests, active, needsWater, season };
+  }, [notes]);
+  const profileAchievements = useMemo(() => [
+    { label: 'Primera semilla', active: notes.length > 0 },
+    { label: 'Primera cosecha', active: profileStats.harvests > 0 },
+    { label: 'Racha de 3 días', active: wateringRitual.streak >= 3 },
+    { label: '60 min de enfoque', active: profileStats.totalFocus >= 60 },
+  ], [notes.length, profileStats.harvests, profileStats.totalFocus, wateringRitual.streak]);
   const authDisabledReason = !isSupabaseConfigured
     ? 'Faltan las variables VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en este despliegue.'
     : !authEmail.trim()
@@ -2223,78 +2285,142 @@ export default function App() {
   useEffect(() => {
     if (!supabase || !session?.user) return;
     const userId = session.user.id;
+    const userEmail = session.user.email?.toLowerCase() || '';
+    const sharedPlanetIds = planets.filter(planet => planet.ownerId && planet.ownerId !== userId).map(planet => planet.id);
     const markRemoteApplyDone = () => window.setTimeout(() => { applyingRemoteSyncRef.current = false; }, 0);
+
+    const handleNotePayload = (payload: any) => {
+      applyingRemoteSyncRef.current = true;
+      if (payload.eventType === 'DELETE') {
+        const deletedId = payload.old?.id;
+        if (deletedId) setNotes(current => current.filter(note => note.id !== deletedId));
+        markRemoteApplyDone();
+        return;
+      }
+
+      const row = payload.new;
+      if (!row?.data?.id) {
+        markRemoteApplyDone();
+        return;
+      }
+
+      const incoming: SeedNote = {
+        ...row.data,
+        planetId: row.data.planetId || row.planet_id || DEFAULT_PLANET_ID,
+      };
+
+      setNotes(current => {
+        const existing = current.find(note => note.id === incoming.id);
+        if (existing && noteUpdatedAt(existing) > noteUpdatedAt(incoming)) return current;
+        if (existing) return current.map(note => note.id === incoming.id ? incoming : note);
+        return [incoming, ...current];
+      });
+      markRemoteApplyDone();
+    };
+
+    const handlePlanetPayload = (payload: any) => {
+      applyingRemoteSyncRef.current = true;
+      if (payload.eventType === 'DELETE') {
+        const deletedId = payload.old?.id;
+        if (deletedId) setPlanets(current => current.filter(planet => planet.id !== deletedId));
+        markRemoteApplyDone();
+        return;
+      }
+
+      const row = payload.new;
+      if (!row?.id) {
+        markRemoteApplyDone();
+        return;
+      }
+
+      const incoming: Planet = {
+        id: row.id,
+        name: row.name,
+        description: row.description || '',
+        theme: row.theme,
+        createdAt: row.created_at_ms || Date.now(),
+        ownerId: row.user_id,
+        shared: row.user_id !== userId,
+      };
+
+      setPlanets(current => {
+        const existing = current.find(planet => planet.id === incoming.id);
+        if (existing) return current.map(planet => planet.id === incoming.id ? { ...planet, ...incoming, members: planet.members } : planet);
+        return [...current, incoming];
+      });
+      markRemoteApplyDone();
+    };
 
     const notesChannel = supabase
       .channel(`seed-notes-${userId}`)
       .on(
         'postgres_changes' as never,
         { event: '*', schema: 'public', table: 'seed_notes', filter: `user_id=eq.${userId}` } as never,
-        (payload: any) => {
-          applyingRemoteSyncRef.current = true;
-          if (payload.eventType === 'DELETE') {
-            const deletedId = payload.old?.id;
-            if (deletedId) setNotes(current => current.filter(note => note.id !== deletedId));
-            markRemoteApplyDone();
-            return;
-          }
-
-          const row = payload.new;
-          if (!row?.data?.id) {
-            markRemoteApplyDone();
-            return;
-          }
-
-          const incoming: SeedNote = {
-            ...row.data,
-            planetId: row.data.planetId || row.planet_id || DEFAULT_PLANET_ID,
-          };
-
-          setNotes(current => {
-            const existing = current.find(note => note.id === incoming.id);
-            if (existing && noteUpdatedAt(existing) > noteUpdatedAt(incoming)) return current;
-            if (existing) return current.map(note => note.id === incoming.id ? incoming : note);
-            return [incoming, ...current];
-          });
-          markRemoteApplyDone();
-        },
+        handleNotePayload,
       )
       .subscribe();
+
+    const sharedNoteChannels = sharedPlanetIds.map(planetId => supabase
+      .channel(`seed-notes-shared-${userId}-${planetId}`)
+      .on(
+        'postgres_changes' as never,
+        { event: '*', schema: 'public', table: 'seed_notes', filter: `planet_id=eq.${planetId}` } as never,
+        handleNotePayload,
+      )
+      .subscribe());
 
     const planetsChannel = supabase
       .channel(`seed-planets-${userId}`)
       .on(
         'postgres_changes' as never,
         { event: '*', schema: 'public', table: 'seed_planets', filter: `user_id=eq.${userId}` } as never,
+        handlePlanetPayload,
+      )
+      .subscribe();
+
+    const sharedPlanetChannels = sharedPlanetIds.map(planetId => supabase
+      .channel(`seed-planets-shared-${userId}-${planetId}`)
+      .on(
+        'postgres_changes' as never,
+        { event: '*', schema: 'public', table: 'seed_planets', filter: `id=eq.${planetId}` } as never,
+        handlePlanetPayload,
+      )
+      .subscribe());
+
+    const membersChannel = supabase
+      .channel(`seed-planet-members-${userId}`)
+      .on(
+        'postgres_changes' as never,
+        { event: '*', schema: 'public', table: 'seed_planet_members', filter: `member_email=eq.${userEmail}` } as never,
         (payload: any) => {
+          const row = payload.new || payload.old;
+          const isRelevant = row?.owner_id === userId || row?.member_email?.toLowerCase?.() === userEmail;
+          if (!isRelevant) return;
+
           applyingRemoteSyncRef.current = true;
-          if (payload.eventType === 'DELETE') {
-            const deletedId = payload.old?.id;
-            if (deletedId) setPlanets(current => current.filter(planet => planet.id !== deletedId));
-            markRemoteApplyDone();
-            return;
-          }
+          syncGardenWithSupabase({ planets, notes }, session.user)
+            .then(synced => {
+              setPlanets(synced.planets.length > 0 ? synced.planets : planets);
+              setNotes(synced.notes);
+            })
+            .finally(markRemoteApplyDone);
+        },
+      )
+      .subscribe();
 
-          const row = payload.new;
-          if (!row?.id) {
-            markRemoteApplyDone();
-            return;
-          }
-
-          const incoming: Planet = {
-            id: row.id,
-            name: row.name,
-            description: row.description || '',
-            theme: row.theme,
-            createdAt: row.created_at_ms || Date.now(),
-          };
-
-          setPlanets(current => {
-            const existing = current.find(planet => planet.id === incoming.id);
-            if (existing) return current.map(planet => planet.id === incoming.id ? { ...planet, ...incoming } : planet);
-            return [...current, incoming];
-          });
-          markRemoteApplyDone();
+    const ownedMembersChannel = supabase
+      .channel(`seed-planet-members-owned-${userId}`)
+      .on(
+        'postgres_changes' as never,
+        { event: '*', schema: 'public', table: 'seed_planet_members', filter: `owner_id=eq.${userId}` } as never,
+        () => {
+          applyingRemoteSyncRef.current = true;
+          syncGardenWithSupabase({ planets, notes }, session.user)
+            .then(synced => {
+              setPlanets(synced.planets.length > 0 ? synced.planets : planets);
+              setNotes(synced.notes);
+            })
+            .finally(markRemoteApplyDone);
         },
       )
       .subscribe();
@@ -2302,8 +2428,12 @@ export default function App() {
     return () => {
       supabase.removeChannel(notesChannel);
       supabase.removeChannel(planetsChannel);
+      sharedNoteChannels.forEach(channel => supabase.removeChannel(channel));
+      sharedPlanetChannels.forEach(channel => supabase.removeChannel(channel));
+      supabase.removeChannel(membersChannel);
+      supabase.removeChannel(ownedMembersChannel);
     };
-  }, [session?.user?.id]);
+  }, [notes, planets, session?.user?.id, session?.user?.email]);
 
   useEffect(() => {
     if (!session?.user || !notesLoaded || !remoteSyncReadyRef.current || applyingRemoteSyncRef.current) return;
@@ -2795,6 +2925,44 @@ export default function App() {
     switchPlanet(nextPlanet.id);
   };
 
+  const shareActivePlanet = async () => {
+    if (!session?.user) {
+      setSyncStatus('Inicia sesión para compartir un planeta.');
+      return;
+    }
+    try {
+      await invitePlanetMember(activePlanet, shareEmail, session.user, 'editor');
+      const normalizedEmail = shareEmail.trim().toLowerCase();
+      setPlanets(current => current.map(planet => {
+        if (planet.id !== activePlanet.id) return planet;
+        const members = planet.members || [];
+        const nextMembers = members.some(member => member.email === normalizedEmail)
+          ? members.map(member => member.email === normalizedEmail ? { ...member, role: 'editor' as const } : member)
+          : [...members, { planetId: planet.id, email: normalizedEmail, role: 'editor' as const, invitedAt: Date.now() }];
+        return { ...planet, shared: true, ownerId: session.user.id, members: nextMembers };
+      }));
+      setShareEmail('');
+      setSyncStatus(`Planeta compartido con ${normalizedEmail}.`);
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : 'No se pudo compartir el planeta.');
+    }
+  };
+
+  const unshareActivePlanet = async (email: string) => {
+    if (!session?.user) return;
+    try {
+      await removePlanetMember(activePlanet.id, email, session.user);
+      setPlanets(current => current.map(planet => {
+        if (planet.id !== activePlanet.id) return planet;
+        const members = (planet.members || []).filter(member => member.email !== email);
+        return { ...planet, shared: members.length > 0, members };
+      }));
+      setSyncStatus(`Se quitó el acceso de ${email}.`);
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : 'No se pudo quitar el miembro.');
+    }
+  };
+
   const signUpWithEmail = async () => {
     if (!supabase) {
       setAuthStatus('Supabase no está configurado.');
@@ -2997,6 +3165,11 @@ export default function App() {
           {showPlanetSettings && (
             <div className="rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] p-3">
               <p className="text-[10px] font-black uppercase tracking-widest text-[var(--seed-accent)] mb-2">Planeta activo</p>
+              {activePlanet.shared && (
+                <span className="mb-2 inline-flex rounded-full bg-green-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-green-700">
+                  Compartido
+                </span>
+              )}
               <input
                 autoFocus
                 value={editingPlanetName}
@@ -3024,6 +3197,54 @@ export default function App() {
                   <Trash2 size={14} />
                 </button>
               </div>
+              <div className="mt-3 rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] p-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Compartir planeta</p>
+                <p className="mt-1 text-[11px] font-semibold leading-relaxed text-[var(--text-muted)]">
+                  Invita a alguien por email para cultivar este planeta en equipo.
+                </p>
+                <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+                  <input
+                    value={shareEmail}
+                    onChange={(event) => setShareEmail(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') shareActivePlanet();
+                    }}
+                    type="email"
+                    placeholder="persona@email.com"
+                    className="min-w-0 bg-[var(--bg-app)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                  />
+                  <button
+                    onClick={shareActivePlanet}
+                    disabled={!shareEmail.trim() || !session?.user}
+                    className="rounded-xl bg-[var(--sage)] disabled:opacity-40 px-3 py-2 text-xs font-black text-white"
+                  >
+                    Invitar
+                  </button>
+                </div>
+                {!session?.user && (
+                  <p className="mt-2 text-[11px] font-semibold text-[var(--text-muted)]">Inicia sesión para compartir planetas.</p>
+                )}
+                {(activePlanet.members || []).length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {(activePlanet.members || []).map(member => (
+                      <div key={member.email} className="flex items-center justify-between gap-2 rounded-xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-black text-[var(--earth)]">{member.email}</p>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{member.role}</p>
+                        </div>
+                        {(!activePlanet.ownerId || activePlanet.ownerId === session?.user?.id) && (
+                          <button
+                            onClick={() => unshareActivePlanet(member.email)}
+                            className="rounded-lg bg-red-50 px-2 py-1 text-[10px] font-black text-red-500"
+                          >
+                            Quitar
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -3044,7 +3265,10 @@ export default function App() {
                     {planet.name.slice(0, 1).toUpperCase()}
                   </span>
                   <span className="block min-w-0 mt-3">
-                    <span className="block text-sm font-black truncate">{planet.name}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="block truncate text-sm font-black">{planet.name}</span>
+                      {planet.shared && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" title="Planeta compartido" />}
+                    </span>
                     <span className="block text-[10px] font-bold text-[var(--text-muted)]">{count} ideas</span>
                   </span>
                 </button>
@@ -4073,218 +4297,264 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="space-y-5 p-5 sm:p-6 overflow-y-auto app-scrollbar">
-                  <section className="rounded-[2rem] bg-[var(--bg-app)] border border-[var(--border)] p-4">
-                    <div className="flex items-start gap-4">
-                      <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-[var(--sage)] to-[var(--seed-accent)] text-white flex items-center justify-center font-serif text-xl font-black shadow-lg shadow-[var(--sage)]/15">
-                        {accountInitials}
+                <div className="space-y-4 p-5 sm:p-6 overflow-y-auto app-scrollbar">
+                  <section className="rounded-[2rem] bg-[var(--bg-app)] border border-[var(--border)] p-4 sm:p-5">
+                    <div className="flex flex-col gap-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-4 min-w-0">
+                        <div className="h-16 w-16 rounded-[1.35rem] bg-gradient-to-tr from-[var(--sage)] to-[var(--seed-accent)] text-white flex items-center justify-center font-serif text-2xl font-black shadow-lg shadow-[var(--sage)]/15 shrink-0">
+                          {accountInitials}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Cuenta</p>
+                          <h4 className="mt-1 text-2xl font-serif font-black text-[var(--earth)] truncate">{account.name || 'Tu jardín'}</h4>
+                          <p className="mt-1 text-sm font-black text-[var(--sage)] truncate">{account.purpose || 'Ideas personales'}</p>
+                          <p className="mt-1 text-xs font-semibold text-[var(--text-muted)] truncate">{session?.user?.email || account.email || 'Sin sesión en la nube'}</p>
+                        </div>
+                        </div>
+                        <span className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest shrink-0 ${session?.user ? 'bg-green-100 text-green-700' : isSupabaseConfigured ? 'bg-amber-100 text-amber-700' : 'bg-[var(--surface-strong)] text-[var(--text-muted)]'}`}>
+                          {session?.user ? 'Sync' : 'Local'}
+                        </span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="mb-3 flex flex-wrap items-center gap-2">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Cuenta local</p>
-                          <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${isSupabaseConfigured ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                            {isSupabaseConfigured ? 'Supabase listo' : 'Sin Supabase'}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <label className="block">
-                            <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Nombre</span>
-                            <input
-                              value={account.name}
-                              onChange={(event) => setAccount(current => ({ ...current, name: event.target.value }))}
-                              className="mt-1 w-full rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                              placeholder="Tu nombre"
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Correo</span>
-                            <input
-                              type="email"
-                              value={account.email}
-                              onChange={(event) => setAccount(current => ({ ...current, email: event.target.value }))}
-                              className="mt-1 w-full rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                              placeholder="tu@email.com"
-                            />
-                          </label>
-                          <label className="block sm:col-span-2">
-                            <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Rol</span>
-                            <input
-                              value={account.role}
-                              onChange={(event) => setAccount(current => ({ ...current, role: event.target.value }))}
-                              className="mt-1 w-full rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                              placeholder="Ej. Creador, estudiante, fundador..."
-                            />
-                          </label>
-                        </div>
+
+                      <div className="rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] p-4">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">{profileStats.season}</p>
+                        <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
+                          {account.mantra?.trim() || 'Estoy cultivando ideas que merecen volver a existir fuera de mi cabeza.'}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                        {[
+                          { label: 'Ideas', value: notes.length },
+                          { label: 'Creciendo', value: profileStats.active },
+                          { label: 'Racha', value: wateringRitual.streak },
+                          { label: 'Min', value: profileStats.totalFocus },
+                        ].map(item => (
+                          <div key={item.label} className="rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-3">
+                            <p className="text-2xl font-serif font-black text-[var(--earth)]">{item.value}</p>
+                            <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        {profileAchievements.map(item => (
+                          <div key={item.label} className={`rounded-2xl border px-3 py-2.5 text-xs font-black ${item.active ? 'border-green-100 bg-green-50 text-green-700' : 'border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-muted)]'}`}>
+                            {item.active ? '✓ ' : ''}{item.label}
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                      {[
-                        { label: 'Ideas', value: notes.length },
-                        { label: 'Racha', value: wateringRitual.streak },
-                        { label: 'Min', value: notes.reduce((sum, note) => sum + (note.focusedMinutes || 0), 0) },
-                      ].map(item => (
-                        <div key={item.label} className="rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-3">
-                          <p className="text-2xl font-serif font-black text-[var(--earth)]">{item.value}</p>
-                          <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
-                        </div>
-                      ))}
+                  </section>
+
+                  <section className="rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] p-4 sm:p-5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Perfil</p>
+                        <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">Personaliza cómo Seed entiende tu jardín.</p>
+                      </div>
                     </div>
-                    <div className="mt-4 rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] p-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Sync Supabase</p>
-                          <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">
-                            {session?.user ? `Conectado como ${session.user.email}` : 'Crea una cuenta o inicia sesión para sincronizar entre dispositivos.'}
-                          </p>
-                        </div>
-                        {session?.user && (
-                          <button onClick={signOut} className="rounded-xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2 text-xs font-black text-[var(--sage)]">
-                            Cerrar sesión
-                          </button>
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <label className="block">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Nombre</span>
+                        <input
+                          value={account.name}
+                          onChange={(event) => setAccount(current => ({ ...current, name: event.target.value }))}
+                          className="mt-1 w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                          placeholder="Tu nombre"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Uso principal</span>
+                        <select
+                          value={account.purpose || 'Ideas personales'}
+                          onChange={(event) => setAccount(current => ({ ...current, purpose: event.target.value }))}
+                          className="mt-1 w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                        >
+                          {PROFILE_PURPOSES.map(purpose => (
+                            <option key={purpose} value={purpose}>{purpose}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block sm:col-span-2">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Rol</span>
+                        <input
+                          value={account.role}
+                          onChange={(event) => setAccount(current => ({ ...current, role: event.target.value }))}
+                          className="mt-1 w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                          placeholder="Creador, estudiante..."
+                        />
+                      </label>
+                      <label className="block sm:col-span-2">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Estoy cultivando</span>
+                        <textarea
+                          value={account.mantra || ''}
+                          onChange={(event) => setAccount(current => ({ ...current, mantra: event.target.value }))}
+                          rows={3}
+                          className="mt-1 w-full resize-none rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                          placeholder="Ej. Ideas para crear una vida más tranquila y proyectos que sí quiero terminar."
+                        />
+                      </label>
+                    </div>
+                  </section>
+
+                  <section className="rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] p-4 sm:p-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Sincronización</p>
+                        <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">
+                          {session?.user ? `Conectado como ${session.user.email}` : 'Inicia sesión para llevar tus ideas a otros dispositivos.'}
+                        </p>
+                      </div>
+                      {session?.user ? (
+                        <button onClick={signOut} className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-4 py-2.5 text-xs font-black text-[var(--sage)]">
+                          Cerrar sesión
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {!session?.user ? (
+                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          type="email"
+                          value={authEmail}
+                          onChange={(event) => setAuthEmail(event.target.value)}
+                          placeholder="correo@email.com"
+                          className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                        />
+                        <input
+                          type="password"
+                          value={authPassword}
+                          onChange={(event) => setAuthPassword(event.target.value)}
+                          placeholder="Contraseña"
+                          className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                        />
+                        <button
+                          onClick={signInWithEmail}
+                          disabled={Boolean(authDisabledReason)}
+                          className="sm:col-span-2 rounded-2xl bg-[var(--sage)] disabled:opacity-40 text-white py-3 text-xs font-black"
+                        >
+                          Entrar y sincronizar
+                        </button>
+                        <button
+                          onClick={signUpWithEmail}
+                          disabled={Boolean(authDisabledReason)}
+                          className="sm:col-span-2 text-xs font-black text-[var(--sage)]"
+                        >
+                          Crear cuenta nueva
+                        </button>
+                        {authDisabledReason && (
+                          <p className="sm:col-span-2 text-xs font-semibold text-[var(--text-muted)]">{authDisabledReason}</p>
                         )}
                       </div>
+                    ) : (
+                      <button
+                        onClick={syncGarden}
+                        disabled={isSyncing}
+                        className="mt-4 w-full rounded-2xl bg-[var(--sage)] disabled:opacity-50 text-white py-3 text-xs font-black"
+                      >
+                        {isSyncing ? 'Sincronizando...' : 'Sincronizar ahora'}
+                      </button>
+                    )}
 
-                      {!session?.user && (
-                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <input
-                            type="email"
-                            value={authEmail}
-                            onChange={(event) => setAuthEmail(event.target.value)}
-                            placeholder="correo@email.com"
-                            className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                          />
-                          <input
-                            type="password"
-                            value={authPassword}
-                            onChange={(event) => setAuthPassword(event.target.value)}
-                            placeholder="Contraseña"
-                            className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                          />
-                          <button
-                            onClick={signInWithEmail}
-                            disabled={Boolean(authDisabledReason)}
-                            className="rounded-2xl bg-[var(--sage)] disabled:opacity-40 text-white py-3 text-xs font-black"
-                          >
-                            Iniciar sesión
-                          </button>
-                          <button
-                            onClick={signUpWithEmail}
-                            disabled={Boolean(authDisabledReason)}
-                            className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] text-[var(--sage)] py-3 text-xs font-black"
-                          >
-                            Crear cuenta
-                          </button>
-                          {authDisabledReason && (
-                            <p className="sm:col-span-2 text-xs font-semibold text-[var(--text-muted)]">{authDisabledReason}</p>
-                          )}
-                        </div>
-                      )}
-
-                      {session?.user && (
-                        <button
-                          onClick={syncGarden}
-                          disabled={isSyncing}
-                          className="mt-4 w-full rounded-2xl bg-[var(--sage)] disabled:opacity-50 text-white py-3 text-xs font-black"
-                        >
-                          {isSyncing ? 'Sincronizando...' : 'Sincronizar jardín'}
-                        </button>
-                      )}
-
-                      {(authStatus || syncStatus) && (
-                        <p className="mt-3 text-xs font-semibold text-[var(--text-muted)]">{syncStatus || authStatus}</p>
-                      )}
-                    </div>
-                    <p className="mt-3 text-xs font-semibold text-[var(--text-muted)]">
-                      {isSupabaseConfigured
-                        ? 'Supabase ya esta configurado. El sync es manual por ahora para mantener control sobre los datos locales.'
-                        : 'Esta cuenta vive en este dispositivo. Para sincronizar entre usuarios o equipos hará falta añadir Supabase.'}
-                    </p>
+                    {(authStatus || syncStatus) && (
+                      <p className="mt-3 text-xs font-semibold text-[var(--text-muted)]">{syncStatus || authStatus}</p>
+                    )}
                   </section>
 
-                  <section>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)] mb-3">Ecosistema</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {THEMES.map(item => (
-                        <button
-                          key={item.id}
-                          onClick={() => {
-                            setTheme(item.id);
-                            setPlanets(current => current.map(planet => planet.id === activePlanet.id ? touchPlanet({ ...planet, theme: item.id }) : planet));
+                  <section className="rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] p-4 sm:p-5">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Preferencias</p>
+                    <div className="mt-4 space-y-4">
+                      <label className="flex flex-col gap-2">
+                        <span className="text-sm font-black text-[var(--earth)]">Ecosistema del planeta actual</span>
+                        <select
+                          value={activePlanet.theme || theme}
+                          onChange={(event) => {
+                            const selectedTheme = event.target.value as Theme;
+                            setTheme(selectedTheme);
+                            setPlanets(current => current.map(planet => planet.id === activePlanet.id ? touchPlanet({ ...planet, theme: selectedTheme }) : planet));
                           }}
-                          className={`rounded-2xl border px-3 py-4 text-center transition-all ${(activePlanet.theme || theme) === item.id ? 'bg-[var(--sage)] text-white border-[var(--sage)]' : 'bg-[var(--bg-app)] text-[var(--earth)] border-[var(--border)]'}`}
+                          className="w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-3 text-sm font-bold text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)]"
                         >
-                          <span className="block text-xl mb-2">{item.icon}</span>
-                          <span className="text-[10px] font-black">{item.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
+                          {THEMES.map(item => (
+                            <option key={item.id} value={item.id}>{item.icon} {item.label}</option>
+                          ))}
+                        </select>
+                      </label>
 
-                  <section>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)] mb-3">Riego por defecto</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[1, 3, 7].map(days => (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <label className="flex flex-col gap-2">
+                          <span className="text-sm font-black text-[var(--earth)]">Riego por defecto</span>
+                          <select
+                            value={defaultWateringInterval}
+                            onChange={(event) => setDefaultWateringInterval(Number(event.target.value))}
+                            className="w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-3 text-sm font-bold text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                          >
+                            <option value={1}>Diario</option>
+                            <option value={3}>Cada 3 días</option>
+                            <option value={7}>Semanal</option>
+                          </select>
+                        </label>
+                        <label className="flex flex-col gap-2">
+                          <span className="text-sm font-black text-[var(--earth)]">Hora de recordatorio</span>
+                          <input
+                            type="time"
+                            value={`${String(reminderHour).padStart(2, '0')}:00`}
+                            onChange={(event) => setReminderHour(Number(event.target.value.split(':')[0] || reminderHour))}
+                            className="w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-3 text-sm font-bold text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-4 rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4">
+                        <div>
+                          <p className="font-black text-[var(--earth)]">Recordatorios</p>
+                          <p className="text-xs text-[var(--text-muted)] mt-1">Avisos suaves para volver a ideas que piden riego.</p>
+                        </div>
                         <button
-                          key={days}
-                          onClick={() => setDefaultWateringInterval(days)}
-                          className={`rounded-2xl px-3 py-3 text-xs font-black transition-all ${defaultWateringInterval === days ? 'bg-[var(--sage)] text-white' : 'bg-[var(--bg-app)] text-[var(--sage)] border border-[var(--border)]'}`}
+                          onClick={() => notificationsEnabled ? setNotificationsEnabled(false) : enableNotifications()}
+                          className={`relative h-8 w-14 rounded-full transition-colors ${notificationsEnabled ? 'bg-[var(--sage)]' : 'bg-[var(--border)]'}`}
+                          aria-label={notificationsEnabled ? 'Desactivar recordatorios' : 'Activar recordatorios'}
                         >
-                          {days === 1 ? 'Diario' : days === 3 ? '3 días' : 'Semanal'}
+                          <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${notificationsEnabled ? 'translate-x-7' : 'translate-x-1'}`} />
                         </button>
-                      ))}
+                      </div>
                     </div>
                   </section>
 
-                  <section className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 flex items-center justify-between gap-4">
-                    <div>
-                      <p className="font-black text-[var(--earth)]">Recordatorios</p>
-                      <p className="text-xs text-[var(--text-muted)] mt-1">Aviso diario si hay ideas que valen un riego rápido mientras la app pueda notificar.</p>
+                  <details className="group rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] p-4 sm:p-5">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Datos y ayuda</p>
+                        <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">Exportar, importar, ver guía o borrar datos.</p>
+                      </div>
+                      <ChevronRight className="text-[var(--text-muted)] transition-transform group-open:rotate-90" size={18} />
+                    </summary>
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button onClick={exportGarden} className="rounded-2xl bg-[var(--earth)] text-white py-3 font-black flex items-center justify-center gap-2">
+                        <Download size={17} /> Markdown
+                      </button>
+                      <button onClick={exportBackup} className="rounded-2xl bg-[var(--earth)] text-white py-3 font-black flex items-center justify-center gap-2">
+                        <Download size={17} /> Backup
+                      </button>
+                      <button onClick={() => importInputRef.current?.click()} className="rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] py-3 font-black border border-[var(--border)]">
+                        Importar backup
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowSettings(false);
+                          setShowOnboarding(true);
+                        }}
+                        className="rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] py-3 font-black border border-[var(--border)]"
+                      >
+                        Ver guía
+                      </button>
+                      <button onClick={clearGardenData} className="sm:col-span-2 rounded-2xl bg-red-50 text-red-600 py-3 font-black border border-red-100">
+                        Borrar datos locales
+                      </button>
                     </div>
-                    <button
-                      onClick={() => notificationsEnabled ? setNotificationsEnabled(false) : enableNotifications()}
-                      className={`rounded-full px-4 py-2 text-xs font-black ${notificationsEnabled ? 'bg-[var(--sage)] text-white' : 'bg-[var(--surface-strong)] text-[var(--sage)] border border-[var(--border)]'}`}
-                    >
-                      {notificationsEnabled ? 'Activo' : 'Activar'}
-                    </button>
-                  </section>
-
-                  <section>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)] mb-3">Hora de recordatorio</p>
-                    <input
-                      type="range"
-                      min={7}
-                      max={21}
-                      value={reminderHour}
-                      onChange={(event) => setReminderHour(Number(event.target.value))}
-                      className="w-full accent-[var(--sage)]"
-                    />
-                    <p className="mt-2 text-sm font-black text-[var(--earth)]">{reminderHour}:00</p>
-                  </section>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button onClick={exportGarden} className="rounded-2xl bg-[var(--earth)] text-white py-4 font-black flex items-center justify-center gap-2">
-                      <Download size={17} /> Markdown
-                    </button>
-                    <button onClick={exportBackup} className="rounded-2xl bg-[var(--earth)] text-white py-4 font-black flex items-center justify-center gap-2">
-                      <Download size={17} /> Backup
-                    </button>
-                    <button onClick={() => importInputRef.current?.click()} className="rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] py-4 font-black border border-[var(--border)]">
-                      Importar backup
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowSettings(false);
-                        setShowOnboarding(true);
-                      }}
-                      className="rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] py-4 font-black border border-[var(--border)]"
-                    >
-                      Ver guía
-                    </button>
-                    <button onClick={clearGardenData} className="sm:col-span-2 rounded-2xl bg-red-50 text-red-600 py-4 font-black border border-red-100">
-                      Borrar datos locales
-                    </button>
-                  </div>
+                  </details>
                   <input
                     ref={importInputRef}
                     type="file"
