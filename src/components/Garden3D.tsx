@@ -596,6 +596,54 @@ function SproutTreeModel({ progress, palette }: { progress: number; palette: Gar
   );
 }
 
+function QuickFlowerModel({ seed, palette }: { seed: number; palette: GardenPalette }) {
+  const petalColor = palette.fruit[seed % palette.fruit.length];
+  const centerColor = palette.sparkles;
+
+  return (
+    <group scale={[1.34, 1.34, 1.34]}>
+      <mesh position={[0, 0.48, 0]} castShadow>
+        <cylinderGeometry args={[0.035, 0.062, 0.96, 10]} />
+        <meshStandardMaterial color={palette.leafDark} roughness={0.82} />
+      </mesh>
+      {[
+        { x: 0.17, y: 0.42, z: 0.02, rz: -0.76, color: palette.leaf },
+        { x: -0.17, y: 0.58, z: -0.02, rz: 0.78, color: palette.leafAlt },
+      ].map((leaf, index) => (
+        <mesh key={index} position={[leaf.x, leaf.y, leaf.z]} rotation={[0.2, 0, leaf.rz]} scale={[0.72, 0.24, 0.38]} castShadow>
+          <sphereGeometry args={[0.17, 14, 8]} />
+          <meshStandardMaterial color={leaf.color} roughness={0.78} />
+        </mesh>
+      ))}
+      <group position={[0, 1.08, 0]}>
+        {[0, 1, 2, 3, 4, 5].map((petal) => {
+          const angle = petal * Math.PI / 3 + seed * 0.01;
+          return (
+            <mesh
+              key={petal}
+              position={[Math.cos(angle) * 0.25, Math.sin(angle) * 0.25, 0]}
+              rotation={[0, 0, angle]}
+              scale={[0.5, 0.23, 0.1]}
+              castShadow
+            >
+              <sphereGeometry args={[0.24, 18, 10]} />
+              <meshStandardMaterial color={petal % 2 ? palette.leafAlt : petalColor} roughness={0.58} />
+            </mesh>
+          );
+        })}
+        <mesh position={[0, 0, 0.04]} castShadow>
+          <sphereGeometry args={[0.16, 18, 14]} />
+          <meshStandardMaterial color={centerColor} emissive={centerColor} emissiveIntensity={0.22} roughness={0.45} />
+        </mesh>
+      </group>
+      <mesh position={[0, 0.06, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
+        <circleGeometry args={[0.5, 28]} />
+        <meshStandardMaterial color={palette.leafDark} transparent opacity={0.18} roughness={0.9} />
+      </mesh>
+    </group>
+  );
+}
+
 function BloomTreeModel({ seed, palette }: { seed: number; palette: GardenPalette }) {
   const fruitColor = palette.fruit[seed % palette.fruit.length];
 
@@ -1209,6 +1257,8 @@ function Plant3D({
   const meshRef = useRef<THREE.Group>(null);
   const haloRef = useRef<THREE.Mesh>(null);
   const { growthStage, isGrowth, tasks } = note;
+  const isQuickFlower = growthStage === 'bloom' && !isGrowth;
+  const isCompleted = growthStage === 'bloom';
 
   const [spawned, setSpawned] = useState(false);
   useEffect(() => {
@@ -1270,6 +1320,10 @@ function Plant3D({
   const renderModel = () => {
     const seedValue = note.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
 
+    if (growthStage === 'bloom' && !isGrowth) {
+      return <QuickFlowerModel seed={seedValue} palette={palette} />;
+    }
+
     if (growthStage === 'bloom') {
       return <BloomTreeModel seed={seedValue} palette={palette} />;
     }
@@ -1316,11 +1370,19 @@ function Plant3D({
         </mesh>
       )}
       <group ref={meshRef}>
-        <IdeaPotModel palette={palette} stage={growthStage} selected={selected} needsWater={needsWater} />
+        {!isCompleted && (
+          <IdeaPotModel palette={palette} stage={growthStage} selected={selected} needsWater={needsWater} />
+        )}
+        {isCompleted && selected && (
+          <mesh position={[0, 0.06, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[isQuickFlower ? 0.76 : 1.08, 0.025, 8, 48]} />
+            <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.4} transparent opacity={0.7} depthWrite={false} />
+          </mesh>
+        )}
         {renderModel()}
       </group>
       {showLabel && (
-        <Html position={[0, growthStage === 'bloom' ? 3.45 : growthStage === 'sprout' ? 2.45 : 1.75, 0]} center distanceFactor={compactLabelDistance(growthStage)}>
+        <Html position={[0, isQuickFlower ? 2.35 : growthStage === 'bloom' ? 3.45 : growthStage === 'sprout' ? 2.45 : 1.75, 0]} center distanceFactor={compactLabelDistance(growthStage, isQuickFlower)}>
           <button
             type="button"
             onClick={(event) => {
@@ -1345,7 +1407,8 @@ function Plant3D({
   );
 }
 
-function compactLabelDistance(stage: SeedNote['growthStage']) {
+function compactLabelDistance(stage: SeedNote['growthStage'], compact = false) {
+  if (compact) return 13;
   if (stage === 'bloom') return 13;
   if (stage === 'sprout') return 15;
   return 17;
@@ -1560,7 +1623,7 @@ function formatWatered(note: SeedNote) {
 function stageLabel(note: SeedNote) {
   if (note.paused) return 'Pausada';
   if (wateringDue(note) && note.growthStage !== 'bloom') return 'Pide riego';
-  if (note.growthStage === 'bloom') return 'Lista para cosechar';
+  if (note.growthStage === 'bloom') return note.isGrowth ? 'Árbol logrado' : 'Flor lograda';
   if (note.growthStage === 'sprout') return 'En crecimiento';
   if (note.growthStage === 'withered') return 'Marchita';
   return 'Semilla nueva';
@@ -1594,7 +1657,7 @@ export default function Garden3D({
   variant?: 'app' | 'preview';
   fullscreen?: boolean;
 }) {
-  const palette = GARDEN_PALETTES[theme];
+  const palette = GARDEN_PALETTES[theme] || GARDEN_PALETTES.earth;
   const isPreview = variant === 'preview';
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<GardenFilter>('all');
