@@ -59,6 +59,12 @@
   outline-offset: 3px;
 }
 
+.garden-switcher-input:focus,
+.garden-switcher-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .soft-interaction {
   transition:
     background-color 160ms ease,

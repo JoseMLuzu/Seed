@@ -311,9 +311,9 @@ function QuickCaptureBox({
 
   return (
     <div className="rounded-[1.5rem] border border-[var(--border)] bg-[var(--bg-app)] p-2 shadow-inner shadow-black/[0.02] transition-all focus-within:border-[var(--sage)] focus-within:bg-[var(--surface-strong)] focus-within:ring-2 focus-within:ring-[var(--sage)]/15">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <label className="flex min-h-16 flex-1 items-start gap-3 rounded-[1.2rem] px-3 py-3 sm:min-h-12 sm:items-center">
-          <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)] sm:mt-0">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <label className="flex min-h-14 flex-1 items-center gap-3 rounded-[1.2rem] px-3 py-2">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)]">
             <Sprout size={17} />
           </span>
           <textarea
@@ -325,15 +325,15 @@ function QuickCaptureBox({
                 onSubmit();
               }
             }}
-            rows={2}
+            rows={1}
             placeholder={placeholder}
-            className="min-h-10 w-full resize-none bg-transparent pt-1 text-base font-semibold leading-snug text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)] sm:min-h-8 sm:pt-1 sm:text-sm"
+            className="h-10 w-full resize-none overflow-hidden bg-transparent py-2 text-base font-semibold leading-6 text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)] sm:text-sm"
           />
         </label>
         <button
           onClick={onSubmit}
           disabled={!canSubmit}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-[1.15rem] bg-[var(--sage)] px-5 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 transition-all active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-[1.15rem] bg-[var(--sage)] px-5 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 transition-all active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
         >
           <Plus size={17} /> {buttonLabel}
         </button>
@@ -503,31 +503,11 @@ function CalendarView({
     const now = new Date();
     return isSameMonth(now, monthStart) ? now : monthStart;
   });
-  const [mapWidth, setMapWidth] = useState(() => typeof window === 'undefined' ? 1280 : window.innerWidth);
-  const [mapContainerWidth, setMapContainerWidth] = useState(() => typeof window === 'undefined' ? 1280 : Math.min(window.innerWidth, 1280));
-  const mapContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const now = new Date();
     setSelectedDay(isSameMonth(now, monthStart) ? now : monthStart);
   }, [currentMonth]);
-
-  useEffect(() => {
-    const update = () => setMapWidth(window.innerWidth);
-    update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
-  }, []);
-
-  useEffect(() => {
-    const element = mapContainerRef.current;
-    if (!element) return;
-    const update = () => setMapContainerWidth(element.getBoundingClientRect().width);
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
 
   const activityByDay = useMemo(() => {
     type DayActivity = {
@@ -603,39 +583,17 @@ function CalendarView({
         : selectedActivity.planted.length > 0
           ? `Día de siembra: plantaste ${selectedActivity.planted.length} semilla${selectedActivity.planted.length === 1 ? '' : 's'} nueva${selectedActivity.planted.length === 1 ? '' : 's'}.`
           : `Día de avance: moviste ${selectedActivity.advanced.length} idea${selectedActivity.advanced.length === 1 ? '' : 's'} hacia adelante.`;
-  const mapColumns = mapWidth < 720 ? 3 : mapWidth < 1100 ? 4 : 6;
-  const mapStepY = mapWidth < 720 ? 154 : mapWidth < 1100 ? 162 : 172;
-  const mapTopPadding = mapWidth < 720 ? 92 : 108;
-  const mapRows = Math.ceil(monthDays.length / mapColumns);
-  const mapHeight = Math.max(mapWidth < 720 ? 1120 : 760, mapRows * mapStepY + 220);
-  const mapCanvasWidth = Math.max(352, mapContainerWidth || Math.min(mapWidth, 1280));
-  const mapSidePadding = mapCanvasWidth < 720 ? 64 : 92;
-  const lanes = Array.from({ length: mapColumns }, (_, index) => {
-    return mapSidePadding + ((mapCanvasWidth - mapSidePadding * 2) / (mapColumns - 1)) * index;
-  });
-  const mapNodes = monthDays.map((day, idx) => {
-    const row = Math.floor(idx / mapColumns);
-    const columnIndex = idx % mapColumns;
-    const column = row % 2 === 0 ? columnIndex : mapColumns - 1 - columnIndex;
-    const x = lanes[column] + Math.sin((row + 1) * 0.74) * (mapColumns < 5 ? 8 : 14);
-    const y = mapTopPadding + row * mapStepY + (column % 2) * (mapWidth < 720 ? 8 : 16);
-    return { day, x: Math.max(mapSidePadding * 0.72, Math.min(mapCanvasWidth - mapSidePadding * 0.72, x)), y };
-  });
-  const mapPath = mapNodes.reduce((path, node, index) => {
-    if (index === 0) return `M ${node.x} ${node.y}`;
-    const previous = mapNodes[index - 1];
-    const midY = (previous.y + node.y) / 2;
-    return `${path} C ${previous.x} ${midY}, ${node.x} ${midY}, ${node.x} ${node.y}`;
-  }, '');
-  const mapSegments = mapNodes.slice(1).map((node, index) => {
-    const previous = mapNodes[index];
-    const midY = (previous.y + node.y) / 2;
-    return {
-      id: `${format(previous.day, 'yyyy-MM-dd')}-${format(node.day, 'yyyy-MM-dd')}`,
-      path: `M ${previous.x} ${previous.y} C ${previous.x} ${midY}, ${node.x} ${midY}, ${node.x} ${node.y}`,
-      completed: node.day.getTime() <= Date.now(),
-    };
-  });
+  const weekLabels = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'];
+  const monthStartOffset = (monthStart.getDay() + 6) % 7;
+  const calendarDays = [
+    ...Array.from({ length: monthStartOffset }, () => null),
+    ...monthDays,
+  ];
+  const calendarCells = [
+    ...calendarDays,
+    ...Array.from({ length: Math.ceil(calendarDays.length / 7) * 7 - calendarDays.length }, () => null),
+  ];
+  const calendarRows = Math.max(5, calendarCells.length / 7);
 
   return (
     <motion.div
@@ -644,63 +602,63 @@ function CalendarView({
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-[#eef7ef] text-[var(--text-main)]"
     >
-      <header className="relative z-20 border-b border-white/50 bg-white/70 px-4 py-3 shadow-sm backdrop-blur-2xl sm:px-6">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <header className="relative z-20 shrink-0 border-b border-white/50 bg-white/70 px-3 py-2 shadow-sm backdrop-blur-2xl sm:px-6 sm:py-3">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Camino del jardinero</p>
-            <div className="mt-1 flex flex-wrap items-end gap-x-4 gap-y-1">
-              <h3 className="font-serif text-3xl font-black capitalize leading-none text-[var(--earth)] sm:text-4xl">
+            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)] sm:text-[10px]">Camino del jardinero</p>
+            <div className="mt-0.5 flex flex-wrap items-end gap-x-4 gap-y-1 sm:mt-1">
+              <h3 className="font-serif text-2xl font-black capitalize leading-none text-[var(--earth)] sm:text-4xl">
                 {format(currentMonth, 'MMMM yyyy', { locale: es })}
               </h3>
-              <p className="max-w-2xl pb-1 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
+              <p className="hidden max-w-2xl pb-1 text-sm font-semibold leading-relaxed text-[var(--text-muted)] md:block">
                 Un mapa de tu mes: dias plantados, riegos, avances y cosechas.
               </p>
             </div>
-            <div className="mt-3 flex max-w-xl items-center gap-3">
+            <div className="mt-2 flex max-w-xl items-center gap-2 sm:mt-3 sm:gap-3">
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-emerald-100">
                 <div className="h-full rounded-full bg-[linear-gradient(90deg,#7aa95c,#e3b64b)]" style={{ width: `${monthProgress}%` }} />
               </div>
-              <span className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">{monthProgress}% cultivado</span>
-              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase text-amber-700">{activeStreak} racha</span>
+              <span className="text-[9px] font-black uppercase tracking-widest text-[var(--sage)] sm:text-[10px]">{monthProgress}%</span>
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-700 sm:px-2.5 sm:py-1 sm:text-[10px]">{activeStreak} racha</span>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto pb-0.5 app-scrollbar xl:flex-wrap xl:overflow-visible">
             {[
               { label: 'Dias', value: monthSummary.activeDays, icon: CalendarIcon, tone: 'text-[var(--sage)]' },
               { label: 'Plantadas', value: monthSummary.planted, icon: Sprout, tone: 'text-amber-600' },
               { label: 'Riegos', value: monthSummary.watered, icon: Droplets, tone: 'text-sky-600' },
               { label: 'Cosechas', value: monthSummary.harvested, icon: CheckCircle2, tone: 'text-green-600' },
             ].map(item => (
-              <div key={item.label} className="flex h-11 items-center gap-2 rounded-2xl border border-white/60 bg-white/65 px-3 shadow-sm">
-                <item.icon size={15} className={item.tone} />
-                <span className="font-serif text-xl font-black text-[var(--earth)]">{item.value}</span>
-                <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</span>
+              <div key={item.label} className="flex h-9 shrink-0 items-center gap-1.5 rounded-2xl border border-white/60 bg-white/65 px-2.5 shadow-sm sm:h-11 sm:gap-2 sm:px-3">
+                <item.icon size={14} className={item.tone} />
+                <span className="font-serif text-lg font-black text-[var(--earth)] sm:text-xl">{item.value}</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)] sm:text-[9px]">{item.label}</span>
               </div>
             ))}
-            <div className="ml-0 flex items-center gap-2 xl:ml-2">
+            <div className="ml-auto flex shrink-0 items-center gap-1.5 xl:ml-2 xl:gap-2">
               <button
                 onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                className="grid h-11 w-11 place-items-center rounded-2xl border border-[var(--border)] bg-white/75 text-[var(--sage)] transition-colors hover:bg-white"
+                className="grid h-9 w-9 place-items-center rounded-2xl border border-[var(--border)] bg-white/75 text-[var(--sage)] transition-colors hover:bg-white sm:h-11 sm:w-11"
                 aria-label="Mes anterior"
               >
-                <ChevronLeft size={20} />
+                <ChevronLeft size={18} />
               </button>
               <button
                 onClick={() => setCurrentMonth(new Date())}
-                className="h-11 rounded-2xl border border-[var(--border)] bg-white/75 px-4 text-xs font-black uppercase text-[var(--sage)] transition-colors hover:bg-white"
+                className="h-9 rounded-2xl border border-[var(--border)] bg-white/75 px-3 text-[10px] font-black uppercase text-[var(--sage)] transition-colors hover:bg-white sm:h-11 sm:px-4 sm:text-xs"
               >
                 Hoy
               </button>
               <button
                 onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                className="grid h-11 w-11 place-items-center rounded-2xl border border-[var(--border)] bg-white/75 text-[var(--sage)] transition-colors hover:bg-white"
+                className="grid h-9 w-9 place-items-center rounded-2xl border border-[var(--border)] bg-white/75 text-[var(--sage)] transition-colors hover:bg-white sm:h-11 sm:w-11"
                 aria-label="Mes siguiente"
               >
-                <ChevronRight size={20} />
+                <ChevronRight size={18} />
               </button>
               <button
                 onClick={onExit}
-                className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--earth)] text-white shadow-lg shadow-black/10 transition-colors hover:bg-[var(--sage)]"
+                className="grid h-9 w-9 place-items-center rounded-2xl bg-[var(--earth)] text-white shadow-lg shadow-black/10 transition-colors hover:bg-[var(--sage)] sm:h-11 sm:w-11"
                 aria-label="Cerrar mapa"
               >
                 <X size={18} />
@@ -710,114 +668,77 @@ function CalendarView({
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_24rem]">
-        <div className="relative min-h-0 overflow-hidden bg-[#eef5ef]">
-          <div className="relative h-full overflow-auto app-scrollbar">
-            <div ref={mapContainerRef} className="relative mx-auto w-full min-w-[22rem] max-w-[1280px]" style={{ height: mapHeight }}>
-              <div className="pointer-events-none absolute inset-0 overflow-hidden">
-                <div className="absolute inset-0 bg-[linear-gradient(180deg,#d8edf2_0%,#f7f7ef_30%,#dfe9c8_56%,#8cad77_100%)]" />
-                <div className="absolute inset-x-0 top-0 h-[36%] bg-[radial-gradient(circle_at_18%_16%,rgba(255,246,208,0.86)_0_4.5%,rgba(255,246,208,0.28)_8%,transparent_20%),radial-gradient(ellipse_at_68%_18%,rgba(255,255,255,0.48)_0_12%,transparent_38%)]" />
-                <div className="absolute left-[-18%] top-[26%] h-[30%] w-[70%] rounded-[50%] bg-[#dbe7cd] shadow-[inset_-60px_-28px_90px_rgba(50,75,45,0.10)]" />
-                <div className="absolute right-[-18%] top-[22%] h-[34%] w-[72%] rounded-[50%] bg-[#c9ddb8] shadow-[inset_52px_-28px_90px_rgba(50,75,45,0.11)]" />
-                <div className="absolute inset-x-[-8%] top-[45%] h-[34%] rounded-[50%] bg-[#b0ca90] shadow-[inset_0_34px_90px_rgba(255,255,255,0.20)]" />
-                <div className="absolute inset-x-0 top-[63%] bottom-0 bg-[linear-gradient(180deg,#95b575_0%,#71965f_52%,#49694c_100%)]" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_72%,rgba(255,255,255,0.14)_0_1.3%,transparent_1.8%),radial-gradient(circle_at_73%_54%,rgba(255,255,255,0.12)_0_1.1%,transparent_1.6%),radial-gradient(circle_at_42%_86%,rgba(255,235,188,0.12)_0_1.2%,transparent_1.7%)] bg-[length:190px_160px] opacity-70" />
-                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(25,45,31,0.035)_1px,transparent_1px),linear-gradient(180deg,rgba(25,45,31,0.028)_1px,transparent_1px)] bg-[length:80px_80px] opacity-35" />
-                {[
-                  { left: '5%', top: '30%', scale: 0.62 },
-                  { left: '90%', top: '28%', scale: 0.72 },
-                  { left: '9%', top: '58%', scale: 0.86 },
-                  { left: '86%', top: '68%', scale: 0.72 },
-                  { left: '48%', top: '82%', scale: 0.58 },
-                ].map((tree, index) => (
-                  <div key={index} className="absolute" style={{ left: tree.left, top: tree.top, transform: `scale(${tree.scale})` }}>
-                    <div className="mx-auto h-20 w-5 rounded-t-full bg-[#6f5138]" />
-                    <div className="-mt-32 h-32 w-36 rounded-[48%] bg-[#335f3f] opacity-70 shadow-[inset_-20px_-14px_0_rgba(0,0,0,0.08)]" />
-                  </div>
-                ))}
-                {[
-                  { left: '20%', top: '58%' },
-                  { left: '64%', top: '68%' },
-                  { left: '35%', top: '82%' },
-                  { left: '90%', top: '52%' },
-                  { left: '8%', top: '78%' },
-                ].map((flower, index) => (
-                  <div key={index} className="absolute grid h-8 w-8 place-items-center rounded-full bg-white/40 text-[#d28b74] shadow-sm backdrop-blur" style={{ left: flower.left, top: flower.top }}>
-                    <Sparkles size={13} />
-                  </div>
-                ))}
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,transparent_0_42%,rgba(30,55,34,0.14)_100%)]" />
-              </div>
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] gap-0 xl:grid-cols-[minmax(0,1fr)_24rem] xl:grid-rows-1">
+        <div className="relative flex min-h-0 overflow-hidden bg-[linear-gradient(180deg,#eef7ef,#dfead8)] p-1.5 sm:p-4">
+          <div className="mx-auto flex h-full w-full max-w-7xl min-w-0 flex-col rounded-[1.4rem] border border-white/70 bg-white/58 p-1.5 shadow-2xl shadow-[#40583a]/10 backdrop-blur-2xl sm:rounded-[2rem] sm:p-4">
+            <div className="grid shrink-0 grid-cols-7 gap-1.5 sm:gap-2">
+              {weekLabels.map(label => (
+                <div key={label} className="rounded-xl bg-white/60 px-1 py-1 text-center text-[7px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)] sm:rounded-2xl sm:px-2 sm:py-2 sm:text-[10px]">
+                  {label}
+                </div>
+              ))}
+            </div>
 
-              <svg
-                className="pointer-events-none absolute inset-0 h-full w-full"
-                viewBox={`0 0 ${mapCanvasWidth} ${mapHeight}`}
-                aria-hidden="true"
-              >
-                <defs>
-                  <filter id="calendarPathLift" x="-8%" y="-8%" width="116%" height="116%">
-                    <feDropShadow dx="0" dy="12" stdDeviation="7" floodColor="#263725" floodOpacity="0.22" />
-                    <feDropShadow dx="0" dy="2" stdDeviation="1.5" floodColor="#ffffff" floodOpacity="0.42" />
-                  </filter>
-                  <linearGradient id="calendarPathSurface" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="rgba(255,255,255,0.96)" />
-                    <stop offset="54%" stopColor="rgba(255,255,255,0.72)" />
-                    <stop offset="100%" stopColor="rgba(231,239,221,0.78)" />
-                  </linearGradient>
-                  <linearGradient id="calendarPathProgress" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#fff1a8" />
-                    <stop offset="50%" stopColor="#9fbc73" />
-                    <stop offset="100%" stopColor="#6e945d" />
-                  </linearGradient>
-                </defs>
-                <path d={mapPath} fill="none" stroke="rgba(37,54,39,0.12)" strokeWidth="34" strokeLinecap="round" filter="url(#calendarPathLift)" />
-                <path d={mapPath} fill="none" stroke="rgba(255,255,255,0.64)" strokeWidth="28" strokeLinecap="round" />
-                <path d={mapPath} fill="none" stroke="rgba(126,153,105,0.16)" strokeWidth="23" strokeLinecap="round" transform="translate(0 5)" />
-                <path d={mapPath} fill="none" stroke="url(#calendarPathSurface)" strokeWidth="22" strokeLinecap="round" />
-                {mapSegments.map(segment => (
-                  <path
-                    key={segment.id}
-                    d={segment.path}
-                    fill="none"
-                    stroke={segment.completed ? 'url(#calendarPathProgress)' : 'rgba(255,255,255,0.18)'}
-                    strokeWidth="13"
-                    strokeLinecap="round"
-                  />
-                ))}
-                <path d={mapPath} fill="none" stroke="rgba(255,255,255,0.72)" strokeWidth="3" strokeLinecap="round" strokeDasharray="1 18" />
-              </svg>
+            <div
+              className="mt-1 grid min-h-0 flex-1 grid-cols-7 gap-1 sm:mt-2 sm:gap-2"
+              style={{ gridTemplateRows: `repeat(${calendarRows}, minmax(0, 1fr))` }}
+            >
+              {calendarCells.map((day, index) => {
+                if (!day) {
+                  return (
+                    <div
+                      key={`empty-${index}`}
+                      className="min-h-0 rounded-xl border border-white/40 bg-white/20 sm:rounded-[1.4rem]"
+                    />
+                  );
+                }
 
-              {mapNodes.map(({ day, x, y }, idx) => {
-            const dateKey = format(day, 'yyyy-MM-dd');
-            const activity = activityByDay[dateKey] || { planted: [], watered: [], harvested: [], advanced: [], due: [] };
-            const activityCount = activity.planted.length + activity.watered.length + activity.harvested.length + activity.advanced.length;
-            const hasActivity = activityCount > 0;
-            const isSelected = isSameDay(day, selectedDay);
-            const isTodayDay = isToday(day);
-            const strongest =
-              activity.harvested.length > 0 ? 'harvested' :
-              activity.watered.length > 0 ? 'watered' :
-              activity.advanced.length > 0 ? 'advanced' :
-              activity.planted.length > 0 ? 'planted' : 'empty';
-            const NodeIcon =
-              strongest === 'harvested' ? CheckCircle2 :
-              strongest === 'watered' ? Droplets :
-              strongest === 'advanced' ? TrendingUp :
-              strongest === 'planted' ? Sprout :
-              Leaf;
+                const dateKey = format(day, 'yyyy-MM-dd');
+                const activity = activityByDay[dateKey] || { planted: [], watered: [], harvested: [], advanced: [], due: [] };
+                const activityCount = activity.planted.length + activity.watered.length + activity.harvested.length + activity.advanced.length;
+                const hasActivity = activityCount > 0;
+                const isSelected = isSameDay(day, selectedDay);
+                const isTodayDay = isToday(day);
+                const strongest =
+                  activity.harvested.length > 0 ? 'harvested' :
+                  activity.watered.length > 0 ? 'watered' :
+                  activity.advanced.length > 0 ? 'advanced' :
+                  activity.planted.length > 0 ? 'planted' : 'empty';
+                const NodeIcon =
+                  strongest === 'harvested' ? CheckCircle2 :
+                  strongest === 'watered' ? Droplets :
+                  strongest === 'advanced' ? TrendingUp :
+                  strongest === 'planted' ? Sprout :
+                  Leaf;
 
-            return (
-                <div
-                  key={dateKey}
-                  className="absolute"
-                  style={{ left: x, top: y, transform: 'translate(-50%, -50%)' }}
-                >
+                return (
                   <button
+                    key={dateKey}
                     type="button"
                     onClick={() => setSelectedDay(day)}
-                    className={`group relative grid h-[clamp(4rem,7.2vw,5.7rem)] w-[clamp(4rem,7.2vw,5.7rem)] place-items-center rounded-full border-[5px] text-center shadow-[0_18px_45px_rgba(31,45,35,0.18)] transition-all hover:-translate-y-1 ${
+                    className={`group relative flex min-h-0 flex-col items-center justify-center overflow-hidden rounded-xl border p-0.5 text-center transition-all hover:-translate-y-0.5 hover:shadow-xl sm:rounded-[1.4rem] sm:p-2 ${
                       isSelected
-                        ? 'border-white bg-[var(--sage)] text-white ring-4 ring-white/50'
+                        ? 'border-[var(--sage)] bg-white shadow-2xl shadow-[var(--sage)]/12 ring-2 ring-[var(--sage)]/20'
+                        : isTodayDay
+                          ? 'border-[var(--earth)]/20 bg-white/82 shadow-lg shadow-black/5'
+                          : hasActivity
+                            ? 'border-white/80 bg-white/72 shadow-md shadow-black/5'
+                            : 'border-white/55 bg-white/38 hover:bg-white/62'
+                    }`}
+                    aria-label={`Dia ${format(day, 'd')}`}
+                  >
+                    <span className="absolute left-1 top-1 text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)] sm:left-2 sm:top-2 sm:text-xs">
+                      {format(day, 'd')}
+                    </span>
+                    {isTodayDay && (
+                      <span className="absolute right-1 top-1 rounded-full bg-[var(--earth)] px-1 py-0.5 text-[6px] font-black uppercase text-white sm:right-2 sm:top-2 sm:px-2 sm:text-[8px]">
+                        Hoy
+                      </span>
+                    )}
+
+                    <span className={`relative grid h-[clamp(1.8rem,4.4vh,4rem)] w-[clamp(1.8rem,4.4vh,4rem)] place-items-center rounded-full border-[3px] shadow-[0_10px_22px_rgba(31,45,35,0.12)] sm:h-[clamp(2.15rem,5.4vh,4rem)] sm:w-[clamp(2.15rem,5.4vh,4rem)] sm:border-[4px] ${
+                      isSelected
+                        ? 'border-white bg-[var(--sage)] text-white'
                         : isTodayDay
                           ? 'border-white bg-[var(--earth)] text-white'
                           : strongest === 'harvested'
@@ -829,75 +750,62 @@ function CalendarView({
                                 : strongest === 'planted'
                                   ? 'border-white bg-amber-400 text-amber-950'
                                   : 'border-white bg-[var(--surface-strong)] text-[var(--text-muted)]'
-                    }`}
-                    aria-label={`Dia ${format(day, 'd')}`}
-                  >
-                    <span className="absolute -top-2 -right-2 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[var(--earth)] text-[10px] font-black text-white shadow-md">
-                      {format(day, 'd')}
+                    }`}>
+                      <NodeIcon size={15} className="sm:h-6 sm:w-6" />
+                      {activity.due.length > 0 && (
+                        <span className="absolute -left-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-violet-500 shadow sm:h-3.5 sm:w-3.5" />
+                      )}
+                      {(activity.harvested.length > 0 || activityCount >= 3) && (
+                        <span className="absolute -right-1 bottom-0 grid h-4 w-4 place-items-center rounded-full border-2 border-white bg-yellow-300 text-yellow-900 shadow-lg sm:-right-2 sm:bottom-1 sm:h-6 sm:w-6">
+                          <Sparkles size={9} />
+                        </span>
+                      )}
                     </span>
-                    <NodeIcon size={24} />
-                    {hasActivity && (
-                      <span className="absolute -bottom-2 rounded-full border-2 border-white bg-white px-2 py-0.5 text-[9px] font-black uppercase text-[var(--earth)] shadow">
-                        {activityCount}
-                      </span>
-                    )}
-                    {activity.due.length > 0 && (
-                      <span className="absolute -left-2 top-2 h-4 w-4 rounded-full border-2 border-white bg-violet-500 shadow" />
-                    )}
-                    {(activity.harvested.length > 0 || activityCount >= 3) && (
-                      <span className="absolute -right-3 bottom-3 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-yellow-300 text-yellow-900 shadow-lg">
-                        <Sparkles size={13} />
-                      </span>
-                    )}
-                  </button>
-                  <div className={`mt-3 w-32 -translate-x-4 rounded-2xl border border-white/70 bg-white/80 px-2 py-1.5 text-center shadow-sm backdrop-blur ${isSelected ? 'opacity-100' : 'opacity-0 transition-opacity group-hover:opacity-100'}`}>
-                    <p className="truncate text-[10px] font-black uppercase text-[var(--earth)]">
-                      {hasActivity ? `${activityCount} evento${activityCount === 1 ? '' : 's'}` : 'Dia libre'}
-                    </p>
-                    <div className="mt-1 flex justify-center gap-1">
-                      {activity.planted.length > 0 && <Sprout size={11} className="text-amber-600" />}
-                      {activity.watered.length > 0 && <Droplets size={11} className="text-sky-600" />}
-                      {activity.advanced.length > 0 && <TrendingUp size={11} className="text-emerald-600" />}
-                      {activity.harvested.length > 0 && <CheckCircle2 size={11} className="text-green-600" />}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
 
-              <div className="pointer-events-none absolute left-8 top-28 hidden rounded-[2rem] border border-white/60 bg-white/60 p-4 shadow-lg backdrop-blur sm:block">
-                <Sprout className="text-amber-600" size={22} />
-                <p className="mt-2 max-w-32 text-xs font-black leading-tight text-[var(--earth)]">Inicio del mes</p>
-              </div>
+                    <span className={`mt-1 hidden max-w-full truncate rounded-full px-1.5 py-0.5 text-[7px] font-black uppercase tracking-widest min-[430px]:inline-flex sm:mt-2 sm:px-2.5 sm:py-1 sm:text-[9px] ${
+                      hasActivity ? 'bg-[var(--surface-strong)] text-[var(--earth)]' : 'bg-white/45 text-[var(--text-muted)]'
+                    }`}>
+                      {hasActivity ? `${activityCount} evento${activityCount === 1 ? '' : 's'}` : 'Libre'}
+                    </span>
+
+                    <span className="mt-0.5 hidden h-3 justify-center gap-0.5 min-[430px]:flex sm:mt-1.5 sm:h-4 sm:gap-1">
+                      {activity.planted.length > 0 && <Sprout size={10} className="text-amber-600 sm:h-3 sm:w-3" />}
+                      {activity.watered.length > 0 && <Droplets size={10} className="text-sky-600 sm:h-3 sm:w-3" />}
+                      {activity.advanced.length > 0 && <TrendingUp size={10} className="text-emerald-600 sm:h-3 sm:w-3" />}
+                      {activity.harvested.length > 0 && <CheckCircle2 size={10} className="text-green-600 sm:h-3 sm:w-3" />}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
 
-        <aside className="min-h-0 overflow-y-auto border-l border-white/60 bg-white/74 p-5 shadow-2xl backdrop-blur-2xl app-scrollbar">
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Dia seleccionado</p>
-          <h4 className="mt-2 font-serif text-3xl font-black capitalize text-[var(--earth)]">
+        <aside className="max-h-[32vh] min-h-0 overflow-y-auto border-t border-white/60 bg-white/80 p-3 shadow-2xl backdrop-blur-2xl app-scrollbar sm:max-h-[36vh] sm:p-5 xl:max-h-none xl:border-l xl:border-t-0">
+          <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)] sm:text-[10px]">Dia seleccionado</p>
+          <h4 className="mt-1 font-serif text-2xl font-black capitalize text-[var(--earth)] sm:mt-2 sm:text-3xl">
             {format(selectedDay, "d 'de' MMMM", { locale: es })}
           </h4>
-          <div className="mt-4 rounded-[1.5rem] border border-[var(--border)] bg-[var(--bg-app)] p-4">
+          <div className="mt-3 rounded-[1.25rem] border border-[var(--border)] bg-[var(--bg-app)] p-3 sm:mt-4 sm:rounded-[1.5rem] sm:p-4">
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--sage)]">Resumen del día</p>
-            <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--earth)]">{daySummary}</p>
+            <p className="mt-1 line-clamp-2 text-sm font-semibold leading-relaxed text-[var(--earth)] sm:mt-2 sm:line-clamp-none">{daySummary}</p>
           </div>
 
-          <div className="mt-5 grid grid-cols-4 gap-2 text-center">
+          <div className="mt-3 grid grid-cols-4 gap-1.5 text-center sm:mt-5 sm:gap-2">
             {[
               { label: 'Plant', value: selectedActivity.planted.length, tone: 'text-amber-600' },
               { label: 'Riego', value: selectedActivity.watered.length, tone: 'text-sky-600' },
               { label: 'Avance', value: selectedActivity.advanced.length, tone: 'text-emerald-600' },
               { label: 'Cosecha', value: selectedActivity.harvested.length, tone: 'text-green-600' },
             ].map(item => (
-              <div key={item.label} className="rounded-2xl bg-[var(--bg-app)] px-2 py-3">
-                <p className={`text-lg font-black ${item.tone}`}>{item.value}</p>
+              <div key={item.label} className="rounded-2xl bg-[var(--bg-app)] px-2 py-2 sm:py-3">
+                <p className={`text-base font-black sm:text-lg ${item.tone}`}>{item.value}</p>
                 <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
               </div>
             ))}
           </div>
 
-          <div className="mt-5 space-y-2">
+          <div className="mt-3 space-y-2 sm:mt-5">
             {selectedEvents.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-app)] p-5 text-center">
                 <Leaf className="mx-auto text-[var(--sage)] opacity-50" size={26} />
@@ -2824,6 +2732,7 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('seed-onboarded') !== 'true');
   const [showSettings, setShowSettings] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showGardenSwitcher, setShowGardenSwitcher] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -3607,6 +3516,7 @@ export default function App() {
     setSearch('');
     setFilterStage('all');
     setView('today');
+    setShowGardenSwitcher(false);
   };
 
   const addPlanet = () => {
@@ -3862,114 +3772,201 @@ export default function App() {
           </button>
         </motion.div>
 
-        <div className="space-y-3 mb-8">
-          <div className="flex items-center justify-between px-4">
-            <div>
-              <p className="text-[10px] uppercase font-black text-[var(--seed-accent)] tracking-[0.25em] opacity-50">Jardines</p>
-              <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)] opacity-60">Espacios de trabajo</p>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={openPlanetSettings}
-                className="h-7 w-7 rounded-full bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors"
-                aria-label="Editar jardín activo"
-                title="Editar jardín activo"
-              >
-                <Settings size={14} />
-              </button>
-              <button
-                onClick={() => { setIsAddingPlanet(!isAddingPlanet); setShowPlanetSettings(false); }}
-                className="h-7 w-7 rounded-full bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors"
-                aria-label="Agregar jardín"
-                title="Agregar jardín"
-              >
-                <Plus size={15} />
-              </button>
-            </div>
-          </div>
+        <div className="mb-8 space-y-3">
+          <p className="px-4 text-[10px] uppercase font-black tracking-[0.25em] text-[var(--seed-accent)] opacity-50">Jardines</p>
 
-          {isAddingPlanet && (
-            <div className="rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] p-3">
-              <input
-                autoFocus
-                value={newPlanetName}
-                onChange={(event) => setNewPlanetName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') addPlanet();
-                  if (event.key === 'Escape') setIsAddingPlanet(false);
-                }}
-                placeholder="Nombre del jardín..."
-                className="w-full bg-[var(--surface-strong)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
-              />
-              <button
-                onClick={addPlanet}
-                disabled={!newPlanetName.trim()}
-                className="mt-2 w-full rounded-xl bg-[var(--sage)] disabled:opacity-40 text-white py-2 text-xs font-black"
-              >
-                Crear jardín
-              </button>
-            </div>
-          )}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowGardenSwitcher(value => !value)}
+              className="group flex w-full items-center gap-3 rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)]/90 p-3 text-left shadow-xl shadow-black/[0.04] ring-1 ring-white/40 backdrop-blur-xl soft-interaction hover:border-[var(--sage)]/25"
+              aria-expanded={showGardenSwitcher}
+              aria-label="Cambiar jardín"
+            >
+              <span className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[1.2rem] bg-[var(--bg-app)] font-serif text-lg font-black text-[var(--sage)] ring-1 ring-[var(--border)]">
+                <span className="absolute inset-0 bg-[radial-gradient(circle_at_35%_20%,rgba(255,255,255,0.85),transparent_36%)]" />
+                <span className="relative">{activePlanet.name.slice(0, 1).toUpperCase()}</span>
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-base font-black tracking-tight text-[var(--earth)]">{activePlanet.name}</span>
+                <span className="mt-0.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                  {planetNoteCounts.get(activePlanet.id) || 0} ideas
+                </span>
+              </span>
+              <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)] transition-transform ${showGardenSwitcher ? 'rotate-180' : ''}`}>
+                <ChevronDown size={17} />
+              </span>
+            </button>
 
-          {showPlanetSettings && (
-            <div className="rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] p-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[var(--seed-accent)] mb-2">Jardín activo</p>
-              <input
-                autoFocus
-                value={editingPlanetName}
-                onChange={(event) => setEditingPlanetName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') renameActivePlanet();
-                  if (event.key === 'Escape') setShowPlanetSettings(false);
-                }}
-                className="w-full bg-[var(--surface-strong)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
-              />
-              <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
-                <button
-                  onClick={renameActivePlanet}
-                  disabled={!editingPlanetName.trim()}
-                  className="rounded-xl bg-[var(--sage)] disabled:opacity-40 text-white py-2 text-xs font-black"
+            <AnimatePresence initial={false}>
+              {showGardenSwitcher && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                  transition={{ duration: 0.18 }}
+                  className="mt-2 overflow-hidden rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)]/95 p-2 shadow-2xl shadow-black/[0.08] ring-1 ring-white/40 backdrop-blur-xl"
                 >
-                  Guardar nombre
-                </button>
-                <button
-                  onClick={deleteActivePlanet}
-                  className="rounded-xl bg-red-50 text-red-500 px-3 py-2 text-xs font-black border border-red-100 hover:bg-red-100 transition-colors"
-                  title="Borrar jardín"
-                  aria-label="Borrar jardín activo"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          )}
+                  <div className="max-h-52 space-y-1 overflow-y-auto pr-1 app-scrollbar">
+                    {planets.map((planet) => {
+                      const count = planetNoteCounts.get(planet.id) || 0;
+                      const isActive = activePlanet.id === planet.id;
 
-          <div className="flex gap-2 overflow-x-auto pb-2 px-1 app-scrollbar snap-x snap-mandatory">
-            {planets.map((planet) => {
-              const count = planetNoteCounts.get(planet.id) || 0;
-              return (
-                <button
-                  key={planet.id}
-                  onClick={() => {
-                    switchPlanet(planet.id);
-                    setShowMobileMenu(false);
-                  }}
-                  className={`snap-start shrink-0 w-28 rounded-2xl px-3 py-3 soft-interaction text-left ${
-                    activePlanet.id === planet.id
-                      ? 'bg-[var(--surface-strong)] shadow-xl shadow-black/5 text-[var(--sage)] ring-1 ring-black/5'
-                      : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'
-                  }`}
-                >
-                  <span className="h-9 w-9 rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] flex items-center justify-center font-serif font-black text-sm">
-                    {planet.name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span className="block min-w-0 mt-3">
-                    <span className="block truncate text-sm font-black">{planet.name}</span>
-                    <span className="block text-[10px] font-bold text-[var(--text-muted)]">{count} ideas</span>
-                  </span>
-                </button>
-              );
-            })}
+                      return (
+                        <button
+                          key={planet.id}
+                          onClick={() => {
+                            switchPlanet(planet.id);
+                            setShowMobileMenu(false);
+                          }}
+                          className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors ${
+                            isActive
+                              ? 'bg-[var(--bg-app)] text-[var(--sage)]'
+                              : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'
+                          }`}
+                        >
+                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] font-serif text-sm font-black">
+                            {planet.name.slice(0, 1).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-black">{planet.name}</span>
+                            <span className="block text-[10px] font-bold text-[var(--text-muted)]">{count} ideas</span>
+                          </span>
+                          {isActive && <CheckCircle2 size={16} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-2 space-y-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingPlanet(value => !value);
+                        setShowPlanetSettings(false);
+                      }}
+                      className={`flex h-11 w-full items-center justify-between gap-3 rounded-2xl px-3 text-left text-xs font-black transition-all ${
+                        isAddingPlanet
+                          ? 'bg-[var(--sage)] text-white shadow-lg shadow-[var(--sage)]/20'
+                          : 'bg-[var(--sage)]/10 text-[var(--sage)] hover:bg-[var(--sage)]/15'
+                      }`}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-xl ${isAddingPlanet ? 'bg-white/20' : 'bg-[var(--surface-strong)]'}`}>
+                          <Plus size={15} />
+                        </span>
+                        <span>Crear jardín</span>
+                      </span>
+                      <ChevronRight size={15} className={isAddingPlanet ? 'rotate-90 transition-transform' : 'transition-transform'} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openPlanetSettings}
+                      className={`flex h-10 w-full items-center justify-between gap-3 rounded-2xl border px-3 text-left text-xs font-black transition-all ${
+                        showPlanetSettings
+                          ? 'border-[var(--sage)]/30 bg-[var(--surface-soft)] text-[var(--sage)] shadow-sm'
+                          : 'border-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface-soft)] hover:text-[var(--sage)]'
+                      }`}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-[var(--surface-strong)]">
+                          <Settings size={14} />
+                        </span>
+                        <span>Administrar jardín actual</span>
+                      </span>
+                      <ChevronRight size={14} className={showPlanetSettings ? 'rotate-90 transition-transform' : 'transition-transform'} />
+                    </button>
+                  </div>
+
+                  {isAddingPlanet && (
+                    <div className="mt-2 rounded-[1.35rem] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-app),var(--surface-soft))] p-3 shadow-inner shadow-white/40">
+                      <div className="mb-3 flex items-center gap-2">
+                        <span className="grid h-8 w-8 place-items-center rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)] ring-1 ring-[var(--border)]">
+                          <Plus size={15} />
+                        </span>
+                        <div>
+                          <p className="text-xs font-black text-[var(--earth)]">Nuevo jardín</p>
+                          <p className="text-[10px] font-semibold text-[var(--text-muted)]">Crea un espacio para un tema.</p>
+                        </div>
+                      </div>
+                      <label className="flex h-12 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-3 shadow-sm focus-within:border-[var(--sage)] focus-within:ring-2 focus-within:ring-[var(--sage)]/10">
+                        <Sprout size={15} className="shrink-0 text-[var(--sage)]" />
+                        <input
+                          value={newPlanetName}
+                          onChange={(event) => setNewPlanetName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') addPlanet();
+                            if (event.key === 'Escape') setIsAddingPlanet(false);
+                          }}
+                          placeholder="Ej. Trabajo, Universidad..."
+                          className="garden-switcher-input h-full min-w-0 flex-1 bg-transparent text-sm font-semibold text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]"
+                        />
+                      </label>
+                      <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+                        <button
+                          onClick={addPlanet}
+                          disabled={!newPlanetName.trim()}
+                          className="h-11 rounded-2xl bg-[var(--sage)] text-xs font-black text-white shadow-lg shadow-[var(--sage)]/15 disabled:opacity-40"
+                        >
+                          Crear
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingPlanet(false)}
+                          className="grid h-11 w-11 place-items-center rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-muted)] transition-colors hover:text-[var(--earth)]"
+                          aria-label="Cancelar crear jardín"
+                        >
+                          <X size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {showPlanetSettings && (
+                    <div className="mt-2 rounded-[1.35rem] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-app),var(--surface-soft))] p-3 shadow-inner shadow-white/40">
+                      <div className="mb-3 flex items-center gap-2">
+                        <span className="grid h-8 w-8 place-items-center rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)] ring-1 ring-[var(--border)]">
+                          <Settings size={15} />
+                        </span>
+                        <div>
+                          <p className="text-xs font-black text-[var(--earth)]">Jardín actual</p>
+                          <p className="text-[10px] font-semibold text-[var(--text-muted)]">Renombra o elimina este jardín.</p>
+                        </div>
+                      </div>
+                      <label className="flex h-12 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-3 shadow-sm focus-within:border-[var(--sage)] focus-within:ring-2 focus-within:ring-[var(--sage)]/10">
+                        <Leaf size={15} className="shrink-0 text-[var(--sage)]" />
+                        <input
+                          value={editingPlanetName}
+                          onChange={(event) => setEditingPlanetName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') renameActivePlanet();
+                            if (event.key === 'Escape') setShowPlanetSettings(false);
+                          }}
+                          className="garden-switcher-input h-full min-w-0 flex-1 bg-transparent text-sm font-semibold text-[var(--earth)] outline-none"
+                        />
+                      </label>
+                      <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+                        <button
+                          onClick={renameActivePlanet}
+                          disabled={!editingPlanetName.trim()}
+                          className="h-11 rounded-2xl bg-[var(--sage)] text-xs font-black text-white shadow-lg shadow-[var(--sage)]/15 disabled:opacity-40"
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          onClick={deleteActivePlanet}
+                          className="grid h-11 w-11 place-items-center rounded-2xl border border-red-100 bg-red-50 text-red-500 transition-colors hover:bg-red-100"
+                          title="Borrar jardín"
+                          aria-label="Borrar jardín activo"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
