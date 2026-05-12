@@ -68,6 +68,8 @@ type AccountProfile = {
   mantra?: string;
 };
 
+type AppView = 'today' | 'inbox' | 'projects' | 'focus' | 'garden' | 'profile' | 'harvest' | 'calendar' | '3D';
+
 const THEMES: { id: Theme; label: string; icon: string }[] = [
   { id: 'earth', label: 'Pradera', icon: '🌾' },
   { id: 'forest', label: 'Bosque', icon: '🌲' },
@@ -83,9 +85,8 @@ const DEFAULT_PLANET_ID = 'personal';
 
 const DEFAULT_PLANETS: Planet[] = [
   { id: DEFAULT_PLANET_ID, name: 'Personal', description: 'Ideas de vida, habitos y pendientes propios.', theme: 'earth', createdAt: 0 },
-  { id: 'work', name: 'Trabajo', description: 'Proyectos, entregas y decisiones profesionales.', theme: 'forest', createdAt: 0 },
-  { id: 'study', name: 'Universidad', description: 'Tareas, lecturas, examenes e investigacion.', theme: 'arctic', createdAt: 0 },
 ];
+const LEGACY_DEFAULT_PLANET_IDS = new Set(['work', 'study']);
 
 function touchNote(note: SeedNote, timestamp = Date.now()): SeedNote {
   return { ...note, updatedAt: timestamp };
@@ -104,6 +105,44 @@ const SEED_TYPES: { id: NonNullable<SeedNote['seedType']>; label: string; task: 
   { id: 'project', label: 'Proyecto', task: 'Definir el primer entregable pequeño' },
   { id: 'goal', label: 'Meta', task: 'Elegir una acción medible para esta semana' },
   { id: 'learning', label: 'Aprendizaje', task: 'Practicar o resumir el primer concepto' },
+];
+
+const ONBOARDING_STEPS = [
+  {
+    icon: Leaf,
+    eyebrow: 'La idea',
+    title: 'Seed es un jardín para tus notas',
+    text: 'Captura cosas pequeñas como comprar leche, ideas sueltas o proyectos grandes. No tienes que decidir todo al principio.',
+    action: 'Empieza escribiendo cualquier cosa que no quieras perder.',
+  },
+  {
+    icon: CheckCircle2,
+    eyebrow: 'Semillas',
+    title: 'Las notas rápidas se completan o crecen',
+    text: 'Una semilla puede ser algo simple. Si la marcas como Hecho, se convierte en una flor. Si necesita pasos, la conviertes en proyecto.',
+    action: 'Hecho = flor. Proyecto = brote.',
+  },
+  {
+    icon: Sprout,
+    eyebrow: 'Brotes',
+    title: 'Los proyectos son listas simples',
+    text: 'Un brote tiene pasos tipo to-do. Completar pasos hace crecer la idea sin convertir Seed en una app complicada.',
+    action: 'Un proyecto solo necesita el siguiente paso.',
+  },
+  {
+    icon: Droplets,
+    eyebrow: 'Riego',
+    title: 'Regar es revisar sin presión',
+    text: 'Seed te recuerda ideas que llevan tiempo sin verse. Regar significa decidir si siguen vivas, si necesitan un paso o si se pausan.',
+    action: 'Hoy basta con revisar una.',
+  },
+  {
+    icon: Box,
+    eyebrow: 'Recompensa',
+    title: 'Tu jardín muestra el progreso',
+    text: 'Flores, brotes y árboles llenan tu planeta. El jardín no es trabajo extra: es la recompensa visual por cuidar tus ideas.',
+    action: 'Llena tu planeta con cosas terminadas y proyectos vivos.',
+  },
 ];
 
 const PROFILE_PURPOSES = [
@@ -736,7 +775,7 @@ function TodayView({
   onToggleTask: (noteId: string, taskId: string) => void;
   onFocusNote: (id: string) => void;
   onEnableNotifications: () => void;
-  onNavigate: (view: 'today' | 'inbox' | 'focus' | 'garden' | 'harvest' | 'calendar' | '3D') => void;
+  onNavigate: (view: AppView) => void;
   onShowWateringQueue: () => void;
   wateredToday: boolean;
   wateringStreak: number;
@@ -746,26 +785,22 @@ function TodayView({
   const allThirstyNotes = activeNotes
     .filter(note => wateringDue(note))
     .sort((a, b) => daysSince(b.lastWateredAt || b.createdAt) - daysSince(a.lastWateredAt || a.createdAt));
-  const thirstyNotes = allThirstyNotes.slice(0, 3);
-  const hiddenThirstyCount = Math.max(0, allThirstyNotes.length - thirstyNotes.length);
+  const firstWatering = allThirstyNotes[0];
   const nextActions = notes
     .filter(note => !note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom' && !wateringDue(note))
     .map(note => ({ note, task: note.tasks.find(task => !task.completed) }))
     .filter((item): item is { note: SeedNote; task: NonNullable<typeof item.task> } => Boolean(item.task))
-    .slice(0, 4);
+    .slice(0, 1);
+  const nextAction = nextActions[0];
   const inboxNotes = notes
     .filter(note => note.inbox)
     .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, 3);
-  const dueSoon = notes
-    .filter(note => !note.inbox && note.dueDate && note.growthStage !== 'bloom' && !note.paused)
-    .sort((a, b) => (a.dueDate || 0) - (b.dueDate || 0))
-    .slice(0, 3);
-  const harvests = notes
-    .filter(note => note.growthStage === 'bloom')
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, 3);
-  const firstWatering = thirstyNotes[0];
+    .slice(0, 1);
+  const inboxCount = notes.filter(note => note.inbox).length;
+  const activeCount = activeNotes.length;
+  const doneTodayText = wateredToday
+    ? `Racha de ${wateringStreak} día${wateringStreak === 1 ? '' : 's'}`
+    : 'Sin presión: una revisión basta';
 
   return (
     <motion.div
@@ -773,23 +808,28 @@ function TodayView({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }}
-      className="pb-24 space-y-6"
+      className="pb-24 space-y-5"
     >
-      <div className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] shadow-[0_18px_60px_rgb(47,62,51,0.08)] p-5 md:p-6">
-        <div className="flex items-center justify-between gap-4 mb-4">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Captura rápida</p>
-            <h3 className="text-2xl font-serif font-black text-[var(--earth)] mt-1">Planta una semilla</h3>
+      <section className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] shadow-[0_18px_60px_rgb(47,62,51,0.08)] p-5 md:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Hoy</p>
+            <h3 className="mt-1 text-3xl md:text-4xl font-serif font-black leading-tight text-[var(--earth)]">¿Qué quieres cultivar?</h3>
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
+              Planta una idea rápida, riega una pendiente o enfócate en un solo paso. No necesitas organizar todo ahora.
+            </p>
           </div>
           <button
             onClick={onEnableNotifications}
-            className="h-10 w-10 rounded-full bg-[var(--bg-app)] text-[var(--sage)] flex items-center justify-center hover:bg-[var(--surface-strong)] transition-colors"
+            className="h-11 w-11 rounded-full bg-[var(--bg-app)] text-[var(--sage)] flex items-center justify-center hover:bg-[var(--surface-strong)] transition-colors"
             title="Activar recordatorios"
+            aria-label="Activar recordatorios"
           >
             <Bell size={18} />
           </button>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
+
+        <div className="mt-5 flex flex-col sm:flex-row gap-3">
           <input
             value={quickNote}
             onChange={(event) => setQuickNote(event.target.value)}
@@ -807,176 +847,145 @@ function TodayView({
             <Plus size={18} /> Plantar
           </button>
         </div>
-      </div>
 
-      {inboxNotes.length > 0 && (
-        <section className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-5 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Semillero</p>
-              <h3 className="mt-1 text-2xl font-serif font-black text-[var(--earth)]">
-                {inboxNotes.length === 1 ? '1 semilla por cultivar' : `${inboxNotes.length} semillas por cultivar`}
-              </h3>
-              <p className="mt-2 text-sm font-semibold text-[var(--text-muted)]">Son ideas rápidas. Elige cuáles pasan al jardín cuando tengas claridad.</p>
+        <div className="mt-5 grid grid-cols-3 gap-2">
+          {[
+            { label: 'Activas', value: activeCount },
+            { label: 'Por regar', value: allThirstyNotes.length },
+            { label: 'Semillas', value: inboxCount },
+          ].map(item => (
+            <div key={item.label} className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-3 text-center">
+              <p className="font-serif text-2xl font-black text-[var(--earth)]">{item.value}</p>
+              <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
             </div>
-            <button
-              onClick={() => onNavigate('inbox')}
-              className="rounded-2xl bg-[var(--sage)] text-white px-5 py-3 font-black shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
-            >
-              Cultivar semillas
-            </button>
-          </div>
-        </section>
-      )}
-
-      <section className={`rounded-[2rem] border p-5 md:p-6 shadow-sm ${firstWatering ? 'bg-[var(--card-bg)] border-[var(--border)]' : wateredToday ? 'bg-green-50 border-green-100' : 'bg-[var(--card-bg)] border-[var(--border)]'}`}>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
-          <div className="flex items-start gap-4">
-            <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 ${firstWatering ? 'bg-[var(--sage)] text-white' : wateredToday ? 'bg-green-600 text-white' : 'bg-[var(--sage)] text-white'}`}>
-              <Droplets size={22} />
-            </div>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Riego diario</p>
-              <h3 className="mt-1 text-2xl md:text-3xl font-serif font-black text-[var(--earth)]">
-                {firstWatering ? wateredToday ? 'Aún hay ideas por regar' : 'Riega 1 idea hoy' : wateredToday ? 'Jardín cuidado hoy' : 'Tu jardín está fresco'}
-              </h3>
-              <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-                {firstWatering
-                  ? wateredToday
-                    ? `Ya cuidaste tu racha de ${wateringStreak} día${wateringStreak === 1 ? '' : 's'}, pero puedes revisar otra idea si quieres.`
-                    : 'Una revisión de 20 segundos basta: mira la idea, decide si sigue viva o crea un micro-paso.'
-                  : wateredToday
-                    ? `Llevas ${wateringStreak} día${wateringStreak === 1 ? '' : 's'} regando tu jardín.`
-                    : 'No hay ideas pidiendo riego ahora. Puedes plantar o avanzar un paso.'}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => firstWatering ? onOpenWatering(firstWatering.id) : undefined}
-            disabled={!firstWatering}
-            className="rounded-2xl bg-[var(--sage)] disabled:bg-[var(--surface-strong)] disabled:text-[var(--text-muted)] text-white px-5 py-3 font-black shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
-          >
-            {firstWatering ? wateredToday ? 'Regar otra' : 'Regar ahora' : wateredToday ? 'Hecho por hoy' : 'Sin riego pendiente'}
-          </button>
+          ))}
         </div>
       </section>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {thirstyNotes.length > 0 && (
-          <section className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] shadow-sm p-5">
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div>
-                <h3 className="font-serif text-2xl font-black text-[var(--earth)]">Ideas para regar</h3>
-                <p className="text-xs text-[var(--text-muted)] mt-1">Solo revisa las más antiguas. Hoy basta con una.</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+        <section className={`min-h-[17rem] rounded-[2rem] border p-5 shadow-sm ${firstWatering ? 'bg-[var(--card-bg)] border-[var(--border)]' : wateredToday ? 'bg-green-50 border-green-100' : 'bg-[var(--surface-soft)] border-[var(--border)]'}`}>
+          <div className="flex h-full flex-col">
+            <div className="flex items-start gap-3">
+              <div className={`h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 ${firstWatering ? 'bg-[var(--sage)] text-white' : wateredToday ? 'bg-green-600 text-white' : 'bg-[var(--surface-strong)] text-[var(--sage)]'}`}>
+                <Droplets size={20} />
               </div>
-              <Droplets size={20} className="text-[var(--sage)] shrink-0 mt-1" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Regar</p>
+                <h3 className="mt-1 text-2xl font-serif font-black text-[var(--earth)]">
+                  {firstWatering ? 'Revisa una idea' : wateredToday ? 'Jardín cuidado' : 'Todo fresco'}
+                </h3>
+                <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
+                  {firstWatering
+                    ? `${firstWatering.title} lleva ${daysSince(firstWatering.lastWateredAt || firstWatering.createdAt)} días sin revisión.`
+                    : wateredToday
+                      ? doneTodayText
+                      : 'No hay ideas pidiendo riego ahora.'}
+                </p>
+                {allThirstyNotes.length > 1 && (
+                  <button onClick={onShowWateringQueue} className="mt-3 inline-flex rounded-full bg-[var(--surface-strong)] px-3 py-1.5 text-xs font-black text-[var(--sage)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--surface-hover)]">
+                    {allThirstyNotes.length - 1} más en cola
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="space-y-3">
-              {thirstyNotes.map(note => (
-                <button
-                  key={note.id}
-                  onClick={() => onOpenWatering(note.id)}
-                  className="w-full text-left rounded-2xl bg-[var(--bg-app)] hover:bg-[var(--surface-strong)] border border-[var(--border)] p-4 soft-interaction group"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-bold text-[var(--earth)] truncate">{note.title}</p>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] mt-1">
-                        {daysSince(note.lastWateredAt || note.createdAt)} días sin revisar
-                      </p>
-                      {note.lastWateringNote && (
-                        <p className="text-xs text-[var(--text-muted)] mt-2 line-clamp-1">{note.lastWateringNote}</p>
-                      )}
-                    </div>
-                    <span className="h-9 w-9 rounded-full bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center shadow-sm transition-colors group-hover:bg-[var(--surface-hover)]">
-                      <Droplets size={17} />
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-            {hiddenThirstyCount > 0 && (
+            <div className="mt-auto pt-5">
               <button
-                onClick={onShowWateringQueue}
-                className="mt-4 w-full rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] text-[var(--sage)] px-4 py-3 text-sm font-black hover:bg-[var(--surface-strong)] transition-colors"
+                onClick={() => firstWatering ? onOpenWatering(firstWatering.id) : onNavigate('garden')}
+                className="flex h-12 w-full items-center justify-center rounded-2xl bg-[var(--sage)] px-5 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
               >
-                Ver {hiddenThirstyCount} más en el jardín
+                {firstWatering ? 'Regar ahora' : 'Ver jardín'}
               </button>
-            )}
-          </section>
-        )}
-
-        <section className={`rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] shadow-sm p-5 ${thirstyNotes.length === 0 ? 'xl:col-span-2' : ''}`}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-serif text-2xl font-black text-[var(--earth)]">Siguiente paso</h3>
-            <ArrowRight size={20} className="text-[var(--sage)]" />
+            </div>
           </div>
-          <div className="space-y-3">
-            {nextActions.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">
-                {thirstyNotes.length > 0
-                  ? 'Primero riega las ideas pendientes. Después aparecerán aquí los pasos listos para enfocar.'
-                  : 'Convierte una semilla en brote para ver acciones aquí.'}
-              </p>
-            ) : nextActions.map(({ note, task }) => (
-              <div key={task.id} className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4">
-                <button onClick={() => onSelectNote(note.id)} className="text-left w-full">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">{note.title}</p>
-                  <p className="font-semibold text-[var(--earth)] mt-1">{task.text || 'Describe el siguiente paso'}</p>
-                </button>
-                <div className="flex items-center gap-3 mt-4">
-                  <div className="flex-1 h-2 rounded-full bg-[var(--surface-strong)] overflow-hidden">
-                    <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${getProgress(note)}%` }} />
-                  </div>
-                  <button
-                    onClick={() => onFocusNote(note.id)}
-                    className="text-xs font-black text-white bg-[var(--sage)] px-3 py-2 rounded-xl active:translate-y-px soft-interaction"
-                  >
-                    Enfocar
-                  </button>
-                  <button
-                    onClick={() => onToggleTask(note.id, task.id)}
-                    className="text-xs font-black text-[var(--sage)] bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-2 rounded-xl active:translate-y-px soft-interaction"
-                  >
-                    Hecho
-                  </button>
-                </div>
+        </section>
+
+        <section className="min-h-[17rem] rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-5 shadow-sm">
+          <div className="flex h-full flex-col">
+            <div className="flex items-start gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center shrink-0">
+                <Target size={20} />
               </div>
-            ))}
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Enfocar</p>
+                <h3 className="mt-1 text-2xl font-serif font-black text-[var(--earth)]">Un paso</h3>
+                {nextAction ? (
+                  <>
+                    <button onClick={() => onSelectNote(nextAction.note.id)} className="mt-2 block w-full text-left">
+                      <p className="truncate text-sm font-black text-[var(--earth)]">{nextAction.note.title}</p>
+                      <p className="mt-1 line-clamp-2 text-sm font-semibold text-[var(--text-muted)]">{nextAction.task.text || 'Describe el siguiente paso'}</p>
+                    </button>
+                    <div className="mt-4 h-2 rounded-full bg-[var(--surface-strong)] overflow-hidden">
+                      <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${getProgress(nextAction.note)}%` }} />
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
+                    {inboxCount > 0 ? 'Cultiva una semilla para crear su primer paso.' : 'Planta una idea y aparecerá aquí el siguiente paso.'}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="mt-auto pt-5 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => nextAction ? onFocusNote(nextAction.note.id) : onNavigate(inboxCount > 0 ? 'inbox' : 'garden')}
+                className="flex h-12 items-center justify-center rounded-2xl bg-[var(--sage)] px-4 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
+              >
+                {nextAction ? 'Enfocar' : inboxCount > 0 ? 'Cultivar' : 'Jardín'}
+              </button>
+              <button
+                onClick={() => nextAction ? onToggleTask(nextAction.note.id, nextAction.task.id) : onNavigate('garden')}
+                disabled={!nextAction}
+                className="flex h-12 items-center justify-center rounded-2xl bg-[var(--surface-strong)] disabled:opacity-50 text-[var(--sage)] border border-[var(--border)] px-4 text-sm font-black active:translate-y-px soft-interaction"
+              >
+                Hecho
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="min-h-[17rem] rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-5 shadow-sm">
+          <div className="flex h-full flex-col">
+            <div className="flex items-start gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center shrink-0">
+                <Sprout size={20} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Semillero</p>
+                <h3 className="mt-1 text-2xl font-serif font-black text-[var(--earth)]">
+                  {inboxCount > 0 ? `${inboxCount} por cultivar` : 'Listo para ideas'}
+                </h3>
+                <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
+                  {inboxNotes[0]
+                    ? `La próxima semilla es "${inboxNotes[0].title}".`
+                    : 'Captura ideas sin decidir todo de una vez.'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => onNavigate(inboxCount > 0 ? 'inbox' : 'garden')}
+              className="mt-auto flex h-12 w-full items-center justify-center rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)] border border-[var(--border)] px-5 text-sm font-black active:translate-y-px soft-interaction"
+            >
+              {inboxCount > 0 ? 'Ver semillas' : 'Abrir jardín'}
+            </button>
           </div>
         </section>
       </div>
 
-      {(dueSoon.length > 0 || harvests.length > 0) && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {dueSoon.length > 0 && (
-            <section className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-5">
-              <h3 className="font-serif text-2xl font-black text-[var(--earth)] mb-4">Próximas cosechas</h3>
-              <div className="space-y-2">
-                {dueSoon.map(note => (
-                  <button key={note.id} onClick={() => onSelectNote(note.id)} className="w-full flex items-center justify-between rounded-2xl bg-[var(--surface-strong)] px-4 py-3 text-left">
-                    <span className="font-bold text-[var(--earth)] truncate">{note.title}</span>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--seed-accent)]">{format(note.dueDate!, 'd MMM')}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {harvests.length > 0 && (
-            <section className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-5">
-              <h3 className="font-serif text-2xl font-black text-[var(--earth)] mb-4">Archivo de cosechas</h3>
-              <div className="space-y-2">
-                {harvests.map(note => (
-                  <button key={note.id} onClick={() => onSelectNote(note.id)} className="w-full flex items-center gap-3 rounded-2xl bg-[var(--surface-strong)] px-4 py-3 text-left">
-                    <Archive size={16} className="text-green-600 shrink-0" />
-                    <span className="font-bold text-[var(--earth)] truncate">{note.title}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
+      {allThirstyNotes.length > 1 && (
+        <section className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] shadow-sm p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="font-serif text-2xl font-black text-[var(--earth)]">Más ideas por regar</h3>
+              <p className="mt-1 text-sm font-semibold text-[var(--text-muted)]">No tienes que hacerlas todas hoy. La app te muestra la cola si quieres seguir.</p>
+            </div>
+            <button
+              onClick={onShowWateringQueue}
+              className="rounded-2xl bg-[var(--sage)] text-white px-5 py-3 font-black shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
+            >
+              Ver cola de riego
+            </button>
+          </div>
+        </section>
       )}
     </motion.div>
   );
@@ -984,13 +993,21 @@ function TodayView({
 
 function InboxView({
   notes,
+  quickNote,
+  setQuickNote,
+  onQuickCapture,
   onCultivate,
+  onComplete,
   onSaveLater,
   onDelete,
   onSelectNote,
 }: {
   notes: SeedNote[];
+  quickNote: string;
+  setQuickNote: (value: string) => void;
+  onQuickCapture: () => void;
   onCultivate: (id: string) => void;
+  onComplete: (id: string) => void;
   onSaveLater: (id: string) => void;
   onDelete: (id: string) => void;
   onSelectNote: (id: string) => void;
@@ -1008,7 +1025,25 @@ function InboxView({
       <div className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-6 shadow-sm mb-6">
         <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Semillero</p>
         <h3 className="text-3xl font-serif font-black text-[var(--earth)] mt-1">Semillas rápidas</h3>
-        <p className="text-sm text-[var(--text-muted)] mt-2">Aquí caen ideas crudas. Elige una y conviértela en el siguiente brote del jardín.</p>
+        <p className="text-sm text-[var(--text-muted)] mt-2">Cosas rápidas, pendientes simples e ideas sueltas. Márcalas como hechas o conviértelas en brote si necesitan pasos.</p>
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+          <input
+            value={quickNote}
+            onChange={(event) => setQuickNote(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && quickNote.trim()) onQuickCapture();
+            }}
+            placeholder="Escribe una idea rápida..."
+            className="h-12 flex-1 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--earth)] outline-none transition-all placeholder:text-[var(--text-muted)] focus:border-[var(--sage)] focus:bg-[var(--surface-strong)] focus:ring-2 focus:ring-[var(--sage)]/15"
+          />
+          <button
+            onClick={onQuickCapture}
+            disabled={!quickNote.trim()}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-[var(--sage)] px-5 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 transition-all active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <Plus size={17} /> Plantar semilla
+          </button>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -1018,28 +1053,174 @@ function InboxView({
             <p className="font-serif text-2xl text-[var(--earth)]">Semillero limpio</p>
             <p className="text-sm text-[var(--text-muted)] mt-2">Cuando captures ideas rápidas, aparecerán aquí antes de pasar al jardín.</p>
           </div>
-        ) : inboxNotes.map(note => (
-          <div key={note.id} className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-5 shadow-sm">
-            <button onClick={() => onSelectNote(note.id)} className="text-left w-full">
-              <p className="font-serif text-2xl font-black text-[var(--earth)]">{note.title}</p>
-              <p className="text-sm text-[var(--text-muted)] mt-2 line-clamp-2">{note.content}</p>
-            </button>
-            <div className="mt-5">
-              <button onClick={() => onCultivate(note.id)} className="w-full rounded-2xl bg-[var(--sage)] text-white py-3 text-sm font-black flex items-center justify-center gap-2 shadow-sm active:translate-y-px soft-interaction">
-                <Sprout size={16} /> Cultivar ahora
+        ) : inboxNotes.map(note => {
+          const hasUsefulDescription = note.content.trim().toLowerCase() !== note.title.trim().toLowerCase();
+          const cardDescription = hasUsefulDescription
+            ? note.content
+            : 'Lista para completar o convertir en proyecto.';
+
+          return (
+            <div key={note.id} className="group rounded-[1.4rem] bg-[var(--card-bg)] border border-[var(--border)] p-4 shadow-[0_10px_30px_rgba(47,62,51,0.06)] transition-all hover:-translate-y-0.5 hover:border-[var(--sage)]/25 hover:shadow-[0_16px_42px_rgba(47,62,51,0.10)]">
+              <button onClick={() => onSelectNote(note.id)} className="text-left w-full">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Semilla rápida</p>
+                    <p className="mt-1 truncate font-serif text-xl font-black text-[var(--earth)]">{note.title}</p>
+                  </div>
+                  <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--surface-soft)] text-[var(--sage)] ring-1 ring-[var(--border)]">
+                    <Sprout size={15} />
+                  </span>
+                </div>
+                <p className="text-sm text-[var(--text-muted)] mt-3 line-clamp-2 leading-relaxed">{cardDescription}</p>
               </button>
-              <div className="flex items-center justify-center gap-5 mt-3 text-[11px] font-black">
-                <button onClick={() => onSaveLater(note.id)} className="text-[var(--text-muted)] hover:text-[var(--sage)] transition-colors flex items-center gap-1.5">
-                  <Archive size={13} /> Después
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <button onClick={() => onComplete(note.id)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-3.5 text-xs font-black text-white shadow-sm shadow-[var(--sage)]/15 active:translate-y-px soft-interaction">
+                  <CheckCircle2 size={14} /> Hecho
                 </button>
-                <button onClick={() => onDelete(note.id)} className="text-red-400 hover:text-red-600 transition-colors flex items-center gap-1.5">
-                  <Trash2 size={13} /> Soltar
+                <button onClick={() => onCultivate(note.id)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--surface-soft)] px-3.5 text-xs font-black text-[var(--sage)] ring-1 ring-[var(--border)] active:translate-y-px soft-interaction hover:bg-[var(--surface-strong)]">
+                  <Sprout size={14} /> Proyecto
                 </button>
+                <div className="ml-auto flex items-center gap-1 text-[11px] font-black">
+                  <button onClick={() => onSaveLater(note.id)} className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--sage)]">
+                    <Archive size={13} /> Después
+                  </button>
+                  <button onClick={() => onDelete(note.id)} className="grid h-8 w-8 place-items-center rounded-full text-red-400 transition-colors hover:bg-red-50 hover:text-red-600" aria-label={`Soltar ${note.title}`}>
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+    </motion.div>
+  );
+}
+
+function ProjectsView({
+  notes,
+  onSelectNote,
+  onFocusNote,
+  onToggleTask,
+  onOpenWatering,
+  getProgress,
+}: {
+  notes: SeedNote[];
+  onSelectNote: (id: string) => void;
+  onFocusNote: (id: string) => void;
+  onToggleTask: (noteId: string, taskId: string) => void;
+  onOpenWatering: (id: string) => void;
+  getProgress: (note: SeedNote) => number;
+}) {
+  const activeProjects = notes.filter(note => !note.inbox && note.isGrowth && note.growthStage !== 'bloom');
+  const sortedProjects = [...activeProjects].sort((a, b) => {
+    const aScore = (wateringDue(a) ? 10 : 0) + daysSince(a.lastWateredAt || a.createdAt);
+    const bScore = (wateringDue(b) ? 10 : 0) + daysSince(b.lastWateredAt || b.createdAt);
+    return bScore - aScore;
+  });
+  const recommended = sortedProjects.find(note => note.tasks.some(task => !task.completed)) || sortedProjects[0];
+  const recommendedTask = recommended?.tasks.find(task => !task.completed);
+
+  return (
+    <motion.div
+      key="projects-view"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 12 }}
+      className="pb-24 space-y-5"
+    >
+      <section className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-5 md:p-6 shadow-sm">
+        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Brotes</p>
+        <h3 className="mt-1 font-serif text-3xl md:text-4xl font-black text-[var(--earth)]">Proyectos que están creciendo</h3>
+        <p className="mt-2 max-w-2xl text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
+          Aquí viven las ideas que necesitan pasos. No tienes que organizar demasiado: elige un paso y avanza.
+        </p>
+      </section>
+
+      {recommended && (
+        <section className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-5 shadow-sm">
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Siguiente brote recomendado</p>
+              <h4 className="mt-1 truncate font-serif text-2xl font-black text-[var(--earth)]">{recommended.title}</h4>
+              <p className="mt-2 text-sm font-semibold text-[var(--text-muted)]">
+                {recommendedTask?.text || 'Agrega el siguiente paso para poder enfocarte.'}
+              </p>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--surface-strong)]">
+                <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${getProgress(recommended)}%` }} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 md:w-56">
+              <button
+                onClick={() => onFocusNote(recommended.id)}
+                className="rounded-2xl bg-[var(--sage)] px-4 py-3 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
+              >
+                Enfocar
+              </button>
+              <button
+                onClick={() => recommendedTask ? onToggleTask(recommended.id, recommendedTask.id) : onSelectNote(recommended.id)}
+                className="rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-4 py-3 text-sm font-black text-[var(--sage)] active:translate-y-px soft-interaction"
+              >
+                {recommendedTask ? 'Hecho' : 'Editar'}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="space-y-3">
+        {sortedProjects.length === 0 ? (
+          <div className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-8 text-center">
+            <Sprout className="mx-auto text-[var(--sage)] opacity-40 mb-4" size={44} />
+            <p className="font-serif text-2xl text-[var(--earth)]">Todavía no hay brotes</p>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">Convierte una semilla en proyecto cuando necesite pasos.</p>
+          </div>
+        ) : sortedProjects.map(note => {
+          const nextTask = note.tasks.find(task => !task.completed);
+          const progress = getProgress(note);
+          const needsWater = wateringDue(note) && !note.paused;
+
+          return (
+            <article key={note.id} className="rounded-[1.5rem] border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-[0_10px_30px_rgba(47,62,51,0.06)]">
+              <div className="flex items-start justify-between gap-4">
+                <button onClick={() => onSelectNote(note.id)} className="min-w-0 flex-1 text-left">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${needsWater ? 'bg-sky-500' : 'bg-[var(--sage)]'}`} />
+                    <p className="truncate font-serif text-xl font-black text-[var(--earth)]">{note.title}</p>
+                  </div>
+                  <p className="mt-2 line-clamp-1 text-sm font-semibold text-[var(--text-muted)]">
+                    {nextTask?.text || 'Sin pasos pendientes'}
+                  </p>
+                </button>
+                <span className="rounded-full bg-[var(--surface-soft)] px-2.5 py-1 text-[10px] font-black text-[var(--sage)]">
+                  {progress}%
+                </span>
+              </div>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--surface-strong)]">
+                <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${progress}%` }} />
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <button onClick={() => onFocusNote(note.id)} className="rounded-full bg-[var(--sage)] px-3.5 py-2 text-xs font-black text-white soft-interaction">
+                  Enfocar
+                </button>
+                {nextTask && (
+                  <button onClick={() => onToggleTask(note.id, nextTask.id)} className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3.5 py-2 text-xs font-black text-[var(--sage)] soft-interaction">
+                    Hecho
+                  </button>
+                )}
+                {needsWater && (
+                  <button onClick={() => onOpenWatering(note.id)} className="rounded-full border border-sky-100 bg-sky-50 px-3.5 py-2 text-xs font-black text-sky-700 soft-interaction">
+                    Regar
+                  </button>
+                )}
+                <button onClick={() => onSelectNote(note.id)} className="ml-auto rounded-full px-3 py-2 text-xs font-black text-[var(--text-muted)] hover:bg-[var(--surface-soft)]">
+                  Detalles
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </section>
     </motion.div>
   );
 }
@@ -1674,6 +1855,11 @@ function PlantIllustration({ stage, progress, isGrowth, theme = 'earth' }: { sta
 
   const height = 34 + (progress * 0.48);
   const crownScale = 0.65 + (progress / 220);
+  const crownY = 74 - height;
+  const branchOneHeight = Math.max(12, Math.min(24, height * 0.5));
+  const branchTwoHeight = Math.max(10, Math.min(22, height * 0.44));
+  const branchOneTop = Math.max(8, height - branchOneHeight - 8);
+  const branchTwoTop = Math.max(12, height - branchTwoHeight - 5);
   return (
     <div className={`relative w-28 h-32 flex flex-col items-center justify-end ${swayClass}`}>
       <div className="absolute bottom-1 w-22 h-4 rounded-full bg-green-950/10 blur-sm" />
@@ -1682,11 +1868,19 @@ function PlantIllustration({ stage, progress, isGrowth, theme = 'earth' }: { sta
         transition={stemTransition}
         className={`relative w-3 bg-gradient-to-t ${tree.trunk} rounded-full origin-bottom shadow-[inset_-4px_0_6px_rgba(0,0,0,0.12)]`}
       >
-        <div className={`absolute left-1/2 top-5 h-9 w-1.5 rounded-full ${tree.branch} origin-bottom rotate-[-46deg]`} />
-        <div className={`absolute right-1/2 top-8 h-8 w-1.5 rounded-full ${tree.branch} origin-bottom rotate-[48deg]`} />
+        <motion.div
+          className={`absolute left-1/2 w-1.5 rounded-full ${tree.branch} origin-bottom rotate-[-42deg]`}
+          animate={{ top: branchOneTop, height: branchOneHeight, opacity: progress > 8 ? 1 : 0.45 }}
+          transition={stemTransition}
+        />
+        <motion.div
+          className={`absolute right-1/2 w-1.5 rounded-full ${tree.branch} origin-bottom rotate-[42deg]`}
+          animate={{ top: branchTwoTop, height: branchTwoHeight, opacity: progress > 18 ? 1 : 0.35 }}
+          transition={stemTransition}
+        />
       </motion.div>
       <motion.div
-        animate={{ y: 58 - height, scale: crownScale }}
+        animate={{ y: crownY, scale: crownScale }}
         transition={stemTransition}
         className="absolute top-0 left-1/2 -translate-x-1/2 h-20 w-24"
       >
@@ -1895,7 +2089,7 @@ function LandingPage({
     { icon: Leaf, title: 'Guarda ideas sin pensarlo tanto', text: 'Escribe eso que se te ocurrió y déjalo crecer poco a poco, sin tener que organizarlo todo desde el primer día.' },
     { icon: Droplets, title: 'Vuelve a lo que vale la pena', text: 'Seed te recuerda ideas que podrían seguir vivas, para revisarlas en segundos y decidir si quieres darles cariño.' },
     { icon: Target, title: 'Menos distracción, más avance', text: 'Cuando quieras trabajar, eliges una idea y la app te deja con lo justo: foco, pasos y una sensación clara de progreso.' },
-    { icon: Box, title: 'Un planeta para cada parte de ti', text: 'Trabajo, estudio, vida personal o proyectos creativos pueden vivir separados, cada uno con su propio jardín.' },
+    { icon: Box, title: 'Un jardín para cada parte de ti', text: 'Trabajo, estudio, vida personal o proyectos creativos pueden vivir separados, cada uno con su propio planeta visual.' },
   ];
   const ecosystems = [
     { name: 'Pradera', theme: 'earth' as Theme, mood: 'Claro, fresco y tranquilo', sky: '#dff2ff', planet: '#93bd6b', accent: '#f5d36c', plant: 'Pasto suave' },
@@ -2060,7 +2254,7 @@ function LandingPage({
               {[
                 { title: 'Encuentra tu idea rápido', text: 'Tocas una planta y el mundo se acerca a ella, para que no tengas que buscar entre listas interminables.' },
                 { title: 'El jardín también respira', text: 'La luz, el movimiento y los ecosistemas hacen que volver a tus ideas se sienta menos como una tarea y más como un ritual.' },
-                { title: 'Cada planeta tiene personalidad', text: 'Puedes tener un jardín para trabajo, otro para estudio y otro para tus proyectos personales.' },
+                { title: 'Cada jardín tiene personalidad', text: 'Puedes tener un espacio para trabajo, otro para estudio y otro para tus proyectos personales.' },
                 { title: 'Ves cómo va creciendo', text: 'Una idea empieza como semilla, se vuelve brote y puede terminar como árbol cuando la haces avanzar.' },
               ].map((item) => (
                 <div key={item.title} className="rounded-2xl border border-[#e3e8df] bg-white p-5 shadow-sm">
@@ -2128,6 +2322,7 @@ function LandingPage({
               </div>
             }>
               <Garden3D
+                key={`${activeEcosystem.theme}-preview`}
                 notes={ecosystemPreviewNotes}
                 theme={activeEcosystem.theme}
                 planetName={activeEcosystem.name}
@@ -2429,6 +2624,7 @@ export default function App() {
   const [newPlanetName, setNewPlanetName] = useState('');
   const [showPlanetSettings, setShowPlanetSettings] = useState(false);
   const [editingPlanetName, setEditingPlanetName] = useState('');
+  const [onboardingStep, setOnboardingStep] = useState(0);
   
   const [theme, setTheme] = useState<Theme>(() => {
     return (localStorage.getItem('seed-theme') as Theme) || 'earth';
@@ -2436,7 +2632,7 @@ export default function App() {
 
   const [search, setSearch] = useState('');
   const [filterStage, setFilterStage] = useState<SeedNote['growthStage'] | 'all'>('all');
-  const [view, setView] = useState<'today' | 'inbox' | 'focus' | 'garden' | 'harvest' | 'calendar' | '3D'>('today');
+  const [view, setView] = useState<AppView>('today');
   const [showGardenFullscreen, setShowGardenFullscreen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [isAdding, setIsAdding] = useState(false);
@@ -2448,6 +2644,7 @@ export default function App() {
   const [wateringNote, setWateringNote] = useState('');
   const [focusNoteId, setFocusNoteId] = useState<string | null>(null);
   const [celebration, setCelebration] = useState<string | null>(null);
+  const [flowerReward, setFlowerReward] = useState<{ id: string; title: string } | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('seed-onboarded') !== 'true');
   const [showSettings, setShowSettings] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
@@ -2560,6 +2757,19 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('seed-planets', JSON.stringify(planets));
   }, [planets]);
+
+  useEffect(() => {
+    if (!notesLoaded) return;
+    const usedPlanetIds = new Set(notes.map(note => note.planetId || DEFAULT_PLANET_ID));
+    setPlanets(current => {
+      const cleaned = current.filter(planet => {
+        const isLegacyDefault = LEGACY_DEFAULT_PLANET_IDS.has(planet.id) && planet.createdAt === 0;
+        return !isLegacyDefault || usedPlanetIds.has(planet.id);
+      });
+      if (cleaned.length === current.length) return current;
+      return cleaned.length > 0 ? cleaned : DEFAULT_PLANETS;
+    });
+  }, [notes, notesLoaded]);
 
   useEffect(() => {
     if (!planets.some(planet => planet.id === activePlanetId)) {
@@ -2923,7 +3133,25 @@ export default function App() {
     setSelectedNoteId(id);
     setFilterStage('all');
     setSearch('');
-    setView('garden');
+    setView('projects');
+  };
+
+  const completeQuickSeed = (id: string) => {
+    const completedNote = notes.find(n => n.id === id);
+    setNotes(notes.map(n => n.id === id ? touchNote({
+      ...n,
+      inbox: false,
+      paused: false,
+      isGrowth: false,
+      growthStage: 'bloom',
+      harvestedAt: n.harvestedAt || Date.now(),
+      lastWateredAt: Date.now(),
+      reflection: n.reflection || 'Nota rápida completada.',
+    }) : n));
+    setSelectedNoteId(null);
+    if (completedNote) {
+      setFlowerReward({ id, title: completedNote.title });
+    }
   };
 
   const saveInboxForLater = (id: string) => {
@@ -3073,9 +3301,20 @@ export default function App() {
     });
   }, [planetNotes, search, filterStage]);
 
+  const projectNotes = useMemo(() => {
+    return planetNotes
+      .filter(note => !note.inbox && note.isGrowth && note.growthStage !== 'bloom')
+      .sort((a, b) => noteUpdatedAt(b) - noteUpdatedAt(a));
+  }, [planetNotes]);
+
+  const visibleGardenNotes = view === 'projects' ? projectNotes : filteredNotes;
+
   const selectedNote = useMemo(() => 
     planetNotes.find(n => n.id === selectedNoteId), 
   [planetNotes, selectedNoteId]);
+  const selectedIsDone = selectedNote?.growthStage === 'bloom';
+  const selectedIsQuickSeed = Boolean(selectedNote && !selectedNote.isGrowth && !selectedIsDone);
+  const selectedIsProject = Boolean(selectedNote?.isGrowth && !selectedIsDone);
 
   const growingNotes = useMemo(() => planetNotes.filter(n => n.isGrowth && !n.inbox && !n.paused && n.growthStage !== 'bloom'), [planetNotes]);
 
@@ -3094,6 +3333,9 @@ export default function App() {
     const completed = note.tasks.filter(t => t.completed).length;
     return Math.round((completed / note.tasks.length) * 100);
   };
+  const selectedProgress = selectedNote ? getProgress(selectedNote) : 0;
+  const selectedCompletedSteps = selectedNote?.tasks.filter(task => task.completed).length || 0;
+  const selectedReviewDays = selectedNote ? daysSince(selectedNote.lastWateredAt || selectedNote.createdAt) : 0;
 
   const exportGarden = () => {
     const markdown = planetNotes.map(note => {
@@ -3148,6 +3390,7 @@ export default function App() {
   const finishOnboarding = () => {
     localStorage.setItem('seed-onboarded', 'true');
     setShowOnboarding(false);
+    setOnboardingStep(0);
   };
 
   const startPlanting = () => {
@@ -3180,7 +3423,7 @@ export default function App() {
     const planet: Planet = touchPlanet({
       id: crypto.randomUUID(),
       name,
-      description: 'Nuevo espacio para cultivar ideas.',
+      description: 'Nuevo jardín para cultivar ideas.',
       theme,
       createdAt: Date.now(),
     });
@@ -3205,20 +3448,20 @@ export default function App() {
 
   const deleteActivePlanet = () => {
     if (planets.length <= 1) {
-      window.alert('Necesitas al menos un planeta para guardar tus ideas.');
+      window.alert('Necesitas al menos un jardín para guardar tus ideas.');
       return;
     }
 
     const ideasInPlanet = notes.filter(note => (note.planetId || DEFAULT_PLANET_ID) === activePlanet.id).length;
-    if (!window.confirm(`Borrar el planeta "${activePlanet.name}"? Se eliminarán ${ideasInPlanet} ideas de este planeta. Esta acción no se puede deshacer.`)) return;
-    if (!window.confirm('Confirmación final: borrar este planeta y sus ideas permanentemente?')) return;
+    if (!window.confirm(`Borrar el jardín "${activePlanet.name}"? Se eliminarán ${ideasInPlanet} ideas de este espacio. Esta acción no se puede deshacer.`)) return;
+    if (!window.confirm('Confirmación final: borrar este jardín y sus ideas permanentemente?')) return;
 
     const nextPlanet = planets.find(planet => planet.id !== activePlanet.id) || DEFAULT_PLANETS[0];
     setNotes(current => current.filter(note => (note.planetId || DEFAULT_PLANET_ID) !== activePlanet.id));
     setPlanets(current => current.filter(planet => planet.id !== activePlanet.id));
     if (session?.user) {
       deletePlanetFromSupabase(activePlanet.id, session.user).catch(error => {
-        setSyncStatus(error instanceof Error ? error.message : 'No se pudo borrar el planeta en la nube.');
+        setSyncStatus(error instanceof Error ? error.message : 'No se pudo borrar el jardín en la nube.');
       });
     }
     setShowPlanetSettings(false);
@@ -3302,7 +3545,7 @@ export default function App() {
       const synced = await syncGardenWithSupabase({ planets, notes }, session.user);
       if (synced.planets.length > 0) setPlanets(synced.planets);
       setNotes(synced.notes);
-      setSyncStatus(`Sincronizado: ${synced.planets.length} planetas y ${synced.notes.length} ideas.`);
+      setSyncStatus(`Sincronizado: ${synced.planets.length} jardines y ${synced.notes.length} ideas.`);
     } catch (error) {
       setSyncStatus(error instanceof Error ? error.message : 'No se pudo sincronizar.');
     } finally {
@@ -3400,21 +3643,24 @@ export default function App() {
 
         <div className="space-y-3 mb-8">
           <div className="flex items-center justify-between px-4">
-            <p className="text-[10px] uppercase font-black text-[var(--seed-accent)] tracking-[0.25em] opacity-50">Planetas</p>
+            <div>
+              <p className="text-[10px] uppercase font-black text-[var(--seed-accent)] tracking-[0.25em] opacity-50">Jardines</p>
+              <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)] opacity-60">Espacios de trabajo</p>
+            </div>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={openPlanetSettings}
                 className="h-7 w-7 rounded-full bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors"
-                aria-label="Editar planeta activo"
-                title="Editar planeta activo"
+                aria-label="Editar jardín activo"
+                title="Editar jardín activo"
               >
                 <Settings size={14} />
               </button>
               <button
                 onClick={() => { setIsAddingPlanet(!isAddingPlanet); setShowPlanetSettings(false); }}
                 className="h-7 w-7 rounded-full bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors"
-                aria-label="Agregar planeta"
-                title="Agregar planeta"
+                aria-label="Agregar jardín"
+                title="Agregar jardín"
               >
                 <Plus size={15} />
               </button>
@@ -3431,7 +3677,7 @@ export default function App() {
                   if (event.key === 'Enter') addPlanet();
                   if (event.key === 'Escape') setIsAddingPlanet(false);
                 }}
-                placeholder="Nombre del planeta..."
+                placeholder="Nombre del jardín..."
                 className="w-full bg-[var(--surface-strong)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
               />
               <button
@@ -3439,14 +3685,14 @@ export default function App() {
                 disabled={!newPlanetName.trim()}
                 className="mt-2 w-full rounded-xl bg-[var(--sage)] disabled:opacity-40 text-white py-2 text-xs font-black"
               >
-                Crear planeta
+                Crear jardín
               </button>
             </div>
           )}
 
           {showPlanetSettings && (
             <div className="rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] p-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[var(--seed-accent)] mb-2">Planeta activo</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[var(--seed-accent)] mb-2">Jardín activo</p>
               <input
                 autoFocus
                 value={editingPlanetName}
@@ -3468,8 +3714,8 @@ export default function App() {
                 <button
                   onClick={deleteActivePlanet}
                   className="rounded-xl bg-red-50 text-red-500 px-3 py-2 text-xs font-black border border-red-100 hover:bg-red-100 transition-colors"
-                  title="Borrar planeta"
-                  aria-label="Borrar planeta activo"
+                  title="Borrar jardín"
+                  aria-label="Borrar jardín activo"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -3506,19 +3752,20 @@ export default function App() {
         <div className="space-y-5 mb-8 md:mb-12">
           {[
             {
-              title: 'Trabajo',
+              title: 'Cultivar',
               items: [
                 { id: 'today', label: 'Hoy', icon: Droplets },
-                { id: 'garden', label: 'Jardín de ideas', icon: LayoutGrid },
-                { id: 'focus', label: 'Concentración', icon: Target },
+                { id: 'inbox', label: 'Semillas', icon: Sprout },
+                { id: 'projects', label: 'Brotes', icon: Target },
+                { id: 'garden', label: 'Jardín', icon: LayoutGrid },
               ],
             },
             {
-              title: 'Espacios',
+              title: 'Tu progreso',
               items: [
+                { id: 'profile', label: 'Perfil', icon: User },
                 { id: '3D', label: 'Planeta', icon: Box },
-                { id: 'calendar', label: 'Calendario', icon: CalendarIcon },
-                { id: 'harvest', label: 'Cosechas', icon: Archive },
+                { id: 'calendar', label: 'Camino', icon: CalendarIcon },
               ],
             },
           ].map((section) => (
@@ -3527,7 +3774,14 @@ export default function App() {
               {section.items.map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => setView(item.id as any)}
+                  onClick={() => {
+                    setSelectedNoteId(null);
+                    if (item.id === 'projects') {
+                      setSearch('');
+                      setFilterStage('all');
+                    }
+                    setView(item.id as AppView);
+                  }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl soft-interaction relative group ${
                     view === item.id
                       ? 'bg-[var(--surface-strong)] shadow-xl shadow-black/5 text-[var(--sage)] ring-1 ring-black/5'
@@ -3679,10 +3933,26 @@ export default function App() {
               ) : view === 'inbox' ? (
                 <InboxView
                   notes={planetNotes}
+                  quickNote={quickNote}
+                  setQuickNote={setQuickNote}
+                  onQuickCapture={addQuickNote}
                   onCultivate={cultivateInboxNote}
+                  onComplete={completeQuickSeed}
                   onSaveLater={saveInboxForLater}
                   onDelete={deleteNote}
                   onSelectNote={setSelectedNoteId}
+                />
+              ) : view === 'projects' ? (
+                <ProjectsView
+                  notes={planetNotes}
+                  onSelectNote={setSelectedNoteId}
+                  onFocusNote={(id) => {
+                    setFocusNoteId(id);
+                    setView('focus');
+                  }}
+                  onToggleTask={toggleTask}
+                  onOpenWatering={openWatering}
+                  getProgress={getProgress}
                 />
               ) : view === 'focus' ? (
                 <FocusView
@@ -3698,16 +3968,108 @@ export default function App() {
                   onPickFocus={setFocusNoteId}
                   onExit={() => setView('today')}
                 />
+              ) : view === 'profile' ? (
+                <motion.div
+                  key="profile-view"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 12 }}
+                  className="pb-24 space-y-6"
+                >
+                  <section className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-6 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Perfil del jardinero</p>
+                    <div className="mt-4 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="grid h-16 w-16 place-items-center rounded-[1.5rem] bg-gradient-to-tr from-[var(--sage)] to-[var(--seed-accent)] font-serif text-2xl font-black text-white shadow-lg">
+                          {accountInitials}
+                        </div>
+                        <div>
+                          <h3 className="font-serif text-3xl font-black text-[var(--earth)]">{account.name || 'Jardinero Digital'}</h3>
+                          <p className="mt-1 text-sm font-semibold text-[var(--text-muted)]">{account.purpose || 'Un jardín para ideas y proyectos'}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowSettings(true)}
+                        className="rounded-2xl bg-[var(--sage)] px-5 py-3 font-black text-white shadow-lg shadow-[var(--sage)]/20 soft-interaction"
+                      >
+                        Ajustes
+                      </button>
+                    </div>
+                  </section>
+
+                  <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {[
+                      { label: 'Semillas', value: gardenStats.seeds },
+                      { label: 'Brotes', value: profileStats.active },
+                      { label: 'Cosechas', value: profileStats.harvests },
+                      { label: 'Racha', value: wateringRitual.streak },
+                    ].map(item => (
+                      <div key={item.label} className="rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] p-4 text-center">
+                        <p className="font-serif text-3xl font-black text-[var(--earth)]">{item.value}</p>
+                        <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
+                      </div>
+                    ))}
+                  </section>
+
+                  <section className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-6">
+                    <h3 className="font-serif text-2xl font-black text-[var(--earth)]">Tu premisa</h3>
+                    <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
+                      Seed es un jardín simple: capturas semillas rápidas, conviertes las importantes en brotes con pasos y llenas tu planeta con flores y árboles al terminar.
+                    </p>
+                    <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      {[
+                        { title: 'Flor', text: 'Una nota rápida completada.' },
+                        { title: 'Brote', text: 'Un proyecto con pasos.' },
+                        { title: 'Árbol', text: 'Un proyecto terminado.' },
+                      ].map(item => (
+                        <div key={item.title} className="rounded-2xl bg-[var(--card-bg)] border border-[var(--border)] p-4">
+                          <p className="font-serif text-xl font-black text-[var(--earth)]">{item.title}</p>
+                          <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">{item.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </motion.div>
               ) : view === 'harvest' ? (
                 <HarvestView notes={planetNotes} onSelectNote={setSelectedNoteId} />
               ) : view === 'garden' ? (
                 <motion.div
-                  key="garden-view"
+                  key={`${view}-view`}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}
                   transition={{ duration: 0.3 }}
                 >
+                  <section className="mb-5 rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-5 shadow-sm">
+                    <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Jardín</p>
+                        <h3 className="mt-1 font-serif text-3xl font-black text-[var(--earth)]">Todo lo que has plantado</h3>
+                        <p className="mt-2 max-w-xl text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
+                          Flores son notas completadas, brotes son proyectos activos y árboles son proyectos terminados.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setView('3D')}
+                        className="rounded-2xl bg-[var(--sage)] px-5 py-3 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 soft-interaction"
+                      >
+                        Ver planeta
+                      </button>
+                    </div>
+                    <div className="mt-5 grid grid-cols-3 gap-2">
+                      {[
+                        { label: 'Flores', value: planetNotes.filter(note => !note.inbox && note.growthStage === 'bloom' && !note.isGrowth).length },
+                        { label: 'Brotes', value: gardenStats.active },
+                        { label: 'Árboles', value: planetNotes.filter(note => !note.inbox && note.growthStage === 'bloom' && note.isGrowth).length },
+                      ].map(item => (
+                        <div key={item.label} className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-3 text-center">
+                          <p className="font-serif text-2xl font-black text-[var(--earth)]">{item.value}</p>
+                          <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
                   <div className="mb-5 flex gap-2 overflow-x-auto pb-2 app-scrollbar">
                     {[
                       { id: 'all', label: 'Todo el jardín', count: gardenStats.total },
@@ -3823,7 +4185,7 @@ export default function App() {
                   )}
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-20">
-                    {filteredNotes.map((note) => {
+                    {visibleGardenNotes.map((note) => {
                       const progress = getProgress(note);
                       const stageMeta = STAGE_META[note.growthStage];
                       const nextTask = note.tasks.find(task => !task.completed);
@@ -4007,6 +4369,7 @@ export default function App() {
                     </div>
                   }>
                     <Garden3D 
+                      key={`${activePlanet.id}-${activePlanet.theme || theme}-garden`}
                       notes={filteredNotes} 
                       theme={activePlanet.theme || theme}
                       planetName={activePlanet.name}
@@ -4050,6 +4413,7 @@ export default function App() {
                     </div>
                   }>
                     <Garden3D
+                      key={`${activePlanet.id}-${activePlanet.theme || theme}-fullscreen`}
                       notes={filteredNotes}
                       theme={activePlanet.theme || theme}
                       planetName={activePlanet.name}
@@ -4074,7 +4438,7 @@ export default function App() {
               )}
             </AnimatePresence>
 
-            {filteredNotes.length === 0 && !isAdding && view === 'garden' && (
+            {visibleGardenNotes.length === 0 && !isAdding && view === 'garden' && (
               <div className="text-center py-24 flex flex-col items-center rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)]">
                 <div className="relative mb-8">
                   <Leaf className="text-[var(--seed)] opacity-10" size={120} />
@@ -4116,7 +4480,7 @@ export default function App() {
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
               className="absolute right-0 top-0 bottom-0 w-full md:w-[400px] bg-[var(--surface-strong)] border-l border-[var(--border)] shadow-2xl flex flex-col z-30"
             >
-              <div className="p-8 pb-4 flex justify-between items-center border-b border-[var(--border)]">
+              <div className="p-5 pb-3 flex justify-between items-center border-b border-[var(--border)]">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${
                     selectedNote.growthStage === 'bloom' ? 'bg-green-500' : 
@@ -4124,9 +4488,9 @@ export default function App() {
                   }`} />
                   <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
                     {selectedNote.inbox ? 'Semilla en semillero' :
-                     selectedNote.growthStage === 'bloom' ? 'Idea Cosechada' : 
+                     selectedNote.growthStage === 'bloom' ? selectedNote.isGrowth ? 'Árbol cosechado' : 'Flor completada' : 
                      selectedNote.growthStage === 'withered' ? 'Idea Marchita' :
-                     selectedNote.isGrowth ? 'Idea en Brote' : 'Semilla'}
+                     selectedNote.isGrowth ? 'Brote activo' : 'Semilla rápida'}
                   </span>
                 </div>
                 <button onClick={() => setSelectedNoteId(null)} className="p-2 hover:bg-[var(--surface-hover)] rounded-full transition-colors">
@@ -4134,77 +4498,131 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto app-scrollbar p-8">
-                {/* Large Visual Representation */}
-                <div className={`mb-10 h-48 bg-gradient-to-b ${STAGE_META[selectedNote.growthStage].aura} rounded-[2rem] flex items-center justify-center relative overflow-hidden border border-[var(--border)] shadow-sm`}>
-                  <div className="seed-card-sheen" />
-                  <div className="absolute bottom-5 w-2/3 h-4 bg-[#3e2723]/10 rounded-full blur-sm" />
-                  <PlantIllustration 
-                    stage={selectedNote.growthStage} 
-                    progress={getProgress(selectedNote)} 
-                    isGrowth={selectedNote.isGrowth} 
-                    theme={activePlanet.theme || theme}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-8">
-                  {selectedNote.inbox ? (
-                    <button
-                      onClick={() => cultivateInboxNote(selectedNote.id)}
-                    className="col-span-2 rounded-2xl bg-[var(--sage)] text-white px-4 py-3 flex items-center justify-center gap-2 text-xs font-black hover:brightness-105 soft-interaction"
-                    >
-                      <Sprout size={16} /> Mover al jardín
-                    </button>
-                  ) : null}
-                  <button
-                    onClick={() => openWatering(selectedNote.id)}
-                    disabled={selectedNote.growthStage === 'bloom'}
-                    className="rounded-2xl bg-[var(--bg-app)] disabled:opacity-40 border border-[var(--border)] px-4 py-3 flex items-center justify-center gap-2 text-xs font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
-                  >
-                    <Droplets size={16} /> Revisar
-                  </button>
-                  <button
-                    onClick={() => togglePauseNote(selectedNote.id)}
-                    disabled={selectedNote.growthStage === 'bloom'}
-                    className="rounded-2xl bg-[var(--bg-app)] disabled:opacity-40 border border-[var(--border)] px-4 py-3 flex items-center justify-center gap-2 text-xs font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
-                  >
-                    <Pause size={16} /> {selectedNote.paused ? 'Reactivar' : 'Pausar'}
-                  </button>
-                </div>
-
-                <div className="mb-8 rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-[var(--seed-accent)] tracking-widest">TIEMPO DE ENFOQUE</p>
-                    <p className="text-sm text-[var(--text-muted)] mt-1">Minutos protegidos para esta idea</p>
+              <div className="flex-1 overflow-y-auto app-scrollbar p-5">
+                <div className="mb-5 flex items-start gap-4 rounded-[1.5rem] border border-[var(--border)] bg-[var(--bg-app)] p-4">
+                  <div className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-b ${STAGE_META[selectedNote.growthStage].aura} border border-white/70 shadow-sm`}>
+                    <div className="absolute bottom-1 left-1/2 origin-bottom -translate-x-1/2 scale-[0.46]">
+                      <PlantIllustration
+                        stage={selectedNote.growthStage}
+                        progress={selectedProgress}
+                        isGrowth={selectedNote.isGrowth}
+                        theme={activePlanet.theme || theme}
+                      />
+                    </div>
                   </div>
-                  <span className="font-mono text-2xl font-black text-[var(--earth)]">{selectedNote.focusedMinutes || 0}m</span>
+                  <div className="min-w-0 flex-1">
+                    <input
+                      type="text"
+                      value={selectedNote.title}
+                      onChange={(e) => updateNote(selectedNote.id, { title: e.target.value })}
+                      className="w-full bg-transparent font-serif text-2xl font-black leading-tight text-[var(--earth)] outline-none"
+                      placeholder="Sin título"
+                    />
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {[
+                        { label: 'Riego', value: selectedNote.growthStage === 'bloom' ? 'Listo' : `${selectedReviewDays}d` },
+                        { label: 'Pasos', value: selectedNote.isGrowth ? `${selectedCompletedSteps}/${selectedNote.tasks.length}` : 'Rápida' },
+                        { label: 'Foco', value: `${selectedNote.focusedMinutes || 0}m` },
+                      ].map(item => (
+                        <div key={item.label} className="rounded-xl bg-[var(--surface-strong)] px-2 py-2 text-center">
+                          <p className="text-sm font-black text-[var(--earth)]">{item.value}</p>
+                          <p className="text-[7px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <input
-                  type="text"
-                  value={selectedNote.title}
-                  onChange={(e) => updateNote(selectedNote.id, { title: e.target.value })}
-                  className="text-2xl font-serif font-bold text-[var(--earth)] bg-transparent outline-none w-full mb-6"
-                  placeholder="Sin título"
-                />
+                <div className="mb-5 grid grid-cols-2 gap-2">
+                  {selectedIsDone ? (
+                    <>
+                      <button
+                        onClick={() => {
+                          setFilterStage('bloom');
+                          setSearch('');
+                          setView('garden');
+                          setSelectedNoteId(null);
+                        }}
+                        className="rounded-full bg-[var(--sage)] text-white px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black hover:brightness-105 soft-interaction"
+                      >
+                        <Leaf size={15} /> Ver en jardín
+                      </button>
+                      <button
+                        onClick={() => setView('3D')}
+                        className="rounded-full bg-[var(--surface-soft)] border border-[var(--border)] px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
+                      >
+                        <Box size={15} /> Planeta
+                      </button>
+                    </>
+                  ) : selectedIsQuickSeed ? (
+                    <>
+                      <button
+                        onClick={() => completeQuickSeed(selectedNote.id)}
+                        className="rounded-full bg-[var(--sage)] text-white px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black hover:brightness-105 soft-interaction"
+                      >
+                        <CheckCircle2 size={15} /> Hecho
+                      </button>
+                      <button
+                        onClick={() => selectedNote.inbox ? cultivateInboxNote(selectedNote.id) : growNote(selectedNote.id)}
+                        className="rounded-full bg-[var(--surface-soft)] border border-[var(--border)] px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
+                      >
+                        <Sprout size={15} /> Proyecto
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => {
+                          setFocusNoteId(selectedNote.id);
+                          setView('focus');
+                        }}
+                        className="rounded-full bg-[var(--sage)] text-white px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black hover:brightness-105 soft-interaction"
+                      >
+                        <Target size={15} /> Enfocar
+                      </button>
+                      <button
+                        onClick={() => addTask(selectedNote.id)}
+                        className="rounded-full bg-[var(--surface-soft)] border border-[var(--border)] px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
+                      >
+                        <Plus size={15} /> Paso
+                      </button>
+                    </>
+                  )}
+                  {selectedIsProject && (
+                    <>
+                      <button
+                        onClick={() => openWatering(selectedNote.id)}
+                        className="rounded-full bg-[var(--surface-soft)] border border-[var(--border)] px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
+                      >
+                        <Droplets size={15} /> Regar
+                      </button>
+                      <button
+                        onClick={() => togglePauseNote(selectedNote.id)}
+                        className="rounded-full bg-[var(--surface-soft)] border border-[var(--border)] px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
+                      >
+                        <Pause size={15} /> {selectedNote.paused ? 'Reactivar' : 'Pausar'}
+                      </button>
+                    </>
+                  )}
+                </div>
                 
-                <p className="text-[10px] uppercase font-bold text-[var(--seed-accent)] mb-2 tracking-widest">PENSAMIENTO PROFUNDO</p>
+                <p className="text-[10px] uppercase font-bold text-[var(--seed-accent)] mb-2 tracking-widest">Nota</p>
                 <textarea
                   value={selectedNote.content}
                   onChange={(e) => updateNote(selectedNote.id, { content: e.target.value })}
-                  rows={8}
-                  className="text-[var(--text-main)] bg-transparent outline-none w-full leading-relaxed resize-none mb-6 placeholder:opacity-20"
-                  placeholder="Profundiza en tu idea aquí..."
+                  rows={5}
+                  className="text-[var(--text-main)] bg-[var(--bg-app)] border border-[var(--border)] rounded-2xl outline-none w-full leading-relaxed resize-none mb-5 p-4 placeholder:opacity-30 focus:bg-[var(--surface-soft)]"
+                  placeholder="Escribe lo importante..."
                 />
 
-                <div className="mb-6">
-                  <p className="text-[10px] uppercase font-bold text-[var(--seed-accent)] mb-3 tracking-widest">TIPO DE SEMILLA</p>
-                  <div className="grid grid-cols-2 gap-2">
+                <div className="mb-5">
+                  <p className="text-[10px] uppercase font-bold text-[var(--seed-accent)] mb-3 tracking-widest">Tipo</p>
+                  <div className="flex gap-2 overflow-x-auto pb-1 app-scrollbar">
                     {SEED_TYPES.map(type => (
                       <button
                         key={type.id}
                         onClick={() => updateNote(selectedNote.id, { seedType: type.id })}
-                        className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${
+                        className={`shrink-0 rounded-full px-3 py-2 text-[11px] font-black transition-all ${
                           (selectedNote.seedType || 'idea') === type.id
                             ? 'bg-[var(--sage)] text-white'
                             : 'bg-[var(--bg-app)] text-[var(--sage)] hover:bg-[var(--surface-strong)]'
@@ -4216,131 +4634,85 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="mb-6">
-                  <div className="flex justify-between items-center mb-3">
-                    <p className="text-[10px] uppercase font-bold text-[var(--seed-accent)] tracking-widest">CONEXIONES NEURONALES</p>
-                    <button 
-                      onClick={() => setIsLinking(!isLinking)}
-                      className="text-[10px] bg-slate-100 px-2 py-1 rounded hover:bg-slate-200 transition-colors"
-                    >
-                      {isLinking ? 'CERRAR' : 'EDITAR'}
-                    </button>
-                  </div>
-                  
-                  {isLinking ? (
-                    <div className="space-y-1 mb-4 max-h-40 overflow-y-auto p-2 bg-slate-50 rounded-xl">
-                      {planetNotes.filter(n => n.id !== selectedNote.id).map(n => {
-                        const isConnected = selectedNote.connections?.includes(n.id);
-                        return (
+                <details className="mb-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] p-4">
+                  <summary className="cursor-pointer list-none text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">
+                    Cuidado
+                  </summary>
+                  <div className="mt-4 space-y-4">
+                    <label className="block">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Fecha objetivo</span>
+                      <input
+                        type="date"
+                        value={selectedNote.dueDate ? new Date(selectedNote.dueDate).toISOString().split('T')[0] : ''}
+                        onChange={(e) => updateNote(selectedNote.id, { dueDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
+                        className="mt-1 h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                      />
+                    </label>
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Riego</p>
+                      <div className="mt-2 grid grid-cols-3 gap-2">
+                        {[
+                          { value: 1, label: 'Diario' },
+                          { value: 3, label: '3 días' },
+                          { value: 7, label: 'Semana' },
+                        ].map(option => (
                           <button
-                            key={n.id}
-                            onClick={() => toggleConnection(selectedNote.id, n.id)}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-xs flex justify-between items-center ${isConnected ? 'bg-green-100 text-green-700' : 'hover:bg-[var(--surface-strong)]'}`}
+                            key={option.value}
+                            onClick={() => updateNote(selectedNote.id, { wateringIntervalDays: option.value })}
+                            className={`rounded-full px-3 py-2 text-[11px] font-black transition-all ${
+                              (selectedNote.wateringIntervalDays || 1) === option.value
+                                ? 'bg-[var(--sage)] text-white'
+                                : 'bg-[var(--surface-soft)] text-[var(--sage)] hover:bg-[var(--surface-strong)]'
+                            }`}
                           >
-                            <span>{n.title}</span>
-                            {isConnected && <CheckCircle2 size={12} />}
+                            {option.label}
                           </button>
-                        );
-                      })}
+                        ))}
+                      </div>
                     </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      {selectedNote.connections?.map(id => {
-                        const target = planetNotes.find(n => n.id === id);
-                        if (!target) return null;
-                        return (
-                          <button 
-                            key={id}
-                            onClick={() => setSelectedNoteId(id)}
-                            className="text-[10px] bg-slate-50 px-3 py-1 rounded-full border border-slate-100 text-slate-600 hover:bg-[var(--surface-strong)] hover:shadow-sm"
-                          >
-                            {target.title}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mb-10 flex items-center gap-4 p-4 bg-[var(--bg-app)] rounded-2xl">
-                  <div className="w-10 h-10 rounded-full bg-[var(--surface-strong)] flex items-center justify-center text-[var(--sage)] shadow-sm">
-                    <CalendarIcon size={20} />
                   </div>
-                  <div className="flex-1">
-                    <p className="text-[10px] font-bold text-[var(--sage)] uppercase mb-1">Fecha de Cosecha</p>
-                    <input 
-                      type="date"
-                      value={selectedNote.dueDate ? new Date(selectedNote.dueDate).toISOString().split('T')[0] : ''}
-                      onChange={(e) => updateNote(selectedNote.id, { dueDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
-                      className="bg-transparent outline-none text-sm font-semibold w-full"
-                    />
-                  </div>
-                </div>
-
-                <div className="mb-10">
-                  <p className="text-[10px] uppercase font-bold text-[var(--seed-accent)] mb-3 tracking-widest">FRECUENCIA DE RIEGO</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { value: 1, label: 'Diario' },
-                      { value: 3, label: '3 días' },
-                      { value: 7, label: 'Semanal' },
-                    ].map(option => (
-                      <button
-                        key={option.value}
-                        onClick={() => updateNote(selectedNote.id, { wateringIntervalDays: option.value })}
-                        className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${
-                          (selectedNote.wateringIntervalDays || 1) === option.value
-                            ? 'bg-[var(--sage)] text-white'
-                            : 'bg-[var(--bg-app)] text-[var(--sage)] hover:bg-[var(--surface-strong)]'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                </details>
 
                 {!selectedNote.isGrowth ? (
-                  <div className={`p-6 rounded-2xl border border-dashed text-center ${
+                  <div className={`p-4 rounded-2xl border border-dashed text-center ${
                     selectedNote.growthStage === 'withered' ? 'bg-red-50 border-red-200' : 'bg-[var(--bg-app)] border-[var(--sage)]'
                   }`}>
-                    <p className="text-sm italic opacity-70 mb-4">
+                    <p className="text-sm font-semibold text-[var(--text-muted)] mb-4">
                       {selectedNote.growthStage === 'withered' 
-                        ? '"Esta semilla se ha marchitado por el tiempo, pero aún puede renacer."' 
-                        : '"Para que esta semilla crezca, necesita una acción."'}
+                        ? 'Esta semilla puede volver como proyecto.' 
+                        : 'Si necesita pasos, conviértela en brote.'}
                     </p>
                     <button 
                       onClick={() => growNote(selectedNote.id)}
                       className={`${
                         selectedNote.growthStage === 'withered' ? 'bg-red-500' : 'bg-[var(--sage)]'
-                      } text-white w-full py-4 rounded-xl font-bold shadow-md hover:brightness-105 soft-interaction flex items-center justify-center gap-2`}
+                      } text-white w-full py-3 rounded-full text-sm font-black shadow-md hover:brightness-105 soft-interaction flex items-center justify-center gap-2`}
                     >
-                      <span>{selectedNote.growthStage === 'withered' ? 'Revivir y Cultivar' : 'Cultivar Idea'}</span>
-                      <Sprout size={18} />
+                      <Sprout size={16} />
+                      <span>{selectedNote.growthStage === 'withered' ? 'Revivir como proyecto' : 'Convertir en proyecto'}</span>
                     </button>
-                    <p className="text-[9px] mt-4 opacity-50 uppercase tracking-tighter">Convierte este pensamiento en un proyecto accionable</p>
                   </div>
                 ) : (
-                  <div className="space-y-6">
+                  <div className="space-y-4">
                     <div className="flex justify-between items-center">
-                      <p className="text-[10px] uppercase font-bold text-[var(--seed-accent)] tracking-widest">PASOS DE CRECIMIENTO</p>
-                      <span className="text-[10px] bg-[var(--bg-app)] px-2 py-0.5 rounded-full text-[var(--sage)] font-bold">
-                        {getProgress(selectedNote)}% COMPLETADO
+                      <p className="text-[10px] uppercase font-bold text-[var(--seed-accent)] tracking-widest">Pasos</p>
+                      <span className="text-[10px] bg-[var(--bg-app)] px-2 py-1 rounded-full text-[var(--sage)] font-bold">
+                        {selectedProgress}%
                       </span>
                     </div>
                     
-                    <div className="space-y-4">
+                    <div className="space-y-2">
                       <AnimatePresence>
                         {selectedNote.tasks.map(task => (
                           <motion.div 
                             key={task.id} 
                             initial={{ opacity: 0, y: 5 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="flex items-start gap-3 group/task"
+                            className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-3 py-2.5 group/task"
                           >
                             <button 
                               onClick={() => toggleTask(selectedNote.id, task.id)}
-                              className={`w-6 h-6 rounded-lg border-2 transition-all mt-0.5 shrink-0 flex items-center justify-center ${task.completed ? 'bg-[var(--sage)] border-[var(--sage)]' : 'border-[var(--border)] hover:border-[var(--sage)]'}`}
+                              className={`w-6 h-6 rounded-full border-2 transition-all shrink-0 flex items-center justify-center ${task.completed ? 'bg-[var(--sage)] border-[var(--sage)]' : 'border-[var(--border)] hover:border-[var(--sage)]'}`}
                             >
                               {task.completed && <CheckCircle2 className="text-white" size={14} />}
                             </button>
@@ -4358,19 +4730,19 @@ export default function App() {
                       </AnimatePresence>
                       <button 
                         onClick={() => addTask(selectedNote.id)}
-                        className="text-xs font-bold text-[var(--sage)] flex items-center gap-2 hover:translate-x-1 transition-transform"
+                        className="inline-flex h-9 items-center gap-2 rounded-full bg-[var(--surface-soft)] px-3 text-xs font-black text-[var(--sage)] ring-1 ring-[var(--border)] soft-interaction"
                       >
-                        <Plus size={14} /> <span>Añadir siguiente paso</span>
+                        <Plus size={14} /> <span>Añadir paso</span>
                       </button>
                     </div>
 
-                    <div className="mt-12 pt-8 border-t border-[var(--border)] text-center">
+                    <div className="mt-8 pt-5 border-t border-[var(--border)] text-center">
                       {selectedNote.growthStage === 'bloom' ? (
                         <div>
                           <motion.div animate={{ y: [0, -6, 0] }} transition={{ duration: 2.4, repeat: Infinity }}>
                             <CheckCircle2 className="mx-auto text-green-500 mb-4" size={32} />
                           </motion.div>
-                          <p className="text-xs font-bold text-green-600 uppercase tracking-widest mb-4">¡Idea Cosechada con Éxito!</p>
+                          <p className="text-xs font-bold text-green-600 uppercase tracking-widest mb-4">Cosecha completada</p>
                           <textarea
                             value={selectedNote.reflection || ''}
                             onChange={(e) => updateNote(selectedNote.id, { reflection: e.target.value })}
@@ -4386,7 +4758,7 @@ export default function App() {
                           <p className="text-[10px] opacity-40 mt-1">Llegaste tarde a la cosecha.</p>
                         </div>
                       ) : (
-                        <p className="text-[10px] italic opacity-40 italic">Completa todos los pasos para ver esta idea florecer.</p>
+                        <p className="text-[10px] opacity-50">Completa los pasos para convertir este brote en árbol.</p>
                       )}
                     </div>
                   </div>
@@ -4495,6 +4867,70 @@ export default function App() {
             >
               <Sparkles className="text-[var(--seed-accent)]" size={18} />
               <span className="text-sm font-black text-[var(--earth)]">+1 avance en {celebration}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {flowerReward && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[65] flex items-end justify-center bg-black/20 p-4 backdrop-blur-sm sm:items-center"
+              onClick={() => setFlowerReward(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 28, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.96 }}
+                transition={{ type: 'spring', damping: 22, stiffness: 260 }}
+                className="w-full max-w-sm overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-2xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="relative grid h-48 place-items-center bg-[linear-gradient(180deg,#f7fbef,#e7f3df)]">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,rgba(255,255,255,0.95),transparent_26%),radial-gradient(circle_at_20%_76%,rgba(122,169,92,0.18),transparent_28%),radial-gradient(circle_at_82%_70%,rgba(227,182,75,0.16),transparent_26%)]" />
+                  <motion.div
+                    initial={{ scale: 0.55, y: 18, opacity: 0 }}
+                    animate={{ scale: 1, y: 0, opacity: 1 }}
+                    transition={{ type: 'spring', damping: 16, stiffness: 220, delay: 0.08 }}
+                    className="relative z-10 grid h-32 w-32 place-items-center rounded-full bg-white/55 shadow-[0_22px_60px_rgba(47,62,51,0.14)]"
+                  >
+                    <PlantIllustration stage="bloom" progress={100} isGrowth={false} theme={activePlanet.theme || theme} />
+                  </motion.div>
+                  <Sparkles className="absolute right-12 top-10 text-[var(--seed-accent)]" size={22} />
+                  <Sparkles className="absolute bottom-12 left-12 text-[var(--sage)]" size={18} />
+                </div>
+                <div className="p-5 text-center">
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Flor plantada</p>
+                  <h3 className="mt-2 font-serif text-3xl font-black leading-tight text-[var(--earth)]">Nota completada</h3>
+                  <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
+                    “{flowerReward.title}” ya vive como una flor en tu jardín.
+                  </p>
+                  <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <button
+                      onClick={() => {
+                        setFlowerReward(null);
+                        setFilterStage('bloom');
+                        setSearch('');
+                        setView('garden');
+                      }}
+                      className="rounded-2xl bg-[var(--sage)] px-4 py-3 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
+                    >
+                      Ver jardín
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFlowerReward(null);
+                        setView('today');
+                      }}
+                      className="rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-4 py-3 text-sm font-black text-[var(--sage)] hover:bg-[var(--surface-soft)]"
+                    >
+                      Seguir
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -4763,7 +5199,7 @@ export default function App() {
                     <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Preferencias</p>
                     <div className="mt-4 space-y-4">
                       <label className="flex flex-col gap-2">
-                        <span className="text-sm font-black text-[var(--earth)]">Ecosistema del planeta actual</span>
+                        <span className="text-sm font-black text-[var(--earth)]">Ecosistema del jardín actual</span>
                         <select
                           value={activePlanet.theme || theme}
                           onChange={(event) => {
@@ -4840,6 +5276,7 @@ export default function App() {
                       <button
                         onClick={() => {
                           setShowSettings(false);
+                          setOnboardingStep(0);
                           setShowOnboarding(true);
                         }}
                         className="rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] py-3 font-black border border-[var(--border)]"
@@ -4880,61 +5317,109 @@ export default function App() {
                 initial={{ opacity: 0, y: 18, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 12, scale: 0.98 }}
-                className="w-full max-w-3xl rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] shadow-2xl p-6 sm:p-7"
+                className="w-full max-w-3xl overflow-hidden rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] shadow-2xl"
               >
-                <div className="flex items-start justify-between gap-5">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Bienvenido a Seed</p>
-                    <h2 className="text-3xl sm:text-4xl font-serif font-black text-[var(--earth)] mt-2 leading-tight">Planta ideas sin complicarte</h2>
-                    <p className="mt-3 max-w-xl text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-                      Seed funciona con tres decisiones pequeñas: guardar la idea, revisarla cuando vuelva y enfocarte en un paso.
-                    </p>
-                  </div>
-                  <button
-                    onClick={finishOnboarding}
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--text-muted)] hover:text-[var(--earth)] transition-colors"
-                    aria-label="Cerrar guía"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
+                {(() => {
+                  const step = ONBOARDING_STEPS[onboardingStep] || ONBOARDING_STEPS[0];
+                  const StepIcon = step.icon;
+                  const isLastStep = onboardingStep === ONBOARDING_STEPS.length - 1;
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
-                  {[
-                    { icon: Leaf, title: 'Planta', text: 'Captura una idea aunque esté incompleta.' },
-                    { icon: Droplets, title: 'Revisa', text: 'Riega para decidir si sigue viva, se pausa o necesita ayuda.' },
-                    { icon: Target, title: 'Enfoca', text: 'Elige un paso pequeño y trabaja sin ver todo lo demás.' },
-                  ].map((step) => (
-                    <div key={step.title} className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4">
-                      <span className="h-10 w-10 rounded-2xl bg-[var(--sage)] text-white flex items-center justify-center shadow-lg shadow-[var(--sage)]/20">
-                        <step.icon size={19} />
-                      </span>
-                      <p className="mt-4 font-serif text-xl font-black text-[var(--earth)]">{step.title}</p>
-                      <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">{step.text}</p>
-                    </div>
-                  ))}
-                </div>
+                  return (
+                    <>
+                      <div className="relative min-h-[13rem] bg-[linear-gradient(135deg,var(--bg-app),var(--surface-soft))] p-6 sm:p-7">
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_82%_20%,rgba(255,255,255,0.75),transparent_24%),radial-gradient(circle_at_18%_80%,rgba(122,169,92,0.18),transparent_28%)]" />
+                        <div className="relative flex items-start justify-between gap-5">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Cómo funciona Seed</p>
+                            <h2 className="mt-2 max-w-xl font-serif text-3xl font-black leading-tight text-[var(--earth)] sm:text-4xl">
+                              Un jardín simple para ideas y proyectos
+                            </h2>
+                            <p className="mt-3 max-w-xl text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
+                              Escribe rápido, decide después y deja que tu planeta crezca con lo que completas.
+                            </p>
+                          </div>
+                          <button
+                            onClick={finishOnboarding}
+                            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/70 text-[var(--text-muted)] shadow-sm hover:text-[var(--earth)] transition-colors"
+                            aria-label="Cerrar guía"
+                          >
+                            <X size={18} />
+                          </button>
+                        </div>
+                      </div>
 
-                <div className="mt-6 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
-                  <button
-                    onClick={() => {
-                      finishOnboarding();
-                      startPlanting();
-                    }}
-                    className="rounded-2xl bg-[var(--sage)] text-white py-4 px-5 font-black shadow-lg shadow-[var(--sage)]/20 flex items-center justify-center gap-2 active:translate-y-px soft-interaction"
-                  >
-                    <Leaf size={18} /> Plantar primera idea
-                  </button>
-                  <button
-                    onClick={() => {
-                      finishOnboarding();
-                      setView('3D');
-                    }}
-                    className="rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] py-4 px-5 font-black border border-[var(--border)] hover:bg-[var(--surface-strong)] transition-colors"
-                  >
-                    Ver ecosistema
-                  </button>
-                </div>
+                      <div className="p-6 sm:p-7">
+                        <div className="mb-5 flex items-center gap-2">
+                          {ONBOARDING_STEPS.map((item, index) => (
+                            <button
+                              key={item.title}
+                              onClick={() => setOnboardingStep(index)}
+                              className={`h-2 flex-1 rounded-full transition-colors ${index <= onboardingStep ? 'bg-[var(--sage)]' : 'bg-[var(--border)]'}`}
+                              aria-label={`Ver paso ${index + 1}`}
+                            />
+                          ))}
+                        </div>
+
+                        <AnimatePresence mode="wait">
+                          <motion.div
+                            key={step.title}
+                            initial={{ opacity: 0, x: 18 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -18 }}
+                            transition={{ duration: 0.2 }}
+                            className="rounded-[1.75rem] border border-[var(--border)] bg-[var(--bg-app)] p-5"
+                          >
+                            <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+                              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[var(--sage)] text-white shadow-lg shadow-[var(--sage)]/20">
+                                <StepIcon size={24} />
+                              </span>
+                              <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">{step.eyebrow}</p>
+                                <h3 className="mt-1 font-serif text-2xl font-black leading-tight text-[var(--earth)] sm:text-3xl">{step.title}</h3>
+                                <p className="mt-3 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">{step.text}</p>
+                                <p className="mt-4 rounded-2xl bg-[var(--surface-strong)] px-4 py-3 text-sm font-black text-[var(--sage)]">
+                                  {step.action}
+                                </p>
+                              </div>
+                            </div>
+                          </motion.div>
+                        </AnimatePresence>
+
+                        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-[auto_1fr_auto]">
+                          <button
+                            onClick={() => setOnboardingStep(value => Math.max(0, value - 1))}
+                            disabled={onboardingStep === 0}
+                            className="rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-5 py-3 font-black text-[var(--sage)] disabled:opacity-40"
+                          >
+                            Atrás
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (isLastStep) {
+                                finishOnboarding();
+                                startPlanting();
+                                return;
+                              }
+                              setOnboardingStep(value => Math.min(ONBOARDING_STEPS.length - 1, value + 1));
+                            }}
+                            className="rounded-2xl bg-[var(--sage)] px-5 py-3 font-black text-white shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
+                          >
+                            {isLastStep ? 'Plantar primera semilla' : 'Siguiente'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              finishOnboarding();
+                              setView('3D');
+                            }}
+                            className="rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-5 py-3 font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
+                          >
+                            Ver jardín
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </motion.div>
             </motion.div>
           )}
