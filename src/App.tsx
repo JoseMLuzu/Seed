@@ -294,6 +294,54 @@ function AppSwitch({
   );
 }
 
+function QuickCaptureBox({
+  value,
+  onChange,
+  onSubmit,
+  placeholder,
+  buttonLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  placeholder: string;
+  buttonLabel: string;
+}) {
+  const canSubmit = Boolean(value.trim());
+
+  return (
+    <div className="rounded-[1.5rem] border border-[var(--border)] bg-[var(--bg-app)] p-2 shadow-inner shadow-black/[0.02] transition-all focus-within:border-[var(--sage)] focus-within:bg-[var(--surface-strong)] focus-within:ring-2 focus-within:ring-[var(--sage)]/15">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <label className="flex min-h-16 flex-1 items-start gap-3 rounded-[1.2rem] px-3 py-3 sm:min-h-12 sm:items-center">
+          <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)] sm:mt-0">
+            <Sprout size={17} />
+          </span>
+          <textarea
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey && canSubmit) {
+                event.preventDefault();
+                onSubmit();
+              }
+            }}
+            rows={2}
+            placeholder={placeholder}
+            className="min-h-10 w-full resize-none bg-transparent pt-1 text-base font-semibold leading-snug text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)] sm:min-h-8 sm:pt-1 sm:text-sm"
+          />
+        </label>
+        <button
+          onClick={onSubmit}
+          disabled={!canSubmit}
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-[1.15rem] bg-[var(--sage)] px-5 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 transition-all active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
+        >
+          <Plus size={17} /> {buttonLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const STAGE_META: Record<SeedNote['growthStage'], { label: string; shortLabel: string; color: string; bg: string; aura: string }> = {
   seed: {
     label: 'Semilla',
@@ -970,23 +1018,14 @@ function TodayView({
           </button>
         </div>
 
-        <div className="mt-5 flex flex-col sm:flex-row gap-3">
-          <input
+        <div className="mt-5">
+          <QuickCaptureBox
             value={quickNote}
-            onChange={(event) => setQuickNote(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') onQuickCapture();
-            }}
+            onChange={setQuickNote}
+            onSubmit={onQuickCapture}
             placeholder="Anota una idea antes de que se escape..."
-            className="flex-1 bg-[var(--bg-app)] border border-[var(--border)] rounded-2xl px-4 py-3 outline-none focus:bg-[var(--surface-strong)] focus:ring-1 focus:ring-[var(--sage)] transition-all text-sm"
+            buttonLabel="Plantar"
           />
-          <button
-            onClick={onQuickCapture}
-            disabled={!quickNote.trim()}
-            className="bg-[var(--sage)] disabled:opacity-40 text-white rounded-2xl px-5 py-3 font-black flex items-center justify-center gap-2 shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
-          >
-            <Plus size={18} /> Plantar
-          </button>
         </div>
 
         <div className="mt-5 grid grid-cols-3 gap-2">
@@ -1167,23 +1206,14 @@ function InboxView({
         <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Semillero</p>
         <h3 className="text-3xl font-serif font-black text-[var(--earth)] mt-1">Semillas rápidas</h3>
         <p className="text-sm text-[var(--text-muted)] mt-2">Cosas rápidas, pendientes simples e ideas sueltas. Márcalas como hechas o conviértelas en brote si necesitan pasos.</p>
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-          <input
+        <div className="mt-5">
+          <QuickCaptureBox
             value={quickNote}
-            onChange={(event) => setQuickNote(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && quickNote.trim()) onQuickCapture();
-            }}
+            onChange={setQuickNote}
+            onSubmit={onQuickCapture}
             placeholder="Escribe una idea rápida..."
-            className="h-12 flex-1 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--earth)] outline-none transition-all placeholder:text-[var(--text-muted)] focus:border-[var(--sage)] focus:bg-[var(--surface-strong)] focus:ring-2 focus:ring-[var(--sage)]/15"
+            buttonLabel="Plantar semilla"
           />
-          <button
-            onClick={onQuickCapture}
-            disabled={!quickNote.trim()}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-[var(--sage)] px-5 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 transition-all active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            <Plus size={17} /> Plantar semilla
-          </button>
         </div>
       </div>
 
