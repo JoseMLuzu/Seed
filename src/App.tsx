@@ -3817,7 +3817,7 @@ export default function App() {
       <button
         type="button"
         onClick={() => setShowMobileMenu(true)}
-        className={`fixed left-4 top-4 z-40 h-11 w-11 place-items-center rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--sage)] shadow-2xl shadow-black/10 backdrop-blur-xl md:hidden ${view === 'focus' || showGardenFullscreen ? 'hidden' : 'grid'}`}
+        className={`fixed left-4 top-[calc(env(safe-area-inset-top)+1rem)] z-40 h-11 w-11 place-items-center rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--sage)] shadow-2xl shadow-black/10 backdrop-blur-xl md:hidden ${view === 'focus' || showGardenFullscreen ? 'hidden' : 'grid'}`}
         aria-label="Abrir menú"
       >
         <Menu size={19} />
@@ -4068,26 +4068,26 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-        <section className={`flex-1 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${view === 'calendar' ? 'px-3 pb-3 pt-20 sm:px-5 sm:pb-5 md:p-6' : 'px-4 pb-4 pt-20 sm:px-6 sm:pb-6 md:p-10'} ${selectedNoteId ? 'md:mr-[400px]' : ''}`}>
+        <section className={`flex-1 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${view === 'calendar' ? 'px-3 pb-3 pt-20 sm:px-5 sm:pb-5 md:p-6' : 'px-4 pb-28 pt-20 sm:px-6 sm:pb-28 md:p-10'} ${selectedNoteId ? 'md:mr-[400px]' : ''}`}>
           <div className={`${view === 'calendar' ? 'mx-auto max-w-[100rem]' : 'max-w-4xl mx-auto'}`}>
-            <header className="mb-10 flex flex-col md:flex-row justify-between items-start gap-5 md:gap-6">
+            <header className="mb-6 flex flex-col md:mb-10 md:flex-row justify-between items-start gap-4 md:gap-6">
               <div className="w-full">
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
                   <div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-3xl md:text-4xl font-serif font-semibold text-[var(--earth)] leading-none">{activePlanet.name}</h2>
+                    <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+                      <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif font-semibold text-[var(--earth)] leading-none">{activePlanet.name}</h2>
                       <span className="inline-flex items-center gap-2 rounded-full bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-1.5 shadow-sm">
                         <TrendingUp size={14} className="text-[var(--sage)]" />
                         <span className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">{planetNotes.length} ideas</span>
                       </span>
                     </div>
-                    <p className="text-xs text-[var(--text-muted)] mt-2 italic">{activePlanet.description || 'Cada nota es el comienzo de algo grande.'}</p>
+                    <p className="mt-2 line-clamp-2 text-xs italic text-[var(--text-muted)]">{activePlanet.description || 'Cada nota es el comienzo de algo grande.'}</p>
                   </div>
                 </motion.div>
-                <div className="grid grid-cols-3 gap-3 mt-6">
+                <div className="mt-5 grid grid-cols-3 gap-2 sm:mt-6 sm:gap-3">
                   {[
                     { id: 'seed', label: 'Semillas', value: gardenStats.seeds, tone: 'bg-amber-100 text-amber-700' },
                     { id: 'sprout', label: 'Brotes', value: gardenStats.active, tone: 'bg-emerald-100 text-emerald-700' },
@@ -4103,12 +4103,12 @@ export default function App() {
                         setSelectedNoteId(null);
                         setView('garden');
                       }}
-                      className={`rounded-2xl border px-4 py-3 shadow-sm text-left soft-interaction ${filterStage === stat.id ? 'bg-[var(--surface-strong)] border-[var(--sage)] ring-1 ring-[var(--sage)]/30' : 'bg-[var(--surface-soft)] border-[var(--border)] hover:bg-[var(--surface-strong)]'}`}
+                      className={`rounded-2xl border px-3 py-3 shadow-sm text-left soft-interaction sm:px-4 ${filterStage === stat.id ? 'bg-[var(--surface-strong)] border-[var(--sage)] ring-1 ring-[var(--sage)]/30' : 'bg-[var(--surface-soft)] border-[var(--border)] hover:bg-[var(--surface-strong)]'}`}
                     >
                       <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{stat.label}</p>
                       <div className="mt-2 flex items-center justify-between">
-                        <span className="text-2xl font-serif font-black text-[var(--earth)]">{stat.value}</span>
-                        <span className={`h-7 w-7 rounded-full flex items-center justify-center ${stat.tone}`}>
+                        <span className="text-xl font-serif font-black text-[var(--earth)] sm:text-2xl">{stat.value}</span>
+                        <span className={`flex h-6 w-6 items-center justify-center rounded-full sm:h-7 sm:w-7 ${stat.tone}`}>
                           <Circle size={10} fill="currentColor" />
                         </span>
                       </div>
@@ -4135,7 +4135,7 @@ export default function App() {
                   placeholder="Buscar en el jardín..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full h-11 pl-10 pr-4 bg-[var(--surface-soft)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-1 focus:ring-[var(--sage)] focus:bg-[var(--surface-strong)] transition-all text-sm"
+                  className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] pl-10 pr-4 text-sm transition-all focus:bg-[var(--surface-strong)] focus:outline-none focus:ring-1 focus:ring-[var(--sage)] md:h-11 md:rounded-xl"
                 />
               </div>
             </header>
@@ -4415,7 +4415,7 @@ export default function App() {
                     </motion.div>
                   )}
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-20">
+                  <div className="grid grid-cols-1 gap-4 pb-28 sm:gap-6 md:pb-20 lg:grid-cols-2">
                     {visibleGardenNotes.map((note) => {
                       const progress = getProgress(note);
                       const stageMeta = STAGE_META[note.growthStage];
@@ -4428,7 +4428,7 @@ export default function App() {
                         initial={{ opacity: 0, y: 14 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        whileHover={{ y: -4 }}
+                        whileHover={{ y: -3 }}
                         whileTap={{ y: -1 }}
                         transition={{ type: 'tween', duration: 0.18 }}
                         onClick={() => setSelectedNoteId(note.id)}
@@ -4439,7 +4439,7 @@ export default function App() {
                         }`}
                       >
                         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent opacity-80" />
-                        <div className={`h-52 bg-gradient-to-b ${stageMeta.aura} relative flex items-center justify-center pt-8 overflow-hidden`}>
+                        <div className={`relative flex h-44 items-center justify-center overflow-hidden bg-gradient-to-b pt-7 sm:h-52 sm:pt-8 ${stageMeta.aura}`}>
                           <div className="seed-card-sheen" />
                           <div className="absolute inset-x-8 bottom-7 h-8 rounded-full bg-[#3e2723]/10 blur-xl" />
                           <div className="absolute bottom-5 w-3/5 h-3 bg-[#3e2723]/20 rounded-full" />
@@ -4464,7 +4464,7 @@ export default function App() {
                           </motion.div>
                         </div>
 
-                        <div className="p-6">
+                        <div className="p-5 sm:p-6">
                           <div className="flex justify-between items-start mb-3">
                             <div className="flex items-center gap-2">
                               <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] ${stageMeta.bg} ${stageMeta.color}`}>
@@ -4483,7 +4483,7 @@ export default function App() {
                             </button>
                           </div>
 
-                          <h3 className={`text-2xl font-serif font-bold mb-3 leading-tight transition-colors ${selectedNoteId === note.id ? 'text-[var(--sage)]' : note.growthStage === 'withered' ? 'text-[var(--text-muted)]' : 'text-[var(--earth)]'}`}>{note.title}</h3>
+                          <h3 className={`mb-3 text-xl font-serif font-bold leading-tight transition-colors sm:text-2xl ${selectedNoteId === note.id ? 'text-[var(--sage)]' : note.growthStage === 'withered' ? 'text-[var(--text-muted)]' : 'text-[var(--earth)]'}`}>{note.title}</h3>
                           <p className="text-sm leading-relaxed text-[var(--text-muted)] line-clamp-2 min-h-[2.75rem]">
                             {note.content}
                           </p>
@@ -4533,7 +4533,7 @@ export default function App() {
                             </div>
                           )}
 
-                          <div className="mt-6 pt-5 border-t border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="mt-5 flex flex-col justify-between gap-3 border-t border-[var(--border)] pt-4 sm:mt-6 sm:flex-row sm:items-center sm:pt-5">
                             <div className="flex flex-wrap items-center gap-3 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
                               <span>{note.tasks.length} pasos</span>
                               <span>{note.connections?.length || 0} vínculos</span>
@@ -4545,7 +4545,7 @@ export default function App() {
                                   event.stopPropagation();
                                   runCardAction(note, guidance.kind);
                                 }}
-                                className={`h-9 rounded-full px-3 flex items-center gap-1.5 justify-center text-[10px] font-black uppercase tracking-widest soft-interaction shadow-sm active:translate-y-px ${guidance.actionTone}`}
+                                className={`flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-3 text-[10px] font-black uppercase tracking-widest shadow-sm soft-interaction active:translate-y-px sm:h-9 sm:w-auto ${guidance.actionTone}`}
                                 title={guidance.title}
                               >
                                 {guidance.kind === 'water' ? <Droplets size={15} /> :
@@ -4711,7 +4711,7 @@ export default function App() {
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
               className="absolute right-0 top-0 bottom-0 z-50 flex w-full flex-col border-l border-[var(--border)] bg-[var(--surface-strong)] shadow-2xl md:z-30 md:w-[400px]"
             >
-              <div className="p-5 pb-3 flex justify-between items-center border-b border-[var(--border)]">
+              <div className="flex items-center justify-between border-b border-[var(--border)] p-5 pb-3 pt-[calc(env(safe-area-inset-top)+1rem)] md:pt-5">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${
                     selectedNote.growthStage === 'bloom' ? 'bg-green-500' : 
@@ -4729,7 +4729,7 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto app-scrollbar p-5">
+              <div className="flex-1 overflow-y-auto app-scrollbar p-5 pb-28 md:pb-5">
                 <div className="mb-5 flex items-start gap-4 rounded-[1.5rem] border border-[var(--border)] bg-[var(--bg-app)] p-4">
                   <div className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-b ${STAGE_META[selectedNote.growthStage].aura} border border-white/70 shadow-sm`}>
                     <div className="absolute bottom-1 left-1/2 origin-bottom -translate-x-1/2 scale-[0.46]">
@@ -4764,7 +4764,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="mb-5 grid grid-cols-2 gap-2">
+                <div className="sticky bottom-3 z-20 -mx-1 mb-5 grid grid-cols-2 gap-2 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)]/95 p-2 shadow-2xl shadow-black/10 backdrop-blur-xl md:static md:mx-0 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none">
                   {selectedIsDone ? (
                     <>
                       <button
@@ -4774,13 +4774,13 @@ export default function App() {
                           setView('garden');
                           setSelectedNoteId(null);
                         }}
-                        className="rounded-full bg-[var(--sage)] text-white px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black hover:brightness-105 soft-interaction"
+                        className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 py-2.5 text-xs font-black text-white soft-interaction hover:brightness-105"
                       >
                         <Leaf size={15} /> Ver en jardín
                       </button>
                       <button
                         onClick={() => setView('3D')}
-                        className="rounded-full bg-[var(--surface-soft)] border border-[var(--border)] px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
+                        className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-xs font-black text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
                       >
                         <Box size={15} /> Planeta
                       </button>
@@ -4789,13 +4789,13 @@ export default function App() {
                     <>
                       <button
                         onClick={() => completeQuickSeed(selectedNote.id)}
-                        className="rounded-full bg-[var(--sage)] text-white px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black hover:brightness-105 soft-interaction"
+                        className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 py-2.5 text-xs font-black text-white soft-interaction hover:brightness-105"
                       >
                         <CheckCircle2 size={15} /> Hecho
                       </button>
                       <button
                         onClick={() => selectedNote.inbox ? cultivateInboxNote(selectedNote.id) : growNote(selectedNote.id)}
-                        className="rounded-full bg-[var(--surface-soft)] border border-[var(--border)] px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
+                        className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-xs font-black text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
                       >
                         <Sprout size={15} /> Proyecto
                       </button>
@@ -4807,13 +4807,13 @@ export default function App() {
                           setFocusNoteId(selectedNote.id);
                           setView('focus');
                         }}
-                        className="rounded-full bg-[var(--sage)] text-white px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black hover:brightness-105 soft-interaction"
+                        className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 py-2.5 text-xs font-black text-white soft-interaction hover:brightness-105"
                       >
                         <Target size={15} /> Enfocar
                       </button>
                       <button
                         onClick={() => addTask(selectedNote.id)}
-                        className="rounded-full bg-[var(--surface-soft)] border border-[var(--border)] px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
+                        className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-xs font-black text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
                       >
                         <Plus size={15} /> Paso
                       </button>
@@ -4823,13 +4823,13 @@ export default function App() {
                     <>
                       <button
                         onClick={() => openWatering(selectedNote.id)}
-                        className="rounded-full bg-[var(--surface-soft)] border border-[var(--border)] px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
+                        className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-xs font-black text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
                       >
                         <Droplets size={15} /> Regar
                       </button>
                       <button
                         onClick={() => togglePauseNote(selectedNote.id)}
-                        className="rounded-full bg-[var(--surface-soft)] border border-[var(--border)] px-4 py-2.5 flex items-center justify-center gap-2 text-xs font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
+                        className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-xs font-black text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
                       >
                         <Pause size={15} /> {selectedNote.paused ? 'Reactivar' : 'Pausar'}
                       </button>
@@ -4996,7 +4996,7 @@ export default function App() {
                 )}
               </div>
 
-              <div className="p-8 border-t border-[var(--border)] bg-[var(--surface-soft)] flex justify-between items-center">
+              <div className="flex items-center justify-between border-t border-[var(--border)] bg-[var(--surface-soft)] px-5 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] md:p-8">
                  <button 
                    onClick={() => deleteNote(selectedNote.id)}
                    className="text-xs font-bold text-red-400 hover:text-red-600 transition-colors flex items-center gap-2"
@@ -5538,7 +5538,7 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/30 p-3 backdrop-blur-sm sm:items-center sm:p-4"
+              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/30 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 backdrop-blur-sm sm:items-center sm:p-4"
             >
               <motion.div
                 initial={{ opacity: 0, y: 18, scale: 0.98 }}
@@ -5659,9 +5659,11 @@ export default function App() {
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             onClick={startPlanting}
-            className="fixed bottom-8 right-8 w-14 h-14 bg-[var(--sage)] text-white rounded-full shadow-2xl flex items-center justify-center z-50 overflow-hidden hover:shadow-[0_18px_45px_rgba(47,62,51,0.28)] soft-interaction"
+            className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-4 right-4 z-50 flex h-14 items-center justify-center gap-2 overflow-hidden rounded-[1.5rem] bg-[var(--sage)] font-black text-white shadow-2xl shadow-[var(--sage)]/25 soft-interaction hover:shadow-[0_18px_45px_rgba(47,62,51,0.28)] md:bottom-8 md:left-auto md:right-8 md:w-14 md:rounded-full"
+            aria-label="Plantar idea"
           >
-            <Leaf size={28} />
+            <Leaf size={24} />
+            <span className="md:hidden">Plantar idea</span>
           </motion.button>
         )}
       </main>
