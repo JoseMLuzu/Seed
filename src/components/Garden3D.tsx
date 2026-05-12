@@ -1,7 +1,7 @@
 import { useRef, useMemo, useState, Suspense, useEffect } from 'react';
 import type { MutableRefObject } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Environment, Html, Line, Sparkles, Stars } from '@react-three/drei';
+import { AdaptiveDpr, OrbitControls, Environment, Html, Line, Sparkles, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { SeedNote, Theme } from '../types';
 import { daysSince, wateringDue } from '../seedLogic';
@@ -1240,6 +1240,7 @@ function Plant3D({
   routeActive,
   dimmed,
   showLabel,
+  performanceMode,
   onClick,
 }: {
   note: SeedNote;
@@ -1251,6 +1252,7 @@ function Plant3D({
   routeActive: boolean;
   dimmed: boolean;
   showLabel: boolean;
+  performanceMode: boolean;
   onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
@@ -1292,18 +1294,23 @@ function Plant3D({
   }, [spawned, hovered, selected, routeActive, dimmed, nourished]);
 
   useFrame((state, delta) => {
+    const shouldAnimatePlant = !performanceMode || selected || hovered || needsWater || nourished || routeActive;
     if (meshRef.current) {
       const scaleDamping = 1 - Math.exp(-delta * 9);
       const s = THREE.MathUtils.lerp(meshRef.current.scale.x, targetScale, scaleDamping);
       meshRef.current.scale.set(s, s, s);
       
-      if (growthStage !== 'withered') {
+      if (shouldAnimatePlant && growthStage !== 'withered') {
         const t = state.clock.elapsedTime + (note.id.length % 10);
         const offset = Math.sin(t * 1.5) * 0.15 + Math.cos(t * 0.8) * 0.05;
         meshRef.current.position.y = offset;
         
         meshRef.current.rotation.z = Math.sin(t * 0.5) * 0.1;
         meshRef.current.rotation.x = Math.cos(t * 0.4) * 0.1;
+      } else if (performanceMode) {
+        meshRef.current.position.y = 0;
+        meshRef.current.rotation.z = 0;
+        meshRef.current.rotation.x = 0;
       }
     }
 
@@ -1461,7 +1468,7 @@ function ConnectionLine({ start, end, color }: { start: [number, number, number]
   );
 }
 
-function Atmosphere({ isDay, palette }: { isDay: boolean; palette: GardenPalette }) {
+function Atmosphere({ isDay, palette, performanceMode }: { isDay: boolean; palette: GardenPalette; performanceMode: boolean }) {
   const atmosphereRef = useRef<THREE.Mesh>(null);
 
   useFrame((state) => {
@@ -1478,7 +1485,7 @@ function Atmosphere({ isDay, palette }: { isDay: boolean; palette: GardenPalette
 
   return (
     <mesh ref={atmosphereRef}>
-      <sphereGeometry args={[PLANET_RADIUS + 1, 64, 64]} />
+      <sphereGeometry args={[PLANET_RADIUS + 1, performanceMode ? 32 : 64, performanceMode ? 32 : 64]} />
       <meshStandardMaterial 
         color={palette.atmosphere} 
         transparent 
@@ -1499,6 +1506,7 @@ function PlanetSystem({
   recentlyWateredId,
   compact,
   showLabels,
+  performanceMode,
   controlsRef,
   onSelectNote,
 }: {
@@ -1511,6 +1519,7 @@ function PlanetSystem({
   recentlyWateredId?: string | null;
   compact: boolean;
   showLabels: boolean;
+  performanceMode: boolean;
   controlsRef: MutableRefObject<any>;
   onSelectNote: (id: string) => void;
 }) {
@@ -1551,10 +1560,10 @@ function PlanetSystem({
     <group ref={planetRef}>
       <PlanetSurface isDay={isDay} palette={palette} />
       
-      <Atmosphere isDay={isDay} palette={palette} />
+      <Atmosphere isDay={isDay} palette={palette} performanceMode={performanceMode} />
 
       <Sparkles 
-        count={compact ? (isDay ? 45 : 120) : (isDay ? 100 : 300)} 
+        count={performanceMode ? (isDay ? 28 : 70) : compact ? (isDay ? 45 : 120) : (isDay ? 100 : 300)} 
         scale={PLANET_RADIUS * 3.5} 
         size={5} 
         speed={0.4} 
@@ -1584,13 +1593,14 @@ function PlanetSystem({
           dimmed={routeIds.length > 0 && !routeIds.includes(note.id)}
           showLabel={
             showLabels && (
-              plants.length <= 18
+              (!performanceMode && plants.length <= 18)
               || selectedId === note.id
               || routeIds.includes(note.id)
               || wateringDue(note)
               || note.growthStage === 'bloom'
             )
           }
+          performanceMode={performanceMode}
           onClick={() => onSelectNote(note.id)}
         />
       ))}
@@ -1664,6 +1674,7 @@ export default function Garden3D({
   const [routeIds, setRouteIds] = useState<string[]>([]);
   const [showLabels, setShowLabels] = useState(true);
   const [compact3D, setCompact3D] = useState(() => typeof window !== 'undefined' && window.innerWidth < 760);
+  const [lowPowerDevice, setLowPowerDevice] = useState(false);
   const controlsRef = useRef<any>(null);
 
   useEffect(() => {
@@ -1673,17 +1684,24 @@ export default function Garden3D({
     return () => window.removeEventListener('resize', update);
   }, []);
 
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return;
+    const nav = navigator as Navigator & { deviceMemory?: number };
+    setLowPowerDevice((nav.hardwareConcurrency || 8) <= 4 || (nav.deviceMemory || 8) <= 4);
+  }, []);
+
   const isDay = useMemo(() => {
     if (theme === 'night') return false;
     const hour = new Date().getHours();
     return hour >= 6 && hour < 19;
   }, [theme]);
 
-  const stats = useMemo(() => ({
-    water: notes.filter(note => wateringDue(note) && note.growthStage !== 'bloom' && !note.paused).length,
-    progress: notes.filter(note => note.isGrowth && note.growthStage !== 'bloom' && !note.paused).length,
-    harvest: notes.filter(note => note.growthStage === 'bloom').length,
-  }), [notes]);
+  const stats = useMemo(() => notes.reduce((total, note) => {
+    if (wateringDue(note) && note.growthStage !== 'bloom' && !note.paused) total.water += 1;
+    if (note.isGrowth && note.growthStage !== 'bloom' && !note.paused) total.progress += 1;
+    if (note.growthStage === 'bloom') total.harvest += 1;
+    return total;
+  }, { water: 0, progress: 0, harvest: 0 }), [notes]);
 
   const isRaining = !isPreview && (stats.water >= 3 || (stats.progress >= 4 && stats.water / stats.progress >= 0.45));
   const skyColor = isDay ? (isRaining ? '#6fa6c9' : palette.skyDay) : palette.skyNight;
@@ -1704,21 +1722,32 @@ export default function Garden3D({
 
   const routeCandidates = useMemo(() => {
     const picked: SeedNote[] = [];
+    let firstWatering: SeedNote | undefined;
+    let firstProgress: SeedNote | undefined;
+    let firstDue: SeedNote | undefined;
+    const rainyEssentials: SeedNote[] = [];
     const add = (note?: SeedNote) => {
       if (note && !picked.some(item => item.id === note.id)) picked.push(note);
     };
 
-    add(notes.find(note => wateringDue(note) && note.growthStage !== 'bloom' && !note.paused));
-    add(notes.find(note => note.isGrowth && note.growthStage !== 'bloom' && !note.paused && note.tasks.some(task => !task.completed)));
-    add([...notes]
-      .filter(note => note.dueDate && note.growthStage !== 'bloom' && !note.paused)
-      .sort((a, b) => (a.dueDate || 0) - (b.dueDate || 0))[0]);
+    for (const note of notes) {
+      const active = note.growthStage !== 'bloom' && !note.paused;
+      if (!active) continue;
+      const dueForWater = wateringDue(note);
+      if (dueForWater && !firstWatering) firstWatering = note;
+      if (dueForWater) rainyEssentials.push(note);
+      if (!firstProgress && note.isGrowth && note.tasks.some(task => !task.completed)) firstProgress = note;
+      if (note.dueDate && (!firstDue || note.dueDate < (firstDue.dueDate || Infinity))) firstDue = note;
+    }
+
+    add(firstWatering);
+    add(firstProgress);
+    add(firstDue);
 
     if (isRaining) {
-      const rainyEssentials = [...notes]
-        .filter(note => wateringDue(note) && note.growthStage !== 'bloom' && !note.paused)
-        .sort((a, b) => daysSince(b.lastWateredAt || b.createdAt) - daysSince(a.lastWateredAt || a.createdAt));
-      return rainyEssentials.slice(0, 3);
+      return rainyEssentials
+        .sort((a, b) => daysSince(b.lastWateredAt || b.createdAt) - daysSince(a.lastWateredAt || a.createdAt))
+        .slice(0, 3);
     }
 
     return picked.slice(0, 3);
@@ -1749,6 +1778,8 @@ export default function Garden3D({
     });
   }, [visibleNotes]);
 
+  const performanceMode = isPreview || compact3D || lowPowerDevice || plants.length > 28;
+
   const connections = useMemo(() => {
     const byId = new Map(plants.map((plant) => [plant.note.id, plant.position]));
     return plants.flatMap(({ note, position }) => {
@@ -1769,11 +1800,17 @@ export default function Garden3D({
           ? 'h-[31rem] min-h-[31rem] rounded-[2.5rem] border-[8px]'
           : 'h-[68vh] min-h-[520px] sm:h-[75vh] rounded-[2rem] sm:rounded-[3rem] border-[8px] sm:border-[12px]'
     }`}>
-      <Canvas shadows camera={{ position: [40, 30, 40], fov: 45 }}>
+      <Canvas
+        shadows={!performanceMode}
+        dpr={performanceMode ? [0.85, 1.1] : [1, 1.35]}
+        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        camera={{ position: [40, 30, 40], fov: 45 }}
+      >
+        <AdaptiveDpr pixelated={false} />
         <color attach="background" args={[skyColor]} />
         
         <ambientLight intensity={isDay ? (isRaining ? 0.78 : 0.92) : 0.62} />
-        <pointLight position={[50, 50, 50]} intensity={isRaining ? 0.92 : 1.35} castShadow />
+        <pointLight position={[50, 50, 50]} intensity={isRaining ? 0.92 : 1.35} castShadow={!performanceMode} />
         <directionalLight position={[-50, 50, -50]} intensity={isRaining ? 0.72 : 1.05} color={isDay ? "#fff1c7" : "#48cae4"} />
         <hemisphereLight intensity={0.78} color={isRaining ? "#cfefff" : "#ffffff"} groundColor="#11170f" />
         
@@ -1781,7 +1818,7 @@ export default function Garden3D({
         {isDay && !isRaining && <AmbientClouds palette={palette} compact={compact3D} />}
         {!isDay && (
           <>
-            <Stars radius={150} depth={50} count={compact3D ? 1800 : 5000} factor={4} saturation={0} fade speed={1} />
+            <Stars radius={150} depth={50} count={performanceMode ? 850 : 2600} factor={4} saturation={0} fade speed={1} />
             <CompanionMoon palette={palette} />
           </>
         )}
@@ -1802,6 +1839,7 @@ export default function Garden3D({
           recentlyWateredId={recentlyWateredId}
           compact={compact3D}
           showLabels={showLabels}
+          performanceMode={performanceMode}
           controlsRef={controlsRef}
           onSelectNote={(id) => setSelectedId(id)}
         />
