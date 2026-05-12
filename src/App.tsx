@@ -3,11 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { lazy, Suspense, useRef, useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -37,6 +32,8 @@ import {
   Skull,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Menu,
   LayoutGrid,
   Box,
   Settings,
@@ -152,6 +149,150 @@ const PROFILE_PURPOSES = [
   'Ideas personales',
   'Todo un poco',
 ];
+
+const PROFILE_PURPOSE_OPTIONS = PROFILE_PURPOSES.map(purpose => ({ value: purpose, label: purpose }));
+
+const THEME_SELECT_OPTIONS = THEMES.map(item => ({
+  value: item.id,
+  label: `${item.icon} ${item.label}`,
+  description: item.id === 'earth' ? 'Claro y tranquilo' : item.id === 'forest' ? 'Profundo y natural' : item.id === 'bloom' ? 'Creativo y luminoso' : item.id === 'night' ? 'Calma nocturna' : item.id === 'jungle' ? 'Vivo y explorador' : item.id === 'alien' ? 'Experimental' : item.id === 'desert' ? 'Minimal y cálido' : 'Limpio y sereno',
+}));
+
+const WATERING_INTERVAL_OPTIONS = [
+  { value: '1', label: 'Diario', description: 'Ideas importantes' },
+  { value: '3', label: 'Cada 3 días', description: 'Equilibrado' },
+  { value: '7', label: 'Semanal', description: 'Baja presión' },
+];
+
+type AppSelectOption = {
+  value: string;
+  label: string;
+  description?: string;
+};
+
+function AppSelect({
+  value,
+  options,
+  onChange,
+  disabled = false,
+  placeholder = 'Seleccionar',
+  ariaLabel,
+}: {
+  value: string;
+  options: AppSelectOption[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  ariaLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find(option => option.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [open]);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (!disabled) setOpen(current => !current);
+        }}
+        className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-3.5 py-2.5 text-left text-sm font-bold text-[var(--earth)] shadow-sm outline-none transition-all hover:bg-[var(--surface-strong)] focus:ring-2 focus:ring-[var(--sage)]/20 disabled:cursor-not-allowed disabled:opacity-55"
+      >
+        <span className="min-w-0">
+          <span className="block truncate">{selected?.label || placeholder}</span>
+          {selected?.description && (
+            <span className="mt-0.5 block truncate text-[11px] font-semibold text-[var(--text-muted)]">{selected.description}</span>
+          )}
+        </span>
+        <ChevronDown size={16} className={`shrink-0 text-[var(--sage)] transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && !disabled && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 6, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ duration: 0.16 }}
+            onClick={(event) => event.stopPropagation()}
+            className="absolute left-0 right-0 top-full z-50 max-h-72 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] p-1.5 shadow-2xl shadow-black/10 app-scrollbar"
+          >
+            {options.map(option => {
+              const active = option.value === value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                    active
+                      ? 'bg-[var(--sage)] text-white shadow-sm'
+                      : 'text-[var(--earth)] hover:bg-[var(--bg-app)]'
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-black">{option.label}</span>
+                    {option.description && (
+                      <span className={`mt-0.5 block truncate text-[11px] font-semibold ${active ? 'text-white/75' : 'text-[var(--text-muted)]'}`}>
+                        {option.description}
+                      </span>
+                    )}
+                  </span>
+                  {active && <CheckCircle2 size={15} className="shrink-0" />}
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function AppSwitch({
+  checked,
+  onChange,
+  ariaLabel,
+  disabled = false,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void | Promise<void>;
+  ariaLabel: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border border-transparent p-0.5 outline-none transition-colors focus:ring-2 focus:ring-[var(--sage)]/25 disabled:cursor-not-allowed disabled:opacity-50 ${
+        checked ? 'bg-[var(--sage)]' : 'bg-[var(--border)]'
+      }`}
+    >
+      <span
+        className={`h-6 w-6 rounded-full bg-white shadow-md transition-transform duration-200 ${
+          checked ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  );
+}
 
 const STAGE_META: Record<SeedNote['growthStage'], { label: string; shortLabel: string; color: string; bg: string; aura: string }> = {
   seed: {
@@ -1300,13 +1441,13 @@ function FocusView({
   onPickFocus: (id: string) => void;
   onExit: () => void;
 }) {
-  const focusCandidates = notes
+  const focusCandidates = useMemo(() => notes
     .filter(note => !note.inbox && !note.paused && note.growthStage !== 'bloom')
     .sort((a, b) => {
       const aScore = (wateringDue(a) ? 10 : 0) + daysSince(a.lastWateredAt || a.createdAt);
       const bScore = (wateringDue(b) ? 10 : 0) + daysSince(b.lastWateredAt || b.createdAt);
       return bScore - aScore;
-    });
+    }), [notes]);
   const focusNote = focusCandidates.find(note => note.id === focusNoteId) || focusCandidates[0];
   const [step, setStep] = useState('');
   const [duration, setDuration] = useState(10);
@@ -1320,13 +1461,18 @@ function FocusView({
   const [sessionSummary, setSessionSummary] = useState<{ minutes: number; steps: number; growth: number } | null>(null);
   const nextTask = focusNote?.tasks.find(task => !task.completed);
   const completedSteps = focusNote?.tasks.filter(task => task.completed).length || 0;
-  const progress = focusNote?.tasks.length ? Math.round((focusNote.tasks.filter(task => task.completed).length / focusNote.tasks.length) * 100) : 0;
+  const progress = focusNote?.tasks.length ? Math.round((completedSteps / focusNote.tasks.length) * 100) : 0;
   const isDay = new Date().getHours() >= 6 && new Date().getHours() < 19;
-  const focusTips = [
+  const focusOptions = useMemo(() => focusCandidates.map(note => ({
+    value: note.id,
+    label: note.title,
+    description: note.tasks.find(task => !task.completed)?.text || 'Lista para enfocar',
+  })), [focusCandidates]);
+  const focusTips = useMemo(() => [
     nextTask ? `Solo cultiva este paso: ${nextTask.text || 'un paso pequeño'}` : 'Define un paso tan pequeño que puedas empezarlo en menos de dos minutos.',
     active ? 'Si te distraes, vuelve al siguiente paso. No necesitas reiniciar la sesión.' : 'Antes de empezar, deja claro qué significa avanzar un poco.',
     progress >= 70 ? 'Ya estás cerca de cosechar. Cierra lo importante antes de pulir.' : 'Descansa cuando termine el bloque; una pausa corta también protege la idea.',
-  ];
+  ], [active, nextTask, progress]);
 
   useEffect(() => {
     if (!active || !focusNote) return;
@@ -1452,16 +1598,15 @@ function FocusView({
                   <p className="text-[9px] font-black uppercase tracking-widest text-[var(--sage)]">Preparar bloque</p>
                   <label className="block mt-2">
                     <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Idea</span>
-                    <select
+                    <div className="mt-1">
+                      <AppSelect
                       value={focusNote.id}
-                      onChange={(event) => onPickFocus(event.target.value)}
                       disabled={active}
-                      className="mt-1 w-full rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-2.5 text-sm font-bold text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)] disabled:opacity-60"
-                    >
-                      {focusCandidates.map(note => (
-                        <option key={note.id} value={note.id}>{note.title}</option>
-                      ))}
-                    </select>
+                      onChange={onPickFocus}
+                      ariaLabel="Elegir idea para enfoque"
+                      options={focusOptions}
+                    />
+                    </div>
                   </label>
                   <div className="mt-3 rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] p-3">
                     <div className="flex items-center justify-between gap-3">
@@ -1470,23 +1615,24 @@ function FocusView({
                     </div>
                     <label className="mt-2 block">
                       <span className="sr-only">Elegir tiempo de enfoque</span>
-                      <select
+                      <AppSelect
                         value={[5, 10, 30].includes(duration) ? String(duration) : 'custom'}
                         disabled={active}
-                        onChange={(event) => {
-                          if (event.target.value === 'custom') {
+                        onChange={(value) => {
+                          if (value === 'custom') {
                             setFocusDuration(customDuration);
                             return;
                           }
-                          setFocusDuration(Number(event.target.value));
+                          setFocusDuration(Number(value));
                         }}
-                        className="w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm font-black text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)] disabled:opacity-60"
-                      >
-                        <option value="5">Riego corto: 5 min</option>
-                        <option value="10">Cultivo ligero: 10 min</option>
-                        <option value="30">Cultivo profundo: 30 min</option>
-                        <option value="custom">Tiempo personalizado</option>
-                      </select>
+                        ariaLabel="Elegir tiempo de enfoque"
+                        options={[
+                          { value: '5', label: 'Riego corto', description: '5 min' },
+                          { value: '10', label: 'Cultivo ligero', description: '10 min' },
+                          { value: '30', label: 'Cultivo profundo', description: '30 min' },
+                          { value: 'custom', label: 'Tiempo personalizado', description: `${customHours}h ${customMinutes}m` },
+                        ]}
+                      />
                     </label>
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <label className="block">
@@ -2647,6 +2793,7 @@ export default function App() {
   const [flowerReward, setFlowerReward] = useState<{ id: string; title: string } | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('seed-onboarded') !== 'true');
   const [showSettings, setShowSettings] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -3319,14 +3466,29 @@ export default function App() {
   const growingNotes = useMemo(() => planetNotes.filter(n => n.isGrowth && !n.inbox && !n.paused && n.growthStage !== 'bloom'), [planetNotes]);
 
   const gardenStats = useMemo(() => {
-    const total = planetNotes.filter(n => !n.inbox).length;
-    const completed = planetNotes.filter(n => !n.inbox && n.growthStage === 'bloom').length;
-    const active = planetNotes.filter(n => !n.inbox && n.growthStage === 'sprout').length;
-    const seeds = planetNotes.filter(n => !n.inbox && n.growthStage === 'seed').length;
-    const watering = planetNotes.filter(n => !n.inbox && !n.paused && n.growthStage !== 'bloom' && wateringDue(n)).length;
-
-    return { total, completed, active, seeds, watering };
+    return planetNotes.reduce((stats, note) => {
+      if (note.inbox) return stats;
+      stats.total += 1;
+      if (note.growthStage === 'bloom') {
+        stats.completed += 1;
+        if (note.isGrowth) stats.trees += 1;
+        else stats.flowers += 1;
+      }
+      if (note.growthStage === 'sprout') stats.active += 1;
+      if (note.growthStage === 'seed') stats.seeds += 1;
+      if (!note.paused && note.growthStage !== 'bloom' && wateringDue(note)) stats.watering += 1;
+      return stats;
+    }, { total: 0, completed: 0, active: 0, seeds: 0, watering: 0, flowers: 0, trees: 0 });
   }, [planetNotes]);
+
+  const planetNoteCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const note of notes) {
+      const id = note.planetId || DEFAULT_PLANET_ID;
+      counts.set(id, (counts.get(id) || 0) + 1);
+    }
+    return counts;
+  }, [notes]);
 
   const getProgress = (note: SeedNote) => {
     if (!note.tasks.length) return 0;
@@ -3622,8 +3784,29 @@ export default function App() {
 
   return (
     <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-transparent text-[var(--text-main)] font-sans">
+      <button
+        type="button"
+        onClick={() => setShowMobileMenu(true)}
+        className={`fixed left-4 top-4 z-40 h-11 w-11 place-items-center rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--sage)] shadow-2xl shadow-black/10 backdrop-blur-xl md:hidden ${view === 'focus' || showGardenFullscreen ? 'hidden' : 'grid'}`}
+        aria-label="Abrir menú"
+      >
+        <Menu size={19} />
+      </button>
+      <AnimatePresence>
+        {showMobileMenu && (
+          <motion.button
+            type="button"
+            aria-label="Cerrar menú"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowMobileMenu(false)}
+            className="fixed inset-0 z-40 bg-black/35 backdrop-blur-sm md:hidden"
+          />
+        )}
+      </AnimatePresence>
       {/* Sidebar Navigation */}
-      <aside className="w-full md:w-72 max-h-[46vh] md:max-h-none bg-[var(--sidebar-bg)]/80 backdrop-blur-xl border-b md:border-b-0 md:border-r border-[var(--border)] p-4 md:p-8 flex flex-col shrink-0 overflow-y-auto app-scrollbar z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.02)_inset]">
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[86vw] max-w-[21rem] shrink-0 flex-col overflow-y-auto border-r border-[var(--border)] bg-[var(--sidebar-bg)]/95 p-5 shadow-2xl shadow-black/20 backdrop-blur-xl transition-transform duration-300 app-scrollbar md:static md:z-20 md:w-72 md:max-w-none md:translate-x-0 md:bg-[var(--sidebar-bg)]/80 md:p-8 md:shadow-[-10px_0_30px_rgba(0,0,0,0.02)_inset] ${showMobileMenu ? 'translate-x-0' : '-translate-x-full'}`}>
         <motion.div 
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -3639,6 +3822,14 @@ export default function App() {
             <h1 className="text-3xl font-serif font-black text-[var(--sage)] leading-none">Seed</h1>
             <p className="text-[9px] font-black tracking-[0.3em] uppercase text-[var(--seed-accent)] opacity-60">Grow What Matters</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowMobileMenu(false)}
+            className="ml-auto grid h-9 w-9 place-items-center rounded-full bg-[var(--surface-strong)] text-[var(--text-muted)] md:hidden"
+            aria-label="Cerrar menú"
+          >
+            <X size={18} />
+          </button>
         </motion.div>
 
         <div className="space-y-3 mb-8">
@@ -3725,11 +3916,14 @@ export default function App() {
 
           <div className="flex gap-2 overflow-x-auto pb-2 px-1 app-scrollbar snap-x snap-mandatory">
             {planets.map((planet) => {
-              const count = notes.filter(note => (note.planetId || DEFAULT_PLANET_ID) === planet.id).length;
+              const count = planetNoteCounts.get(planet.id) || 0;
               return (
                 <button
                   key={planet.id}
-                  onClick={() => switchPlanet(planet.id)}
+                  onClick={() => {
+                    switchPlanet(planet.id);
+                    setShowMobileMenu(false);
+                  }}
                   className={`snap-start shrink-0 w-28 rounded-2xl px-3 py-3 soft-interaction text-left ${
                     activePlanet.id === planet.id
                       ? 'bg-[var(--surface-strong)] shadow-xl shadow-black/5 text-[var(--sage)] ring-1 ring-black/5'
@@ -3781,6 +3975,7 @@ export default function App() {
                       setFilterStage('all');
                     }
                     setView(item.id as AppView);
+                    setShowMobileMenu(false);
                   }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl soft-interaction relative group ${
                     view === item.id
@@ -3803,8 +3998,11 @@ export default function App() {
         </div>
 
         <button 
-          onClick={startPlanting}
-          className="mb-8 bg-[var(--sage)] hover:bg-[var(--ink)] text-white w-full py-4.5 rounded-[2rem] font-black shadow-2xl shadow-[var(--sage)]/30 soft-interaction items-center justify-center gap-3 hidden md:flex active:translate-y-px active:shadow-inner"
+          onClick={() => {
+            startPlanting();
+            setShowMobileMenu(false);
+          }}
+          className="mb-8 flex w-full items-center justify-center gap-3 rounded-[2rem] bg-[var(--sage)] py-4 font-black text-white shadow-2xl shadow-[var(--sage)]/30 active:translate-y-px active:shadow-inner soft-interaction hover:bg-[var(--ink)]"
         >
           <Plus size={20} strokeWidth={3} />
           <span className="tracking-tight">Plantar Idea</span>
@@ -3820,7 +4018,10 @@ export default function App() {
               <p className="text-[10px] font-medium text-[var(--text-muted)] truncate">{account.email || 'Sin correo'}</p>
             </div>
             <button
-              onClick={() => setShowSettings(true)}
+              onClick={() => {
+                setShowSettings(true);
+                setShowMobileMenu(false);
+              }}
               className="p-2 text-[var(--text-muted)] hover:text-[var(--sage)] transition-colors"
               title="Ajustes"
               aria-label="Abrir ajustes"
@@ -3837,7 +4038,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-        <section className={`flex-1 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${view === 'calendar' ? 'p-3 sm:p-5 md:p-6' : 'p-4 sm:p-6 md:p-10'} ${selectedNoteId ? 'md:mr-[400px]' : ''}`}>
+        <section className={`flex-1 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${view === 'calendar' ? 'px-3 pb-3 pt-20 sm:px-5 sm:pb-5 md:p-6' : 'px-4 pb-4 pt-20 sm:px-6 sm:pb-6 md:p-10'} ${selectedNoteId ? 'md:mr-[400px]' : ''}`}>
           <div className={`${view === 'calendar' ? 'mx-auto max-w-[100rem]' : 'max-w-4xl mx-auto'}`}>
             <header className="mb-10 flex flex-col md:flex-row justify-between items-start gap-5 md:gap-6">
               <div className="w-full">
@@ -4058,9 +4259,9 @@ export default function App() {
                     </div>
                     <div className="mt-5 grid grid-cols-3 gap-2">
                       {[
-                        { label: 'Flores', value: planetNotes.filter(note => !note.inbox && note.growthStage === 'bloom' && !note.isGrowth).length },
+                        { label: 'Flores', value: gardenStats.flowers },
                         { label: 'Brotes', value: gardenStats.active },
-                        { label: 'Árboles', value: planetNotes.filter(note => !note.inbox && note.growthStage === 'bloom' && note.isGrowth).length },
+                        { label: 'Árboles', value: gardenStats.trees },
                       ].map(item => (
                         <div key={item.label} className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-3 text-center">
                           <p className="font-serif text-2xl font-black text-[var(--earth)]">{item.value}</p>
@@ -4478,7 +4679,7 @@ export default function App() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="absolute right-0 top-0 bottom-0 w-full md:w-[400px] bg-[var(--surface-strong)] border-l border-[var(--border)] shadow-2xl flex flex-col z-30"
+              className="absolute right-0 top-0 bottom-0 z-50 flex w-full flex-col border-l border-[var(--border)] bg-[var(--surface-strong)] shadow-2xl md:z-30 md:w-[400px]"
             >
               <div className="p-5 pb-3 flex justify-between items-center border-b border-[var(--border)]">
                 <div className="flex items-center gap-2">
@@ -5092,15 +5293,14 @@ export default function App() {
                       </label>
                       <label className="block">
                         <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Uso principal</span>
-                        <select
+                        <div className="mt-1">
+                          <AppSelect
                           value={account.purpose || 'Ideas personales'}
-                          onChange={(event) => setAccount(current => ({ ...current, purpose: event.target.value }))}
-                          className="mt-1 w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                        >
-                          {PROFILE_PURPOSES.map(purpose => (
-                            <option key={purpose} value={purpose}>{purpose}</option>
-                          ))}
-                        </select>
+                          onChange={(value) => setAccount(current => ({ ...current, purpose: value }))}
+                          ariaLabel="Uso principal"
+                          options={PROFILE_PURPOSE_OPTIONS}
+                        />
+                        </div>
                       </label>
                       <label className="block sm:col-span-2">
                         <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Rol</span>
@@ -5200,33 +5400,27 @@ export default function App() {
                     <div className="mt-4 space-y-4">
                       <label className="flex flex-col gap-2">
                         <span className="text-sm font-black text-[var(--earth)]">Ecosistema del jardín actual</span>
-                        <select
+                        <AppSelect
                           value={activePlanet.theme || theme}
-                          onChange={(event) => {
-                            const selectedTheme = event.target.value as Theme;
+                          onChange={(value) => {
+                            const selectedTheme = value as Theme;
                             setTheme(selectedTheme);
                             setPlanets(current => current.map(planet => planet.id === activePlanet.id ? touchPlanet({ ...planet, theme: selectedTheme }) : planet));
                           }}
-                          className="w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-3 text-sm font-bold text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                        >
-                          {THEMES.map(item => (
-                            <option key={item.id} value={item.id}>{item.icon} {item.label}</option>
-                          ))}
-                        </select>
+                          ariaLabel="Ecosistema del jardín actual"
+                          options={THEME_SELECT_OPTIONS}
+                        />
                       </label>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <label className="flex flex-col gap-2">
                           <span className="text-sm font-black text-[var(--earth)]">Riego por defecto</span>
-                          <select
-                            value={defaultWateringInterval}
-                            onChange={(event) => setDefaultWateringInterval(Number(event.target.value))}
-                            className="w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-3 text-sm font-bold text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                          >
-                            <option value={1}>Diario</option>
-                            <option value={3}>Cada 3 días</option>
-                            <option value={7}>Semanal</option>
-                          </select>
+                          <AppSelect
+                            value={String(defaultWateringInterval)}
+                            onChange={(value) => setDefaultWateringInterval(Number(value))}
+                            ariaLabel="Riego por defecto"
+                            options={WATERING_INTERVAL_OPTIONS}
+                          />
                         </label>
                         <label className="flex flex-col gap-2">
                           <span className="text-sm font-black text-[var(--earth)]">Hora de recordatorio</span>
@@ -5239,18 +5433,21 @@ export default function App() {
                         </label>
                       </div>
 
-                      <div className="flex items-center justify-between gap-4 rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4">
-                        <div>
+                      <div className="flex flex-col gap-4 rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
                           <p className="font-black text-[var(--earth)]">Recordatorios</p>
                           <p className="text-xs text-[var(--text-muted)] mt-1">Avisos suaves para volver a ideas que piden riego.</p>
                         </div>
-                        <button
-                          onClick={() => notificationsEnabled ? setNotificationsEnabled(false) : enableNotifications()}
-                          className={`relative h-8 w-14 rounded-full transition-colors ${notificationsEnabled ? 'bg-[var(--sage)]' : 'bg-[var(--border)]'}`}
-                          aria-label={notificationsEnabled ? 'Desactivar recordatorios' : 'Activar recordatorios'}
-                        >
-                          <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${notificationsEnabled ? 'translate-x-7' : 'translate-x-1'}`} />
-                        </button>
+                        <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
+                          <span className="text-xs font-black uppercase tracking-widest text-[var(--text-muted)]">
+                            {notificationsEnabled ? 'On' : 'Off'}
+                          </span>
+                          <AppSwitch
+                            checked={notificationsEnabled}
+                            onChange={(checked) => checked ? enableNotifications() : setNotificationsEnabled(false)}
+                            ariaLabel={notificationsEnabled ? 'Desactivar recordatorios' : 'Activar recordatorios'}
+                          />
+                        </div>
                       </div>
                     </div>
                   </section>
@@ -5311,13 +5508,13 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[70] bg-black/30 backdrop-blur-sm flex items-center justify-center p-4"
+              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/30 p-3 backdrop-blur-sm sm:items-center sm:p-4"
             >
               <motion.div
                 initial={{ opacity: 0, y: 18, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 12, scale: 0.98 }}
-                className="w-full max-w-3xl overflow-hidden rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] shadow-2xl"
+                className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-2xl"
               >
                 {(() => {
                   const step = ONBOARDING_STEPS[onboardingStep] || ONBOARDING_STEPS[0];
@@ -5326,12 +5523,12 @@ export default function App() {
 
                   return (
                     <>
-                      <div className="relative min-h-[13rem] bg-[linear-gradient(135deg,var(--bg-app),var(--surface-soft))] p-6 sm:p-7">
+                      <div className="relative min-h-[10rem] bg-[linear-gradient(135deg,var(--bg-app),var(--surface-soft))] p-5 sm:min-h-[13rem] sm:p-7">
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_82%_20%,rgba(255,255,255,0.75),transparent_24%),radial-gradient(circle_at_18%_80%,rgba(122,169,92,0.18),transparent_28%)]" />
                         <div className="relative flex items-start justify-between gap-5">
                           <div>
                             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Cómo funciona Seed</p>
-                            <h2 className="mt-2 max-w-xl font-serif text-3xl font-black leading-tight text-[var(--earth)] sm:text-4xl">
+                            <h2 className="mt-2 max-w-xl font-serif text-2xl font-black leading-tight text-[var(--earth)] sm:text-4xl">
                               Un jardín simple para ideas y proyectos
                             </h2>
                             <p className="mt-3 max-w-xl text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
@@ -5348,7 +5545,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="p-6 sm:p-7">
+                      <div className="max-h-[calc(92vh-10rem)] overflow-y-auto p-5 app-scrollbar sm:max-h-none sm:p-7">
                         <div className="mb-5 flex items-center gap-2">
                           {ONBOARDING_STEPS.map((item, index) => (
                             <button
@@ -5367,7 +5564,7 @@ export default function App() {
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: -18 }}
                             transition={{ duration: 0.2 }}
-                            className="rounded-[1.75rem] border border-[var(--border)] bg-[var(--bg-app)] p-5"
+                            className="rounded-[1.75rem] border border-[var(--border)] bg-[var(--bg-app)] p-4 sm:p-5"
                           >
                             <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
                               <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[var(--sage)] text-white shadow-lg shadow-[var(--sage)]/20">

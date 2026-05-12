@@ -20,5 +20,17 @@ export default defineConfig(({mode}) => {
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'motion-vendor': ['motion'],
+            'supabase-vendor': ['@supabase/supabase-js'],
+            'ui-vendor': ['lucide-react', 'date-fns'],
+            'three-vendor': ['three', '@react-three/fiber', '@react-three/drei'],
+          },
+        },
+      },
+    },
   };
 });
