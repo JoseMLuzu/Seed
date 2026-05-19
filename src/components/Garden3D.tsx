@@ -35,6 +35,10 @@ type GardenPalette = {
   treeStyle: 'broadleaf' | 'pine' | 'cherry' | 'moon' | 'palm' | 'mushroom' | 'cactus' | 'ice';
 };
 
+function mutedSceneColor(color: string, intensity: number) {
+  return new THREE.Color(color).multiplyScalar(intensity);
+}
+
 const GARDEN_PALETTES: Record<Theme, GardenPalette> = {
   earth: {
     label: 'Pradera',
@@ -916,7 +920,7 @@ function SurfacePatch({
   lat: number;
   lon: number;
   radius: number;
-  color: string;
+  color: string | THREE.Color;
   stretch?: number;
   twist?: number;
   opacity?: number;
@@ -948,16 +952,20 @@ function SurfaceRock({ lat, lon, scale, color }: { lat: number; lon: number; sca
 }
 
 function PlanetSurface({ isDay, palette }: { isDay: boolean; palette: GardenPalette }) {
+  const surfaceColor = useMemo(() => mutedSceneColor(isDay ? palette.planet : palette.planetNight, isDay ? 0.82 : 0.74), [isDay, palette.planet, palette.planetNight]);
+  const surfaceGlow = useMemo(() => mutedSceneColor(isDay ? palette.planet : palette.planetNight, isDay ? 0.52 : 0.42), [isDay, palette.planet, palette.planetNight]);
+  const overlayColor = useMemo(() => mutedSceneColor(palette.planetOverlay, isDay ? 0.78 : 0.58), [isDay, palette.planetOverlay]);
+
   return (
     <>
       <mesh receiveShadow castShadow>
         <icosahedronGeometry args={[PLANET_RADIUS, 5]} />
         <meshStandardMaterial 
-          color={isDay ? palette.planet : palette.planetNight} 
-          emissive={isDay ? palette.planet : palette.planetNight} 
-          emissiveIntensity={isDay ? 0.18 : 0.58}
-          roughness={0.92} 
-          metalness={0.02}
+          color={surfaceColor}
+          emissive={surfaceGlow}
+          emissiveIntensity={isDay ? 0.045 : 0.24}
+          roughness={0.96}
+          metalness={0}
           flatShading
         />
       </mesh>
@@ -965,9 +973,9 @@ function PlanetSurface({ isDay, palette }: { isDay: boolean; palette: GardenPale
       <mesh scale={[1.004, 1.004, 1.004]} receiveShadow>
         <icosahedronGeometry args={[PLANET_RADIUS, 4]} />
         <meshStandardMaterial
-          color={palette.planetOverlay}
+          color={overlayColor}
           transparent
-          opacity={isDay ? 0.18 : 0.12}
+          opacity={isDay ? 0.11 : 0.08}
           roughness={1}
           depthWrite={false}
           flatShading
@@ -980,7 +988,7 @@ function PlanetSurface({ isDay, palette }: { isDay: boolean; palette: GardenPale
           lat={patch.lat}
           lon={patch.lon}
           radius={patch.radius}
-          color={isDay ? palette.patchColors[index % palette.patchColors.length] : palette.planetNight}
+          color={mutedSceneColor(isDay ? palette.patchColors[index % palette.patchColors.length] : palette.planetNight, isDay ? 0.9 : 0.68)}
           stretch={patch.stretch}
           twist={patch.twist}
         />
@@ -992,10 +1000,10 @@ function PlanetSurface({ isDay, palette }: { isDay: boolean; palette: GardenPale
           lat={lake.lat}
           lon={lake.lon}
           radius={lake.radius}
-          color={isDay ? palette.water : palette.waterNight}
+          color={mutedSceneColor(isDay ? palette.water : palette.waterNight, isDay ? 0.86 : 0.72)}
           stretch={lake.stretch}
           twist={lake.twist}
-          opacity={0.86}
+          opacity={0.78}
           altitude={0.055}
         />
       ))}
@@ -1792,26 +1800,33 @@ export default function Garden3D({
     });
   }, [plants]);
 
+  const headerPositionClass = fullscreen
+    ? 'left-3 right-16 top-[calc(env(safe-area-inset-top)+0.75rem)] sm:left-10 sm:right-auto sm:top-10'
+    : 'left-3 right-16 top-3 sm:left-10 sm:right-auto sm:top-10';
+
   return (
-    <div className={`w-full overflow-hidden shadow-2xl relative border-white/10 backdrop-blur-md transition-colors duration-1000 ${
-      fullscreen
-        ? 'h-screen min-h-screen rounded-none border-0'
-        : isPreview
-          ? 'h-[31rem] min-h-[31rem] rounded-[2.5rem] border-[8px]'
-          : 'h-[68vh] min-h-[520px] sm:h-[75vh] rounded-[2rem] sm:rounded-[3rem] border-[8px] sm:border-[12px]'
-    }`}>
+	    <div className={`w-full overflow-hidden shadow-2xl relative border-white/10 backdrop-blur-md transition-colors duration-1000 ${
+	      fullscreen
+	        ? 'h-screen min-h-screen rounded-none border-0'
+	        : isPreview
+	          ? 'h-[31rem] min-h-[31rem] rounded-[2.5rem] border-[8px]'
+	          : 'h-[calc(100dvh-8.5rem)] min-h-[430px] sm:h-[75vh] sm:min-h-[520px] rounded-[1.65rem] sm:rounded-[3rem] border-0 sm:border-[12px]'
+	    }`}>
       <Canvas
-        shadows={!performanceMode}
-        dpr={performanceMode ? [0.85, 1.1] : [1, 1.35]}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
-        camera={{ position: [40, 30, 40], fov: 45 }}
-      >
+	        shadows={!performanceMode}
+	        dpr={performanceMode ? [0.85, 1.1] : [1, 1.35]}
+	        gl={{ antialias: true, powerPreference: 'high-performance' }}
+	        camera={{ position: compact3D ? [46, 34, 46] : [40, 30, 40], fov: 45 }}
+	        onCreated={({ gl }) => {
+	          gl.toneMappingExposure = compact3D ? 0.86 : 0.92;
+	        }}
+	      >
         <AdaptiveDpr pixelated={false} />
         <color attach="background" args={[skyColor]} />
         
-        <ambientLight intensity={isDay ? (isRaining ? 0.78 : 0.92) : 0.62} />
-        <pointLight position={[50, 50, 50]} intensity={isRaining ? 0.92 : 1.35} castShadow={!performanceMode} />
-        <directionalLight position={[-50, 50, -50]} intensity={isRaining ? 0.72 : 1.05} color={isDay ? "#fff1c7" : "#48cae4"} />
+	        <ambientLight intensity={isDay ? (isRaining ? 0.7 : 0.82) : 0.56} />
+	        <pointLight position={[50, 50, 50]} intensity={isRaining ? 0.82 : 1.08} castShadow={!performanceMode} />
+	        <directionalLight position={[-50, 50, -50]} intensity={isRaining ? 0.62 : 0.88} color={isDay ? "#fff1c7" : "#48cae4"} />
         <hemisphereLight intensity={0.78} color={isRaining ? "#cfefff" : "#ffffff"} groundColor="#11170f" />
         
         {isDay && <DaySun raining={isRaining} />}
@@ -1855,28 +1870,39 @@ export default function Garden3D({
           enableRotate={true}
           autoRotate={!selectedId}
           autoRotateSpeed={0.5}
-          minDistance={25}
-          maxDistance={90}
+	          minDistance={compact3D ? 34 : 25}
+	          maxDistance={compact3D ? 105 : 90}
           makeDefault
         />
-      </Canvas>
-      
-      <div className={`absolute pointer-events-none max-w-[55%] ${isPreview ? 'left-6 top-6' : 'top-5 left-5 sm:top-10 sm:left-10'}`}>
-        <div className="flex items-center gap-3 mb-2">
-          <div className={`w-3 h-3 rounded-full ${isRaining ? 'bg-sky-300 shadow-[0_0_12px_rgba(125,211,252,0.7)]' : 'bg-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.7)]'} animate-pulse`} />
-          <p className="text-[11px] font-black uppercase tracking-[0.4em] text-white/45">{planetName || 'Galaxy Garden'}</p>
-        </div>
-        <h4 className={`${isPreview ? 'text-4xl' : 'text-3xl sm:text-5xl'} font-serif text-white tracking-tight leading-none drop-shadow-xl`}>
-          {palette.label}<br/><span className={`${isRaining ? 'text-sky-200/70' : 'text-yellow-200/70'} italic`}>{isRaining ? 'Lluvia' : 'Vivo'}</span>
-        </h4>
-        <p className="mt-3 hidden max-w-xs text-xs font-semibold leading-relaxed text-white/65 drop-shadow sm:block">{weatherCopy}</p>
-      </div>
+	      </Canvas>
 
-      <div className={`absolute grid grid-cols-3 gap-2 text-white ${isPreview ? 'right-6 top-6' : 'top-5 right-5 sm:top-10 sm:right-10'}`}>
-        {[
-          { id: 'water', label: 'Riego', value: stats.water },
-          { id: 'progress', label: 'Activas', value: stats.progress },
-          { id: 'harvest', label: 'Cosechas', value: stats.harvest },
+	      <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/35 via-black/10 to-transparent sm:h-44" />
+	      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/45 via-black/18 to-transparent sm:h-52" />
+	      <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-white/10" />
+	      
+		      <div className={`absolute pointer-events-none ${isPreview ? 'left-6 top-6 max-w-[55%]' : `${headerPositionClass} sm:max-w-[55%]`}`}>
+		        <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/18 bg-white/[0.12] px-3 py-2 shadow-[0_18px_60px_rgba(0,0,0,0.22)] backdrop-blur-2xl sm:gap-3 sm:bg-transparent sm:px-0 sm:py-0 sm:shadow-none sm:backdrop-blur-none">
+		          <div className={`h-2.5 w-2.5 rounded-full sm:h-3 sm:w-3 ${isRaining ? 'bg-sky-300 shadow-[0_0_12px_rgba(125,211,252,0.7)]' : 'bg-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.7)]'} animate-pulse`} />
+		          <div className="min-w-0">
+		            <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-white/82 sm:text-[11px] sm:text-white/45 sm:tracking-[0.4em]">{planetName || 'Galaxy Garden'}</p>
+		            {!isPreview && (
+		              <p className="mt-0.5 truncate text-[10px] font-semibold text-white/58 sm:hidden">
+		                {isRaining ? 'Lluvia suave' : `${palette.label} vivo`}
+		              </p>
+		            )}
+		          </div>
+		        </div>
+		        <h4 className={`${isPreview ? 'text-4xl' : 'hidden sm:block sm:text-5xl'} font-serif text-white tracking-tight leading-none drop-shadow-xl`}>
+		          {palette.label}<br/><span className={`${isRaining ? 'text-sky-200/70' : 'text-yellow-200/70'} italic`}>{isRaining ? 'Lluvia' : 'Vivo'}</span>
+		        </h4>
+		        <p className="mt-3 hidden max-w-xs text-xs font-semibold leading-relaxed text-white/65 drop-shadow sm:block">{weatherCopy}</p>
+		      </div>
+
+		      <div className={`absolute grid-cols-3 gap-2 text-white ${isPreview ? 'right-6 top-6 grid' : 'right-10 top-10 hidden sm:grid'}`}>
+		        {[
+		          { id: 'water', label: 'Riego', value: stats.water },
+		          { id: 'progress', label: 'Activas', value: stats.progress },
+		          { id: 'harvest', label: 'Cosechas', value: stats.harvest },
         ].map(item => (
           <button
             key={item.label}
@@ -1887,97 +1913,123 @@ export default function Garden3D({
               setRouteIds([]);
               setSelectedId(null);
             }}
-            className={`rounded-2xl border border-white/15 bg-black/20 px-3 py-2 text-center shadow-xl backdrop-blur-xl transition ${
-              !isPreview && filter === item.id ? 'ring-2 ring-white/70 bg-white/18' : ''
-            } ${!isPreview && item.value > 0 ? 'hover:bg-white/12' : 'cursor-default'}`}
-          >
-            <p className="text-lg font-black leading-none">{item.value}</p>
-            <p className="mt-1 text-[8px] font-black uppercase tracking-[0.22em] text-white/55">{item.label}</p>
-          </button>
-        ))}
-      </div>
+		            className={`rounded-2xl border border-white/15 bg-white/[0.12] px-3 py-2 text-center shadow-[0_18px_60px_rgba(0,0,0,0.22)] backdrop-blur-2xl transition ${
+		              !isPreview && filter === item.id ? 'ring-2 ring-white/70 bg-white/18' : ''
+		            } ${!isPreview && item.value > 0 ? 'hover:bg-white/12' : 'cursor-default'}`}
+		          >
+		            <p className="text-lg font-black leading-none">{item.value}</p>
+		            <p className="mt-1 text-[8px] font-black uppercase tracking-[0.22em] text-white/55">{item.label}</p>
+		          </button>
+	        ))}
+	      </div>
 
-      {!isPreview && (
-      <div className="absolute left-3 right-3 bottom-3 sm:left-1/2 sm:right-auto sm:w-[min(94vw,46rem)] sm:-translate-x-1/2 grid grid-cols-1 gap-2 rounded-[1.35rem] border border-white/20 bg-black/25 p-2 shadow-2xl backdrop-blur-2xl text-white sm:grid-cols-[1fr_auto]">
-        <div className="grid min-w-0 grid-cols-4 gap-1">
-          {[
-            { id: 'all', label: 'Todo' },
-            { id: 'water', label: 'Riego' },
+	      {!isPreview && (
+	      <div className="absolute bottom-3 left-3 right-3 rounded-[1.65rem] border border-white/18 bg-white/[0.13] p-2 text-white shadow-[0_24px_80px_rgba(0,0,0,0.30)] backdrop-blur-2xl sm:left-1/2 sm:right-auto sm:grid sm:w-[min(94vw,46rem)] sm:-translate-x-1/2 sm:grid-cols-[1fr_auto] sm:gap-2 sm:rounded-[1.35rem] sm:bg-black/25 sm:p-2">
+	        <div className="mb-2 grid grid-cols-3 gap-1.5 sm:hidden">
+	          {[
+	            { id: 'water', label: 'Riego', value: stats.water },
+	            { id: 'progress', label: 'Activas', value: stats.progress },
+	            { id: 'harvest', label: 'Cosecha', value: stats.harvest },
+	          ].map(item => (
+	            <button
+	              key={item.label}
+	              type="button"
+	              disabled={item.value === 0}
+	              onClick={() => {
+	                setFilter(filter === item.id ? 'all' : item.id as GardenFilter);
+	                setRouteIds([]);
+	                setSelectedId(null);
+	              }}
+	              className={`rounded-2xl border px-2 py-2 text-left transition ${
+	                filter === item.id
+	                  ? 'border-white/55 bg-white text-slate-950'
+	                  : 'border-white/12 bg-black/18 text-white'
+	              } disabled:opacity-45`}
+	            >
+	              <p className="text-base font-black leading-none">{item.value}</p>
+	              <p className={`mt-1 truncate text-[8px] font-black uppercase tracking-[0.14em] ${filter === item.id ? 'text-slate-500' : 'text-white/55'}`}>{item.label}</p>
+	            </button>
+	          ))}
+	        </div>
+	        <div className="flex min-w-0 gap-1 rounded-2xl bg-black/18 p-1 sm:grid sm:grid-cols-4 sm:bg-transparent sm:p-0">
+	          {[
+	            { id: 'all', label: 'Todo' },
+	            { id: 'water', label: 'Riego' },
             { id: 'progress', label: 'Activas' },
             { id: 'harvest', label: 'Cosecha' },
           ].map(item => (
             <button
               key={item.id}
               type="button"
-              onClick={() => {
-                setFilter(item.id as GardenFilter);
-                setRouteIds([]);
-              }}
-              className={`h-11 min-w-0 rounded-2xl px-2 text-[10px] font-black uppercase leading-none transition ${filter === item.id ? 'bg-white text-slate-950' : 'text-white/65 hover:bg-white/10 hover:text-white'}`}
-            >
-              <span className="block truncate">{item.label}</span>
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-1 sm:w-56">
-          <button
-            type="button"
-            onClick={() => {
+		              onClick={() => {
+		                setFilter(item.id as GardenFilter);
+		                setRouteIds([]);
+		              }}
+		              className={`h-9 min-w-0 flex-1 shrink-0 rounded-xl px-2 text-[10px] font-black uppercase leading-none transition sm:h-11 sm:rounded-2xl ${filter === item.id ? 'bg-white text-slate-950 shadow-[0_10px_30px_rgba(255,255,255,0.16)]' : 'text-white/68 hover:bg-white/10 hover:text-white'}`}
+		            >
+		              <span className="block truncate">{item.label}</span>
+		            </button>
+		          ))}
+		        </div>
+		        <div className="mt-1.5 grid grid-cols-2 gap-1 sm:mt-0 sm:w-56">
+		          <button
+		            type="button"
+		            onClick={() => {
               setFilter('all');
               setRouteIds(routeIds.length ? [] : routeCandidates.map(note => note.id));
               setSelectedId(routeIds.length ? null : routeCandidates[0]?.id || null);
-            }}
-            disabled={routeCandidates.length === 0}
-            className={`h-11 min-w-0 rounded-2xl px-2 text-[10px] font-black uppercase leading-none transition ${routeIds.length ? 'bg-[var(--accent)] text-white' : 'bg-white/10 text-white hover:bg-white/18'} disabled:cursor-not-allowed disabled:opacity-40`}
-          >
-            <span className="block truncate">{isRaining ? 'Ruta suave' : 'Ruta hoy'}</span>
-          </button>
+		            }}
+		            disabled={routeCandidates.length === 0}
+		            className={`h-9 min-w-0 rounded-xl px-2 text-[10px] font-black uppercase leading-none transition sm:h-11 sm:rounded-2xl ${routeIds.length ? 'bg-[var(--accent)] text-[var(--on-accent)] shadow-[0_12px_34px_rgba(255,178,74,0.24)]' : 'bg-white/12 text-white hover:bg-white/18'} disabled:cursor-not-allowed disabled:opacity-40`}
+		          >
+		            <span className="block truncate">{isRaining ? 'Ruta suave' : 'Ruta hoy'}</span>
+		          </button>
           <button
-            type="button"
-            onClick={() => setShowLabels(current => !current)}
-            className={`h-11 min-w-0 rounded-2xl px-2 text-[10px] font-black uppercase leading-none transition ${showLabels ? 'bg-white text-slate-950' : 'bg-white/10 text-white/65 hover:bg-white/18 hover:text-white'}`}
-          >
-            <span className="block truncate">Nombres</span>
-          </button>
+		            type="button"
+		            onClick={() => setShowLabels(current => !current)}
+		            className={`h-9 min-w-0 rounded-xl px-2 text-[10px] font-black uppercase leading-none transition sm:h-11 sm:rounded-2xl ${showLabels ? 'bg-white text-slate-950 shadow-[0_10px_30px_rgba(255,255,255,0.16)]' : 'bg-white/12 text-white/68 hover:bg-white/18 hover:text-white'}`}
+		          >
+		            <span className="block truncate">Nombres</span>
+		          </button>
         </div>
       </div>
       )}
 
       {selectedNote && !isPreview && (
-        <div className="absolute left-4 right-4 bottom-32 sm:left-auto sm:right-8 sm:top-28 sm:bottom-auto sm:w-[22rem] sm:max-w-[22rem] rounded-[2rem] border border-white/20 bg-white/92 p-5 shadow-2xl backdrop-blur-2xl text-[var(--earth)]">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[var(--text-muted)]">
-                {seedTypeLabel(selectedNote)} · {stageLabel(selectedNote)}
-              </p>
-              <h5 className="mt-2 text-2xl font-serif font-bold leading-tight">{selectedNote.title}</h5>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSelectedId(null)}
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--paper-soft)] text-lg font-black text-[var(--text-muted)]"
-              aria-label="Cerrar detalle"
-            >
+		        <div className="absolute bottom-[10.2rem] left-3 right-3 rounded-[1.65rem] border border-white/26 bg-white/[0.82] p-4 text-[var(--earth)] shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur-2xl sm:left-auto sm:right-8 sm:top-28 sm:bottom-auto sm:w-[22rem] sm:max-w-[22rem] sm:rounded-[2rem] sm:bg-white/92 sm:p-5">
+	          <div className="flex items-start justify-between gap-4">
+	            <div>
+	              <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[var(--text-muted)] sm:text-[10px] sm:tracking-[0.28em]">
+	                {seedTypeLabel(selectedNote)} · {stageLabel(selectedNote)}
+	              </p>
+	              <h5 className="mt-1 line-clamp-2 text-xl font-serif font-bold leading-tight sm:mt-2 sm:text-2xl">{selectedNote.title}</h5>
+	            </div>
+	            <button
+	              type="button"
+	              onClick={() => setSelectedId(null)}
+	              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--paper-soft)] text-lg font-black text-[var(--text-muted)] sm:h-9 sm:w-9"
+	              aria-label="Cerrar detalle"
+	            >
               ×
             </button>
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-2xl bg-[var(--paper-soft)] px-2 py-3">
-              <p className="text-lg font-black">{progressFor(selectedNote)}%</p>
-              <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Avance</p>
-            </div>
-            <div className="rounded-2xl bg-[var(--paper-soft)] px-2 py-3">
-              <p className="text-lg font-black">{selectedNote.tasks.filter(task => !task.completed).length}</p>
-              <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Pasos</p>
-            </div>
-            <div className="rounded-2xl bg-[var(--paper-soft)] px-2 py-3">
-              <p className="text-sm font-black leading-5">{formatWatered(selectedNote)}</p>
-              <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Riego</p>
-            </div>
-          </div>
+	          <div className="mt-3 grid grid-cols-3 gap-1.5 text-center sm:mt-4 sm:gap-2">
+	            <div className="rounded-xl bg-[var(--paper-soft)] px-2 py-2 sm:rounded-2xl sm:py-3">
+	              <p className="text-base font-black sm:text-lg">{progressFor(selectedNote)}%</p>
+	              <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Avance</p>
+	            </div>
+	            <div className="rounded-xl bg-[var(--paper-soft)] px-2 py-2 sm:rounded-2xl sm:py-3">
+	              <p className="text-base font-black sm:text-lg">{selectedNote.tasks.filter(task => !task.completed).length}</p>
+	              <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Pasos</p>
+	            </div>
+	            <div className="rounded-xl bg-[var(--paper-soft)] px-2 py-2 sm:rounded-2xl sm:py-3">
+	              <p className="text-xs font-black leading-5 sm:text-sm">{formatWatered(selectedNote)}</p>
+	              <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Riego</p>
+	            </div>
+	          </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+	          <div className="mt-3 hidden grid-cols-2 gap-2 text-center sm:grid">
             <div className="rounded-2xl bg-white/70 px-3 py-2">
               <p className="text-xs font-black">{formatDue(selectedNote.dueDate)}</p>
               <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">Fecha</p>
@@ -1988,31 +2040,31 @@ export default function Garden3D({
             </div>
           </div>
 
-          <div className="mt-4 rounded-2xl border border-[var(--soil)]/10 bg-white/70 p-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--text-muted)]">Siguiente paso</p>
-            <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--earth)]">{nextOpenTask(selectedNote)}</p>
-          </div>
+	          <div className="mt-3 rounded-2xl border border-[var(--soil)]/10 bg-white/70 p-3 sm:mt-4 sm:p-4">
+	            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--text-muted)]">Siguiente paso</p>
+	            <p className="mt-1 line-clamp-2 text-sm font-semibold leading-relaxed text-[var(--earth)] sm:mt-2 sm:line-clamp-none">{nextOpenTask(selectedNote)}</p>
+	          </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => onSelectNote(selectedNote.id)}
-              className="rounded-2xl bg-[var(--earth)] px-3 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white"
-            >
-              Abrir
+	          <div className="mt-3 grid grid-cols-3 gap-1.5 sm:mt-4 sm:gap-2">
+	            <button
+	              type="button"
+	              onClick={() => onSelectNote(selectedNote.id)}
+	              className="rounded-xl bg-[var(--earth)] px-2 py-2.5 text-[9px] font-black uppercase tracking-[0.12em] text-[var(--on-earth)] sm:rounded-2xl sm:px-3 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+	            >
+	              Abrir
             </button>
             <button
-              type="button"
-              onClick={() => onReviewNote?.(selectedNote.id)}
-              className="rounded-2xl bg-[var(--sage)] px-3 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white"
-            >
-              Revisar
+	              type="button"
+	              onClick={() => onReviewNote?.(selectedNote.id)}
+	              className="rounded-xl bg-[var(--sage)] px-2 py-2.5 text-[9px] font-black uppercase tracking-[0.12em] text-[var(--on-sage)] sm:rounded-2xl sm:px-3 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+	            >
+	              Revisar
             </button>
             <button
-              type="button"
-              onClick={() => onFocusNote?.(selectedNote.id)}
-              className="rounded-2xl bg-[var(--accent)] px-3 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white"
-            >
+	              type="button"
+	              onClick={() => onFocusNote?.(selectedNote.id)}
+	              className="rounded-xl bg-[var(--accent)] px-2 py-2.5 text-[9px] font-black uppercase tracking-[0.12em] text-[var(--on-accent)] sm:rounded-2xl sm:px-3 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+	            >
               Enfocar
             </button>
           </div>

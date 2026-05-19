@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   ios: {
     contentInset: 'automatic',
-    scrollEnabled: false
+    scrollEnabled: true
   }
 };
 

@@ -17,9 +17,12 @@ import {
   isToday
 } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { enUS } from 'date-fns/locale';
 import { 
   Plus, 
   Search, 
+  Cloud,
+  Clock,
   Leaf, 
   Sprout, 
   CheckCircle2, 
@@ -49,7 +52,7 @@ import {
   Maximize2
 } from 'lucide-react';
 import { Theme, SeedNote, Planet } from './types';
-import { addFocusMinutes, cultivateInboxNote as cultivateNote, DAY_MS, daysSince, toggleTaskForNote, wateringDue, waterNote as waterSeedNote } from './seedLogic';
+import { addFocusMinutes, DAY_MS, daysSince, toggleTaskForNote, wateringDue, waterNote as waterSeedNote } from './seedLogic';
 import { loadNotesFromDb, migrateLocalNotesToDb, saveNotesToDb } from './storage';
 import { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';
@@ -66,6 +69,133 @@ type AccountProfile = {
 };
 
 type AppView = 'today' | 'inbox' | 'projects' | 'focus' | 'garden' | 'profile' | 'harvest' | 'calendar' | '3D';
+type AppLanguage = 'es' | 'en';
+
+function detectDeviceLanguage(): AppLanguage {
+  const languages = typeof navigator !== 'undefined'
+    ? [navigator.language, ...(navigator.languages || [])]
+    : [];
+  return languages.some(language => language?.toLowerCase().startsWith('en')) ? 'en' : 'es';
+}
+
+const appLanguage = detectDeviceLanguage();
+const appDateLocale = appLanguage === 'en' ? enUS : es;
+const appCopy = {
+  es: {
+    today: 'Hoy',
+    seeds: 'Semillas',
+    sprouts: 'Brotes',
+    garden: 'Jardín',
+    planet: 'Planeta',
+    path: 'Camino',
+    profile: 'Perfil',
+    settings: 'Ajustes',
+    cancel: 'Cancelar',
+    plant: 'Plantar',
+    newSeed: 'Nueva semilla',
+    options: 'Opciones',
+    date: 'Fecha',
+    goodMorning: 'Buenos días',
+    goodAfternoon: 'Buenas tardes',
+    goodEvening: 'Buenas noches',
+    streak: 'racha',
+    activeDays: 'días activos',
+    now: 'Ahora',
+    waterNow: 'Regar ahora',
+    focus: 'Enfocar',
+    viewSeeds: 'Ver semillas',
+    openGarden: 'Abrir jardín',
+    quietGarden: 'Tu jardín está tranquilo',
+    captureIdea: 'Captura una idea cuando aparezca',
+    seedWaiting: 'Hay una semilla esperando forma',
+    noPressure: 'Sin presión: una revisión basta',
+    wateringUpToDate: 'Riego al día',
+    wateringQueue: 'por regar',
+    monthPath: 'Mira el mes y los días activos',
+    quietDay: 'Día tranquilo',
+    noActivity: 'Sin actividad',
+    plantedSeed: 'Semilla plantada',
+    ideaCreated: 'Idea creada',
+    wateredIdea: 'Idea regada',
+    advancedIdea: 'Idea avanzada',
+    harvestDone: 'Cosecha lograda',
+    dueDate: 'Fecha objetivo',
+    pendingSeeds: 'ideas por decidir',
+    noPendingSeeds: 'Sin semillas pendientes',
+    plusReady: 'El botón + siempre está listo para una idea.',
+    readyToDecide: 'Lista para decidir.',
+    done: 'Hecho',
+    project: 'Proyecto',
+    later: 'Guardar para después',
+    delete: 'Eliminar',
+  },
+  en: {
+    today: 'Today',
+    seeds: 'Seeds',
+    sprouts: 'Sprouts',
+    garden: 'Garden',
+    planet: 'Planet',
+    path: 'Path',
+    profile: 'Profile',
+    settings: 'Settings',
+    cancel: 'Cancel',
+    plant: 'Plant',
+    newSeed: 'New seed',
+    options: 'Options',
+    date: 'Date',
+    goodMorning: 'Good morning',
+    goodAfternoon: 'Good afternoon',
+    goodEvening: 'Good evening',
+    streak: 'streak',
+    activeDays: 'active days',
+    now: 'Now',
+    waterNow: 'Water now',
+    focus: 'Focus',
+    viewSeeds: 'View seeds',
+    openGarden: 'Open garden',
+    quietGarden: 'Your garden is calm',
+    captureIdea: 'Capture an idea when it appears',
+    seedWaiting: 'A seed is waiting to take shape',
+    noPressure: 'No pressure: one review is enough',
+    wateringUpToDate: 'Watering is up to date',
+    wateringQueue: 'to water',
+    monthPath: 'See the month and active days',
+    quietDay: 'Quiet day',
+    noActivity: 'No activity',
+    plantedSeed: 'Seed planted',
+    ideaCreated: 'Idea created',
+    wateredIdea: 'Idea watered',
+    advancedIdea: 'Idea advanced',
+    harvestDone: 'Harvest completed',
+    dueDate: 'Due date',
+    pendingSeeds: 'ideas to decide',
+    noPendingSeeds: 'No pending seeds',
+    plusReady: 'The + button is always ready for an idea.',
+    readyToDecide: 'Ready to decide.',
+    done: 'Done',
+    project: 'Project',
+    later: 'Save for later',
+    delete: 'Delete',
+  },
+} as const;
+
+function t(key: keyof typeof appCopy.es) {
+  return appCopy[appLanguage][key];
+}
+
+function formatMonthYear(date: number | Date) {
+  return format(date, 'MMMM yyyy', { locale: appDateLocale });
+}
+
+function formatDayMonth(date: number | Date) {
+  return appLanguage === 'en'
+    ? format(date, 'MMMM d', { locale: appDateLocale })
+    : format(date, "d 'de' MMMM", { locale: appDateLocale });
+}
+
+function formatShortDate(date: number | Date) {
+  return format(date, 'd MMM', { locale: appDateLocale });
+}
 
 const THEMES: { id: Theme; label: string; icon: string }[] = [
   { id: 'earth', label: 'Pradera', icon: '🌾' },
@@ -239,7 +369,7 @@ function AppSelect({
                   }}
                   className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
                     active
-                      ? 'bg-[var(--sage)] text-white shadow-sm'
+                      ? 'bg-[var(--sage)] text-[var(--on-sage)] shadow-sm'
                       : 'text-[var(--earth)] hover:bg-[var(--bg-app)]'
                   }`}
                 >
@@ -333,7 +463,7 @@ function QuickCaptureBox({
         <button
           onClick={onSubmit}
           disabled={!canSubmit}
-          className="flex h-14 w-full items-center justify-center gap-2 rounded-[1.15rem] bg-[var(--sage)] px-5 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 transition-all active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-[1.15rem] bg-[var(--sage)] px-5 text-sm font-black text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20 transition-all active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
         >
           <Plus size={17} /> {buttonLabel}
         </button>
@@ -432,7 +562,7 @@ function getIdeaGuidance(note: SeedNote) {
       detail: `${daysWithoutReview} día${daysWithoutReview === 1 ? '' : 's'} sin mirar. Riégala en 20 segundos para que no se pierda.`,
       action: 'Regar',
       tone: 'bg-sky-50 text-sky-800 border-sky-100',
-      actionTone: 'bg-[var(--sage)] text-white',
+      actionTone: 'bg-[var(--sage)] text-[var(--on-sage)]',
       kind: 'water' as const,
     };
   }
@@ -444,7 +574,7 @@ function getIdeaGuidance(note: SeedNote) {
       detail: openTask.text || 'Describe el siguiente paso antes de enfocarte.',
       action: 'Enfocar',
       tone: 'bg-emerald-50 text-emerald-800 border-emerald-100',
-      actionTone: 'bg-[var(--accent)] text-white',
+      actionTone: 'bg-[var(--accent)] text-[var(--on-accent)]',
       kind: 'focus' as const,
     };
   }
@@ -455,7 +585,7 @@ function getIdeaGuidance(note: SeedNote) {
     detail: 'Esta idea necesita un siguiente paso para seguir avanzando.',
     action: 'Abrir',
     tone: 'bg-[var(--bg-app)] text-[var(--sage)] border-[var(--border)]',
-    actionTone: 'bg-[var(--earth)] text-white',
+    actionTone: 'bg-[var(--earth)] text-[var(--on-earth)]',
     kind: 'open' as const,
   };
 }
@@ -539,13 +669,14 @@ function CalendarView({
 
   const selectedKey = format(selectedDay, 'yyyy-MM-dd');
   const selectedActivity = activityByDay[selectedKey] || { planted: [], watered: [], harvested: [], advanced: [], due: [] };
-  const selectedEvents = [
-    ...selectedActivity.planted.map(note => ({ note, type: 'planted', label: note.growthStage === 'seed' ? 'Semilla plantada' : 'Idea creada', icon: Sprout, tone: 'bg-amber-50 text-amber-700 border-amber-100' })),
-    ...selectedActivity.watered.map(note => ({ note, type: 'watered', label: 'Idea regada', icon: Droplets, tone: 'bg-sky-50 text-sky-700 border-sky-100' })),
-    ...selectedActivity.advanced.map(note => ({ note, type: 'advanced', label: 'Idea avanzada', icon: TrendingUp, tone: 'bg-emerald-50 text-emerald-700 border-emerald-100' })),
-    ...selectedActivity.harvested.map(note => ({ note, type: 'harvested', label: 'Cosecha lograda', icon: CheckCircle2, tone: 'bg-green-50 text-green-700 border-green-100' })),
-    ...selectedActivity.due.map(note => ({ note, type: 'due', label: 'Fecha objetivo', icon: Target, tone: 'bg-violet-50 text-violet-700 border-violet-100' })),
+  const buildDayEvents = (activity: typeof selectedActivity) => [
+    ...activity.planted.map(note => ({ note, type: 'planted', label: note.growthStage === 'seed' ? t('plantedSeed') : t('ideaCreated'), icon: Sprout, tone: 'bg-amber-50 text-amber-700 border-amber-100' })),
+    ...activity.watered.map(note => ({ note, type: 'watered', label: t('wateredIdea'), icon: Droplets, tone: 'bg-sky-50 text-sky-700 border-sky-100' })),
+    ...activity.advanced.map(note => ({ note, type: 'advanced', label: t('advancedIdea'), icon: TrendingUp, tone: 'bg-emerald-50 text-emerald-700 border-emerald-100' })),
+    ...activity.harvested.map(note => ({ note, type: 'harvested', label: t('harvestDone'), icon: CheckCircle2, tone: 'bg-green-50 text-green-700 border-green-100' })),
+    ...activity.due.map(note => ({ note, type: 'due', label: t('dueDate'), icon: Target, tone: 'bg-violet-50 text-violet-700 border-violet-100' })),
   ];
+  const selectedEvents = buildDayEvents(selectedActivity);
 
   const monthSummary = monthDays.reduce((summary, day) => {
     const activity = activityByDay[format(day, 'yyyy-MM-dd')];
@@ -594,42 +725,63 @@ function CalendarView({
     ...Array.from({ length: Math.ceil(calendarDays.length / 7) * 7 - calendarDays.length }, () => null),
   ];
   const calendarRows = Math.max(5, calendarCells.length / 7);
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-[#eef7ef] text-[var(--text-main)]"
+      drag="x"
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={0.08}
+      onDragEnd={(_, info) => {
+        if (info.offset.x > 70) setCurrentMonth(subMonths(currentMonth, 1));
+        if (info.offset.x < -70) setCurrentMonth(addMonths(currentMonth, 1));
+      }}
+      className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-[var(--bg-app)] text-[var(--text-main)]"
     >
-      <header className="relative z-20 shrink-0 border-b border-white/50 bg-white/70 px-3 py-2 shadow-sm backdrop-blur-2xl sm:px-6 sm:py-3">
-        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)] sm:text-[10px]">Camino del jardinero</p>
-            <div className="mt-0.5 flex flex-wrap items-end gap-x-4 gap-y-1 sm:mt-1">
-              <h3 className="font-serif text-2xl font-black capitalize leading-none text-[var(--earth)] sm:text-4xl">
-                {format(currentMonth, 'MMMM yyyy', { locale: es })}
+      <header className="relative z-20 shrink-0 border-b border-[var(--border)] bg-[var(--surface-strong)]/88 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-2xl sm:px-6">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)] transition-colors hover:bg-[var(--surface-hover)]"
+                aria-label="Mes anterior"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <h3 className="min-w-0 truncate text-center text-xl font-semibold capitalize tracking-tight text-[var(--earth)] sm:text-3xl">
+                {formatMonthYear(currentMonth)}
               </h3>
-              <p className="hidden max-w-2xl pb-1 text-sm font-semibold leading-relaxed text-[var(--text-muted)] md:block">
-                Un mapa de tu mes: dias plantados, riegos, avances y cosechas.
-              </p>
+              <button
+                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)] transition-colors hover:bg-[var(--surface-hover)]"
+                aria-label="Mes siguiente"
+              >
+                <ChevronRight size={18} />
+              </button>
             </div>
-            <div className="mt-2 flex max-w-xl items-center gap-2 sm:mt-3 sm:gap-3">
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-emerald-100">
-                <div className="h-full rounded-full bg-[linear-gradient(90deg,#7aa95c,#e3b64b)]" style={{ width: `${monthProgress}%` }} />
-              </div>
-              <span className="text-[9px] font-black uppercase tracking-widest text-[var(--sage)] sm:text-[10px]">{monthProgress}%</span>
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-700 sm:px-2.5 sm:py-1 sm:text-[10px]">{activeStreak} racha</span>
+            <div className="mt-2 flex items-center justify-center gap-2 text-xs font-medium text-[var(--text-muted)]">
+              <span>{monthSummary.activeDays} {t('activeDays')}</span>
+              <span>·</span>
+              <span>{activeStreak} {t('streak')}</span>
+              <button onClick={() => setCurrentMonth(new Date())} className="ml-1 rounded-full bg-[var(--bg-app)] px-2 py-1 text-xs font-semibold text-[var(--sage)]">{t('today')}</button>
+              <button onClick={onExit} className="ml-1 grid h-7 w-7 place-items-center rounded-full bg-[var(--earth)] text-[var(--on-earth)] sm:hidden" aria-label="Cerrar calendario">
+                <X size={14} />
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-0.5 app-scrollbar xl:flex-wrap xl:overflow-visible">
+          <div className="hidden items-center gap-2 overflow-x-auto pb-0.5 app-scrollbar sm:flex xl:flex-wrap xl:overflow-visible">
             {[
               { label: 'Dias', value: monthSummary.activeDays, icon: CalendarIcon, tone: 'text-[var(--sage)]' },
               { label: 'Plantadas', value: monthSummary.planted, icon: Sprout, tone: 'text-amber-600' },
               { label: 'Riegos', value: monthSummary.watered, icon: Droplets, tone: 'text-sky-600' },
               { label: 'Cosechas', value: monthSummary.harvested, icon: CheckCircle2, tone: 'text-green-600' },
             ].map(item => (
-              <div key={item.label} className="flex h-9 shrink-0 items-center gap-1.5 rounded-2xl border border-white/60 bg-white/65 px-2.5 shadow-sm sm:h-11 sm:gap-2 sm:px-3">
+              <div key={item.label} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[var(--bg-app)] px-2.5 sm:h-10 sm:gap-2 sm:px-3">
                 <item.icon size={14} className={item.tone} />
                 <span className="font-serif text-lg font-black text-[var(--earth)] sm:text-xl">{item.value}</span>
                 <span className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)] sm:text-[9px]">{item.label}</span>
@@ -637,28 +789,8 @@ function CalendarView({
             ))}
             <div className="ml-auto flex shrink-0 items-center gap-1.5 xl:ml-2 xl:gap-2">
               <button
-                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                className="grid h-9 w-9 place-items-center rounded-2xl border border-[var(--border)] bg-white/75 text-[var(--sage)] transition-colors hover:bg-white sm:h-11 sm:w-11"
-                aria-label="Mes anterior"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <button
-                onClick={() => setCurrentMonth(new Date())}
-                className="h-9 rounded-2xl border border-[var(--border)] bg-white/75 px-3 text-[10px] font-black uppercase text-[var(--sage)] transition-colors hover:bg-white sm:h-11 sm:px-4 sm:text-xs"
-              >
-                Hoy
-              </button>
-              <button
-                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                className="grid h-9 w-9 place-items-center rounded-2xl border border-[var(--border)] bg-white/75 text-[var(--sage)] transition-colors hover:bg-white sm:h-11 sm:w-11"
-                aria-label="Mes siguiente"
-              >
-                <ChevronRight size={18} />
-              </button>
-              <button
                 onClick={onExit}
-                className="grid h-9 w-9 place-items-center rounded-2xl bg-[var(--earth)] text-white shadow-lg shadow-black/10 transition-colors hover:bg-[var(--sage)] sm:h-11 sm:w-11"
+                className="grid h-9 w-9 place-items-center rounded-full bg-[var(--earth)] text-[var(--on-earth)] shadow-lg shadow-black/10 transition-colors hover:bg-[var(--sage)] sm:h-10 sm:w-10"
                 aria-label="Cerrar mapa"
               >
                 <X size={18} />
@@ -668,12 +800,97 @@ function CalendarView({
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] gap-0 xl:grid-cols-[minmax(0,1fr)_24rem] xl:grid-rows-1">
-        <div className="relative flex min-h-0 overflow-hidden bg-[linear-gradient(180deg,#eef7ef,#dfead8)] p-1.5 sm:p-4">
-          <div className="mx-auto flex h-full w-full max-w-7xl min-w-0 flex-col rounded-[1.4rem] border border-white/70 bg-white/58 p-1.5 shadow-2xl shadow-[#40583a]/10 backdrop-blur-2xl sm:rounded-[2rem] sm:p-4">
-            <div className="grid shrink-0 grid-cols-7 gap-1.5 sm:gap-2">
+      <div className="min-h-0 flex-1 sm:grid sm:grid-cols-1 sm:grid-rows-[minmax(0,1fr)_auto] sm:gap-0 xl:grid-cols-[minmax(0,1fr)_24rem] xl:grid-rows-1">
+        <div className="h-full overflow-y-auto px-4 py-3 app-scrollbar sm:hidden">
+          <div className="space-y-2 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+            {monthDays.map(day => {
+              const dateKey = format(day, 'yyyy-MM-dd');
+              const activity = activityByDay[dateKey] || { planted: [], watered: [], harvested: [], advanced: [], due: [] };
+              const dayEvents = buildDayEvents(activity);
+              const activityCount = dayEvents.length;
+              const isTodayDay = isToday(day);
+              const isSelected = isSameDay(day, selectedDay);
+              const isPastQuietDay = activityCount === 0 && day.getTime() < todayStart.getTime();
+              const strongest =
+                activity.harvested.length > 0 ? 'harvested' :
+                activity.watered.length > 0 ? 'watered' :
+                activity.advanced.length > 0 ? 'advanced' :
+                activity.planted.length > 0 ? 'planted' :
+                activity.due.length > 0 ? 'due' : 'empty';
+              const DayIcon =
+                strongest === 'harvested' ? CheckCircle2 :
+                strongest === 'watered' ? Droplets :
+                strongest === 'advanced' ? TrendingUp :
+                strongest === 'planted' ? Sprout :
+                strongest === 'due' ? Target :
+                Leaf;
+              const iconTone =
+                strongest === 'harvested' ? 'bg-green-50 text-green-600' :
+                strongest === 'watered' ? 'bg-sky-50 text-sky-600' :
+                strongest === 'advanced' ? 'bg-emerald-50 text-emerald-600' :
+                strongest === 'planted' ? 'bg-amber-50 text-amber-700' :
+                strongest === 'due' ? 'bg-violet-50 text-violet-600' :
+                isPastQuietDay ? 'bg-green-50 text-green-600' :
+                'bg-[var(--bg-app)] text-[var(--text-muted)]';
+
+              return (
+                <motion.button
+                  key={dateKey}
+                  type="button"
+                  onClick={() => setSelectedDay(day)}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`w-full rounded-[1.35rem] border p-3 text-left shadow-sm transition-colors ${
+                    isSelected
+                      ? 'border-[var(--sage)] bg-[var(--surface-strong)] ring-2 ring-[var(--sage)]/12'
+                      : 'border-[var(--border)] bg-[var(--surface-strong)]'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-12 shrink-0 text-center">
+                      <p className="text-[10px] font-semibold uppercase text-[var(--text-muted)]">{format(day, 'EEE', { locale: appDateLocale })}</p>
+                      <p className={`mt-1 text-2xl font-semibold leading-none ${isTodayDay ? 'text-[var(--sage)]' : 'text-[var(--earth)]'}`}>{format(day, 'd')}</p>
+                    </div>
+                    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${iconTone}`}>
+                      <DayIcon size={17} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-semibold capitalize text-[var(--earth)]">{formatDayMonth(day)}</p>
+                        {activityCount > 0 && (
+                          <span className="shrink-0 rounded-full bg-[var(--bg-app)] px-2 py-0.5 text-[10px] font-semibold text-[var(--sage)]">{activityCount}</span>
+                        )}
+                      </div>
+                      {dayEvents.length === 0 ? (
+                        <p className={`mt-1 text-sm font-medium ${isPastQuietDay ? 'text-green-600' : 'text-[var(--text-muted)]'}`}>
+                          {isPastQuietDay ? t('quietDay') : t('noActivity')}
+                        </p>
+                      ) : (
+                        <div className="mt-1 space-y-1">
+                          {dayEvents.slice(0, 2).map((event, index) => (
+                            <div key={`${event.type}-${event.note.id}-${index}`} className="flex min-w-0 items-center gap-2">
+                              <event.icon size={12} className="shrink-0 opacity-70" />
+                              <p className="truncate text-sm font-medium text-[var(--text-muted)]">{event.label}: {event.note.title}</p>
+                            </div>
+                          ))}
+                          {dayEvents.length > 2 && (
+                            <p className="text-xs font-medium text-[var(--sage)]">+{dayEvents.length - 2} más</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="relative hidden min-h-0 overflow-hidden p-3 sm:flex sm:p-4">
+          <div className="mx-auto flex h-full w-full max-w-7xl min-w-0 flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] p-2 sm:p-4">
+            <div className="grid shrink-0 grid-cols-7 gap-1 sm:gap-2">
               {weekLabels.map(label => (
-                <div key={label} className="rounded-xl bg-white/60 px-1 py-1 text-center text-[7px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)] sm:rounded-2xl sm:px-2 sm:py-2 sm:text-[10px]">
+                <div key={label} className="px-1 py-1 text-center text-[10px] font-semibold text-[var(--text-muted)] sm:px-2 sm:py-2">
                   {label}
                 </div>
               ))}
@@ -688,7 +905,7 @@ function CalendarView({
                   return (
                     <div
                       key={`empty-${index}`}
-                      className="min-h-0 rounded-xl border border-white/40 bg-white/20 sm:rounded-[1.4rem]"
+	                      className="min-h-0 rounded-xl bg-[var(--bg-app)]/45 sm:rounded-2xl"
                     />
                   );
                 }
@@ -699,6 +916,7 @@ function CalendarView({
                 const hasActivity = activityCount > 0;
                 const isSelected = isSameDay(day, selectedDay);
                 const isTodayDay = isToday(day);
+                const isPastQuietDay = activityCount === 0 && day.getTime() < todayStart.getTime();
                 const strongest =
                   activity.harvested.length > 0 ? 'harvested' :
                   activity.watered.length > 0 ? 'watered' :
@@ -716,53 +934,53 @@ function CalendarView({
                     key={dateKey}
                     type="button"
                     onClick={() => setSelectedDay(day)}
-                    className={`group relative flex min-h-0 flex-col items-center justify-center overflow-hidden rounded-xl border p-0.5 text-center transition-all hover:-translate-y-0.5 hover:shadow-xl sm:rounded-[1.4rem] sm:p-2 ${
+	                    className={`group relative flex min-h-0 flex-col items-center justify-center overflow-hidden rounded-xl border p-0.5 text-center transition-colors sm:rounded-2xl sm:p-2 ${
                       isSelected
-                        ? 'border-[var(--sage)] bg-white shadow-2xl shadow-[var(--sage)]/12 ring-2 ring-[var(--sage)]/20'
+	                        ? 'border-[var(--sage)] bg-[var(--bg-app)] ring-2 ring-[var(--sage)]/18'
                         : isTodayDay
-                          ? 'border-[var(--earth)]/20 bg-white/82 shadow-lg shadow-black/5'
+	                          ? 'border-[var(--earth)]/20 bg-[var(--bg-app)]'
                           : hasActivity
-                            ? 'border-white/80 bg-white/72 shadow-md shadow-black/5'
-                            : 'border-white/55 bg-white/38 hover:bg-white/62'
+	                            ? 'border-[var(--border)] bg-white/60'
+	                            : 'border-transparent bg-transparent hover:bg-[var(--bg-app)]'
                     }`}
                     aria-label={`Dia ${format(day, 'd')}`}
                   >
-                    <span className="absolute left-1 top-1 text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)] sm:left-2 sm:top-2 sm:text-xs">
+	                    <span className="absolute left-1.5 top-1.5 text-[10px] font-semibold text-[var(--text-muted)] sm:left-2 sm:top-2 sm:text-xs">
                       {format(day, 'd')}
                     </span>
                     {isTodayDay && (
-                      <span className="absolute right-1 top-1 rounded-full bg-[var(--earth)] px-1 py-0.5 text-[6px] font-black uppercase text-white sm:right-2 sm:top-2 sm:px-2 sm:text-[8px]">
-                        Hoy
-                      </span>
+	                      <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[var(--earth)] sm:right-2 sm:top-2" />
                     )}
 
-                    <span className={`relative grid h-[clamp(1.8rem,4.4vh,4rem)] w-[clamp(1.8rem,4.4vh,4rem)] place-items-center rounded-full border-[3px] shadow-[0_10px_22px_rgba(31,45,35,0.12)] sm:h-[clamp(2.15rem,5.4vh,4rem)] sm:w-[clamp(2.15rem,5.4vh,4rem)] sm:border-[4px] ${
+	                    <span className={`relative grid h-[clamp(1.65rem,4vh,3.2rem)] w-[clamp(1.65rem,4vh,3.2rem)] place-items-center rounded-full sm:h-[clamp(2rem,5vh,3.5rem)] sm:w-[clamp(2rem,5vh,3.5rem)] ${
                       isSelected
-                        ? 'border-white bg-[var(--sage)] text-white'
+	                        ? 'bg-[var(--sage)] text-[var(--on-sage)]'
                         : isTodayDay
-                          ? 'border-white bg-[var(--earth)] text-white'
+	                          ? 'bg-[var(--earth)] text-[var(--on-earth)]'
                           : strongest === 'harvested'
-                            ? 'border-white bg-green-500 text-white'
+	                            ? 'bg-green-500 text-white'
                             : strongest === 'watered'
-                              ? 'border-white bg-sky-500 text-white'
+	                              ? 'bg-sky-500 text-white'
                               : strongest === 'advanced'
-                                ? 'border-white bg-emerald-500 text-white'
+	                                ? 'bg-emerald-500 text-white'
                                 : strongest === 'planted'
-                                  ? 'border-white bg-amber-400 text-amber-950'
-                                  : 'border-white bg-[var(--surface-strong)] text-[var(--text-muted)]'
+                                  ? 'bg-amber-400 text-amber-950'
+		                                  : isPastQuietDay
+                                    ? 'bg-green-50 text-green-600'
+                                    : 'bg-[var(--bg-app)] text-[var(--text-muted)]'
                     }`}>
-                      <NodeIcon size={15} className="sm:h-6 sm:w-6" />
+	                      <NodeIcon size={13} className="sm:h-5 sm:w-5" />
                       {activity.due.length > 0 && (
-                        <span className="absolute -left-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-violet-500 shadow sm:h-3.5 sm:w-3.5" />
+	                        <span className="absolute -left-0.5 top-0.5 h-2 w-2 rounded-full bg-violet-500 sm:h-3 sm:w-3" />
                       )}
                       {(activity.harvested.length > 0 || activityCount >= 3) && (
-                        <span className="absolute -right-1 bottom-0 grid h-4 w-4 place-items-center rounded-full border-2 border-white bg-yellow-300 text-yellow-900 shadow-lg sm:-right-2 sm:bottom-1 sm:h-6 sm:w-6">
+	                        <span className="absolute -right-1 bottom-0 grid h-3.5 w-3.5 place-items-center rounded-full bg-yellow-300 text-yellow-900 sm:h-5 sm:w-5">
                           <Sparkles size={9} />
                         </span>
                       )}
                     </span>
 
-                    <span className={`mt-1 hidden max-w-full truncate rounded-full px-1.5 py-0.5 text-[7px] font-black uppercase tracking-widest min-[430px]:inline-flex sm:mt-2 sm:px-2.5 sm:py-1 sm:text-[9px] ${
+	                    <span className={`mt-1 hidden max-w-full truncate rounded-full px-1.5 py-0.5 text-[7px] font-semibold min-[430px]:inline-flex sm:mt-2 sm:px-2.5 sm:py-1 sm:text-[9px] ${
                       hasActivity ? 'bg-[var(--surface-strong)] text-[var(--earth)]' : 'bg-white/45 text-[var(--text-muted)]'
                     }`}>
                       {hasActivity ? `${activityCount} evento${activityCount === 1 ? '' : 's'}` : 'Libre'}
@@ -781,37 +999,31 @@ function CalendarView({
           </div>
         </div>
 
-        <aside className="max-h-[32vh] min-h-0 overflow-y-auto border-t border-white/60 bg-white/80 p-3 shadow-2xl backdrop-blur-2xl app-scrollbar sm:max-h-[36vh] sm:p-5 xl:max-h-none xl:border-l xl:border-t-0">
-          <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)] sm:text-[10px]">Dia seleccionado</p>
-          <h4 className="mt-1 font-serif text-2xl font-black capitalize text-[var(--earth)] sm:mt-2 sm:text-3xl">
-            {format(selectedDay, "d 'de' MMMM", { locale: es })}
+        <aside className="hidden max-h-[30vh] min-h-0 overflow-y-auto border-t border-[var(--border)] bg-[var(--surface-strong)] p-4 app-scrollbar sm:block sm:max-h-[34vh] sm:p-5 xl:max-h-none xl:border-l xl:border-t-0">
+          <h4 className="text-xl font-semibold capitalize tracking-tight text-[var(--earth)] sm:text-2xl">
+            {formatDayMonth(selectedDay)}
           </h4>
-          <div className="mt-3 rounded-[1.25rem] border border-[var(--border)] bg-[var(--bg-app)] p-3 sm:mt-4 sm:rounded-[1.5rem] sm:p-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--sage)]">Resumen del día</p>
-            <p className="mt-1 line-clamp-2 text-sm font-semibold leading-relaxed text-[var(--earth)] sm:mt-2 sm:line-clamp-none">{daySummary}</p>
-          </div>
+          <p className="mt-1 line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)] sm:line-clamp-none">{daySummary}</p>
 
-          <div className="mt-3 grid grid-cols-4 gap-1.5 text-center sm:mt-5 sm:gap-2">
+          <div className="mt-3 grid grid-cols-4 gap-1.5 text-center sm:gap-2">
             {[
               { label: 'Plant', value: selectedActivity.planted.length, tone: 'text-amber-600' },
               { label: 'Riego', value: selectedActivity.watered.length, tone: 'text-sky-600' },
               { label: 'Avance', value: selectedActivity.advanced.length, tone: 'text-emerald-600' },
               { label: 'Cosecha', value: selectedActivity.harvested.length, tone: 'text-green-600' },
             ].map(item => (
-              <div key={item.label} className="rounded-2xl bg-[var(--bg-app)] px-2 py-2 sm:py-3">
-                <p className={`text-base font-black sm:text-lg ${item.tone}`}>{item.value}</p>
-                <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
+              <div key={item.label} className="rounded-xl bg-[var(--bg-app)] px-2 py-2">
+                <p className={`text-sm font-semibold sm:text-base ${item.tone}`}>{item.value}</p>
+                <p className="mt-0.5 text-[9px] font-medium text-[var(--text-muted)]">{item.label}</p>
               </div>
             ))}
           </div>
 
-          <div className="mt-3 space-y-2 sm:mt-5">
+          <div className="mt-3 space-y-2">
             {selectedEvents.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-app)] p-5 text-center">
-                <Leaf className="mx-auto text-[var(--sage)] opacity-50" size={26} />
-                <p className="mt-3 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-                  No hay actividad guardada en este dia. Buen espacio para plantar una idea nueva.
-                </p>
+              <div className="rounded-2xl bg-[var(--bg-app)] p-4 text-center">
+                <Leaf className="mx-auto text-[var(--sage)] opacity-45" size={22} />
+                <p className="mt-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">Sin actividad este día.</p>
               </div>
             ) : selectedEvents.map((event, index) => (
               <button
@@ -821,25 +1033,20 @@ function CalendarView({
                   onSelectNote(event.note.id);
                   onExit();
                 }}
-                className={`w-full rounded-2xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${event.tone}`}
+	                className={`w-full rounded-2xl border p-3 text-left transition-colors ${event.tone}`}
               >
                 <div className="flex items-start gap-3">
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/70">
                     <event.icon size={17} />
                   </span>
                   <div className="min-w-0">
-                    <p className="text-[9px] font-black uppercase tracking-widest opacity-70">{event.label}</p>
-                    <p className="mt-1 truncate text-sm font-black">{event.note.title}</p>
-                    <p className="mt-1 text-xs font-semibold opacity-70">{STAGE_META[event.note.growthStage].shortLabel}</p>
+                    <p className="text-xs font-semibold opacity-70">{event.label}</p>
+                    <p className="mt-0.5 truncate text-sm font-semibold">{event.note.title}</p>
+                    <p className="mt-0.5 text-xs font-medium opacity-70">{STAGE_META[event.note.growthStage].shortLabel}</p>
                   </div>
                 </div>
               </button>
             ))}
-          </div>
-          <div className="mt-5 rounded-2xl border border-[var(--border)] bg-white/60 px-4 py-3">
-            <p className="text-xs font-semibold leading-relaxed text-[var(--text-muted)]">
-              El mapa usa las fechas guardadas de tus ideas. Luego podemos guardar un historial exacto de cada paso y riego.
-            </p>
           </div>
         </aside>
       </div>
@@ -895,9 +1102,62 @@ function TodayView({
     .slice(0, 1);
   const inboxCount = notes.filter(note => note.inbox).length;
   const activeCount = activeNotes.length;
+  const completedToday = notes.filter(note => note.harvestedAt && isToday(note.harvestedAt)).length;
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? t('goodMorning') : hour < 19 ? t('goodAfternoon') : t('goodEvening');
   const doneTodayText = wateredToday
-    ? `Racha de ${wateringStreak} día${wateringStreak === 1 ? '' : 's'}`
-    : 'Sin presión: una revisión basta';
+    ? appLanguage === 'en'
+      ? `${wateringStreak}-day streak`
+      : `Racha de ${wateringStreak} día${wateringStreak === 1 ? '' : 's'}`
+    : t('noPressure');
+  const primaryMode = firstWatering ? 'water' : nextAction ? 'focus' : inboxCount > 0 ? 'seed' : 'calm';
+  const primaryTitle = firstWatering?.title || nextAction?.note.title || inboxNotes[0]?.title || t('quietGarden');
+  const primaryDetail = firstWatering
+    ? `${daysSince(firstWatering.lastWateredAt || firstWatering.createdAt)} días sin revisión`
+    : nextAction
+      ? nextAction.task.text
+      : inboxNotes[0]
+        ? t('seedWaiting')
+        : t('captureIdea');
+  const primaryAction = firstWatering ? t('waterNow') : nextAction ? t('focus') : inboxCount > 0 ? t('viewSeeds') : t('openGarden');
+  const PrimaryIcon = firstWatering ? Droplets : nextAction ? Target : inboxCount > 0 ? Sprout : Leaf;
+  const primaryTone =
+    primaryMode === 'water' ? 'from-sky-50 to-white text-sky-700' :
+    primaryMode === 'focus' ? 'from-emerald-50 to-white text-emerald-700' :
+    primaryMode === 'seed' ? 'from-amber-50 to-white text-amber-700' :
+    'from-[var(--surface-strong)] to-[var(--bg-app)] text-[var(--sage)]';
+  const todayRoutes = [
+    { label: t('seeds'), value: inboxCount, icon: Sprout, onClick: () => onNavigate('inbox'), tone: 'text-amber-600' },
+    { label: t('sprouts'), value: activeCount, icon: Target, onClick: () => onNavigate('projects'), tone: 'text-emerald-600' },
+    { label: t('garden'), value: notes.filter(note => !note.inbox && note.growthStage === 'bloom').length, icon: Leaf, onClick: () => onNavigate('garden'), tone: 'text-green-600' },
+  ];
+  const secondaryActions = [
+    {
+      icon: Droplets,
+      title: allThirstyNotes.length > 0 ? `${allThirstyNotes.length} ${t('wateringQueue')}` : t('wateringUpToDate'),
+      detail: allThirstyNotes.length > 0 ? (appLanguage === 'en' ? 'Review what has been still the longest' : 'Revisa lo que lleva más tiempo quieto') : doneTodayText,
+      onClick: () => allThirstyNotes.length > 1 ? onShowWateringQueue() : firstWatering ? onOpenWatering(firstWatering.id) : onNavigate('garden'),
+      tone: 'text-sky-600',
+    },
+    {
+      icon: CalendarIcon,
+      title: t('path'),
+      detail: t('monthPath'),
+      onClick: () => onNavigate('calendar'),
+      tone: 'text-[var(--sage)]',
+    },
+  ];
+  const primaryClick = () => {
+    if (firstWatering) {
+      onOpenWatering(firstWatering.id);
+      return;
+    }
+    if (nextAction) {
+      onFocusNote(nextAction.note.id);
+      return;
+    }
+    onNavigate(inboxCount > 0 ? 'inbox' : 'garden');
+  };
 
   return (
     <motion.div
@@ -905,174 +1165,84 @@ function TodayView({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }}
-      className="pb-24 space-y-5"
+      className="space-y-4 pb-24"
     >
-      <section className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] shadow-[0_18px_60px_rgb(47,62,51,0.08)] p-5 md:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Hoy</p>
-            <h3 className="mt-1 text-3xl md:text-4xl font-serif font-black leading-tight text-[var(--earth)]">¿Qué quieres cultivar?</h3>
-            <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-              Planta una idea rápida, riega una pendiente o enfócate en un solo paso. No necesitas organizar todo ahora.
-            </p>
-          </div>
-          <button
-            onClick={onEnableNotifications}
-            className="h-11 w-11 rounded-full bg-[var(--bg-app)] text-[var(--sage)] flex items-center justify-center hover:bg-[var(--surface-strong)] transition-colors"
-            title="Activar recordatorios"
-            aria-label="Activar recordatorios"
-          >
-            <Bell size={18} />
-          </button>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-[var(--text-muted)]">{greeting}</p>
+          <h3 className="mt-0.5 text-3xl font-semibold tracking-tight text-[var(--earth)]">{t('today')}</h3>
+          <p className="mt-1 text-sm font-medium text-[var(--text-muted)]">{doneTodayText}</p>
         </div>
-
-        <div className="mt-5">
-          <QuickCaptureBox
-            value={quickNote}
-            onChange={setQuickNote}
-            onSubmit={onQuickCapture}
-            placeholder="Anota una idea antes de que se escape..."
-            buttonLabel="Plantar"
-          />
-        </div>
-
-        <div className="mt-5 grid grid-cols-3 gap-2">
-          {[
-            { label: 'Activas', value: activeCount },
-            { label: 'Por regar', value: allThirstyNotes.length },
-            { label: 'Semillas', value: inboxCount },
-          ].map(item => (
-            <div key={item.label} className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-3 text-center">
-              <p className="font-serif text-2xl font-black text-[var(--earth)]">{item.value}</p>
-              <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
-        <section className={`min-h-[17rem] rounded-[2rem] border p-5 shadow-sm ${firstWatering ? 'bg-[var(--card-bg)] border-[var(--border)]' : wateredToday ? 'bg-green-50 border-green-100' : 'bg-[var(--surface-soft)] border-[var(--border)]'}`}>
-          <div className="flex h-full flex-col">
-            <div className="flex items-start gap-3">
-              <div className={`h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 ${firstWatering ? 'bg-[var(--sage)] text-white' : wateredToday ? 'bg-green-600 text-white' : 'bg-[var(--surface-strong)] text-[var(--sage)]'}`}>
-                <Droplets size={20} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Regar</p>
-                <h3 className="mt-1 text-2xl font-serif font-black text-[var(--earth)]">
-                  {firstWatering ? 'Revisa una idea' : wateredToday ? 'Jardín cuidado' : 'Todo fresco'}
-                </h3>
-                <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-                  {firstWatering
-                    ? `${firstWatering.title} lleva ${daysSince(firstWatering.lastWateredAt || firstWatering.createdAt)} días sin revisión.`
-                    : wateredToday
-                      ? doneTodayText
-                      : 'No hay ideas pidiendo riego ahora.'}
-                </p>
-                {allThirstyNotes.length > 1 && (
-                  <button onClick={onShowWateringQueue} className="mt-3 inline-flex rounded-full bg-[var(--surface-strong)] px-3 py-1.5 text-xs font-black text-[var(--sage)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--surface-hover)]">
-                    {allThirstyNotes.length - 1} más en cola
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="mt-auto pt-5">
-              <button
-                onClick={() => firstWatering ? onOpenWatering(firstWatering.id) : onNavigate('garden')}
-                className="flex h-12 w-full items-center justify-center rounded-2xl bg-[var(--sage)] px-5 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
-              >
-                {firstWatering ? 'Regar ahora' : 'Ver jardín'}
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section className="min-h-[17rem] rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-5 shadow-sm">
-          <div className="flex h-full flex-col">
-            <div className="flex items-start gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center shrink-0">
-                <Target size={20} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Enfocar</p>
-                <h3 className="mt-1 text-2xl font-serif font-black text-[var(--earth)]">Un paso</h3>
-                {nextAction ? (
-                  <>
-                    <button onClick={() => onSelectNote(nextAction.note.id)} className="mt-2 block w-full text-left">
-                      <p className="truncate text-sm font-black text-[var(--earth)]">{nextAction.note.title}</p>
-                      <p className="mt-1 line-clamp-2 text-sm font-semibold text-[var(--text-muted)]">{nextAction.task.text || 'Describe el siguiente paso'}</p>
-                    </button>
-                    <div className="mt-4 h-2 rounded-full bg-[var(--surface-strong)] overflow-hidden">
-                      <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${getProgress(nextAction.note)}%` }} />
-                    </div>
-                  </>
-                ) : (
-                  <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-                    {inboxCount > 0 ? 'Cultiva una semilla para crear su primer paso.' : 'Planta una idea y aparecerá aquí el siguiente paso.'}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="mt-auto pt-5 grid grid-cols-2 gap-2">
-              <button
-                onClick={() => nextAction ? onFocusNote(nextAction.note.id) : onNavigate(inboxCount > 0 ? 'inbox' : 'garden')}
-                className="flex h-12 items-center justify-center rounded-2xl bg-[var(--sage)] px-4 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
-              >
-                {nextAction ? 'Enfocar' : inboxCount > 0 ? 'Cultivar' : 'Jardín'}
-              </button>
-              <button
-                onClick={() => nextAction ? onToggleTask(nextAction.note.id, nextAction.task.id) : onNavigate('garden')}
-                disabled={!nextAction}
-                className="flex h-12 items-center justify-center rounded-2xl bg-[var(--surface-strong)] disabled:opacity-50 text-[var(--sage)] border border-[var(--border)] px-4 text-sm font-black active:translate-y-px soft-interaction"
-              >
-                Hecho
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section className="min-h-[17rem] rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-5 shadow-sm">
-          <div className="flex h-full flex-col">
-            <div className="flex items-start gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)] flex items-center justify-center shrink-0">
-                <Sprout size={20} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Semillero</p>
-                <h3 className="mt-1 text-2xl font-serif font-black text-[var(--earth)]">
-                  {inboxCount > 0 ? `${inboxCount} por cultivar` : 'Listo para ideas'}
-                </h3>
-                <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-                  {inboxNotes[0]
-                    ? `La próxima semilla es "${inboxNotes[0].title}".`
-                    : 'Captura ideas sin decidir todo de una vez.'}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => onNavigate(inboxCount > 0 ? 'inbox' : 'garden')}
-              className="mt-auto flex h-12 w-full items-center justify-center rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)] border border-[var(--border)] px-5 text-sm font-black active:translate-y-px soft-interaction"
-            >
-              {inboxCount > 0 ? 'Ver semillas' : 'Abrir jardín'}
-            </button>
-          </div>
-        </section>
+        <button
+          onClick={onEnableNotifications}
+          className="grid h-10 w-10 place-items-center rounded-full text-[var(--sage)] transition-colors hover:bg-[var(--surface-hover)]"
+          title="Activar recordatorios"
+          aria-label="Activar recordatorios"
+        >
+          <Bell size={18} />
+        </button>
       </div>
 
-      {allThirstyNotes.length > 1 && (
-        <section className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] shadow-sm p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="font-serif text-2xl font-black text-[var(--earth)]">Más ideas por regar</h3>
-              <p className="mt-1 text-sm font-semibold text-[var(--text-muted)]">No tienes que hacerlas todas hoy. La app te muestra la cola si quieres seguir.</p>
-            </div>
-            <button
-              onClick={onShowWateringQueue}
-              className="rounded-2xl bg-[var(--sage)] text-white px-5 py-3 font-black shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
-            >
-              Ver cola de riego
-            </button>
-          </div>
+      <section className={`overflow-hidden rounded-[1.85rem] border border-[var(--border)] bg-gradient-to-br ${primaryTone} p-4 shadow-sm`}>
+        <button type="button" onClick={primaryClick} className="flex w-full items-start gap-4 text-left">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/72 shadow-sm">
+            <PrimaryIcon size={22} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">{t('now')}</span>
+            <span className="mt-1 block truncate text-xl font-semibold tracking-tight text-[var(--earth)]">{primaryTitle}</span>
+            <span className="mt-1 block line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{primaryDetail}</span>
+          </span>
+          <ChevronRight size={18} className="mt-3 shrink-0 text-[var(--text-muted)]" />
+        </button>
+        <button
+          onClick={primaryClick}
+          className="mt-5 flex h-11 w-full items-center justify-center rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
+        >
+          {primaryAction}
+        </button>
+      </section>
+
+      <section className="grid grid-cols-3 gap-2">
+        {todayRoutes.map(item => (
+          <button
+            key={item.label}
+            type="button"
+            onClick={item.onClick}
+            className="rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-3 text-left shadow-sm soft-interaction hover:bg-[var(--surface-hover)]"
+          >
+            <item.icon size={17} className={item.tone} />
+            <p className="mt-2 text-xl font-semibold text-[var(--earth)]">{item.value}</p>
+            <p className="mt-0.5 truncate text-[10px] font-medium text-[var(--text-muted)]">{item.label}</p>
+          </button>
+        ))}
+      </section>
+
+      <section className="overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
+        {secondaryActions.map((item, index) => (
+          <button
+            key={item.title}
+            type="button"
+            onClick={item.onClick}
+            className={`flex min-h-15 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-hover)] ${index > 0 ? 'border-t border-[var(--border)]' : ''}`}
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--bg-app)]">
+              <item.icon size={17} className={item.tone} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-semibold text-[var(--earth)]">{item.title}</span>
+              <span className="mt-0.5 block truncate text-sm font-medium text-[var(--text-muted)]">{item.detail}</span>
+            </span>
+            <ChevronRight size={16} className="text-[var(--text-muted)]" />
+          </button>
+        ))}
+      </section>
+
+      {completedToday > 0 && (
+        <section className="rounded-[1.5rem] border border-green-100 bg-green-50 px-4 py-3">
+          <p className="text-sm font-semibold text-green-700">
+            {appLanguage === 'en' ? `You closed ${completedToday} idea${completedToday === 1 ? '' : 's'} today.` : `Hoy cerraste ${completedToday} idea${completedToday === 1 ? '' : 's'}.`}
+          </p>
         </section>
       )}
     </motion.div>
@@ -1089,6 +1259,7 @@ function InboxView({
   onSaveLater,
   onDelete,
   onSelectNote,
+  recentlyCreatedNoteId,
 }: {
   notes: SeedNote[];
   quickNote: string;
@@ -1099,6 +1270,7 @@ function InboxView({
   onSaveLater: (id: string) => void;
   onDelete: (id: string) => void;
   onSelectNote: (id: string) => void;
+  recentlyCreatedNoteId: string | null;
 }) {
   const inboxNotes = notes.filter(note => note.inbox);
 
@@ -1110,65 +1282,61 @@ function InboxView({
       exit={{ opacity: 0, y: 12 }}
       className="pb-24"
     >
-      <div className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-6 shadow-sm mb-6">
-        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Semillero</p>
-        <h3 className="text-3xl font-serif font-black text-[var(--earth)] mt-1">Semillas rápidas</h3>
-        <p className="text-sm text-[var(--text-muted)] mt-2">Cosas rápidas, pendientes simples e ideas sueltas. Márcalas como hechas o conviértelas en brote si necesitan pasos.</p>
-        <div className="mt-5">
-          <QuickCaptureBox
-            value={quickNote}
-            onChange={setQuickNote}
-            onSubmit={onQuickCapture}
-            placeholder="Escribe una idea rápida..."
-            buttonLabel="Plantar semilla"
-          />
-        </div>
+      <div className="mb-5">
+        <h3 className="text-3xl font-semibold tracking-tight text-[var(--earth)]">{t('seeds')}</h3>
+        <p className="mt-1 text-sm font-medium text-[var(--text-muted)]">{inboxNotes.length} {t('pendingSeeds')}</p>
       </div>
 
-      <div className="space-y-3">
+      <div className="overflow-hidden rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
         {inboxNotes.length === 0 ? (
-          <div className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-8 text-center">
-            <Inbox className="mx-auto text-[var(--sage)] opacity-40 mb-4" size={40} />
-            <p className="font-serif text-2xl text-[var(--earth)]">Semillero limpio</p>
-            <p className="text-sm text-[var(--text-muted)] mt-2">Cuando captures ideas rápidas, aparecerán aquí antes de pasar al jardín.</p>
+          <div className="px-6 py-10 text-center">
+            <Inbox className="mx-auto mb-4 text-[var(--sage)] opacity-45" size={32} />
+            <p className="text-lg font-semibold text-[var(--earth)]">{t('noPendingSeeds')}</p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">{t('plusReady')}</p>
           </div>
-        ) : inboxNotes.map(note => {
+        ) : inboxNotes.map((note, index) => {
           const hasUsefulDescription = note.content.trim().toLowerCase() !== note.title.trim().toLowerCase();
           const cardDescription = hasUsefulDescription
             ? note.content
-            : 'Lista para completar o convertir en proyecto.';
+            : t('readyToDecide');
 
           return (
-            <div key={note.id} className="group rounded-[1.4rem] bg-[var(--card-bg)] border border-[var(--border)] p-4 shadow-[0_10px_30px_rgba(47,62,51,0.06)] transition-all hover:-translate-y-0.5 hover:border-[var(--sage)]/25 hover:shadow-[0_16px_42px_rgba(47,62,51,0.10)]">
-              <button onClick={() => onSelectNote(note.id)} className="text-left w-full">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Semilla rápida</p>
-                    <p className="mt-1 truncate font-serif text-xl font-black text-[var(--earth)]">{note.title}</p>
-                  </div>
-                  <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--surface-soft)] text-[var(--sage)] ring-1 ring-[var(--border)]">
-                    <Sprout size={15} />
-                  </span>
-                </div>
-                <p className="text-sm text-[var(--text-muted)] mt-3 line-clamp-2 leading-relaxed">{cardDescription}</p>
+            <motion.div
+              key={note.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{
+                opacity: 1,
+                y: 0,
+                backgroundColor: recentlyCreatedNoteId === note.id ? 'rgba(79, 127, 95, 0.10)' : 'rgba(255, 255, 255, 0)',
+              }}
+              transition={{ duration: 0.28 }}
+              className={`group px-4 py-3.5 ${index > 0 ? 'border-t border-[var(--border)]' : ''}`}
+            >
+              <button onClick={() => onSelectNote(note.id)} className="flex w-full items-center gap-3 text-left">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)]">
+                  <Sprout size={15} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold text-[var(--earth)]">{note.title}</span>
+                  <span className="mt-0.5 block line-clamp-2 text-sm leading-relaxed text-[var(--text-muted)]">{cardDescription}</span>
+                </span>
+                <ChevronRight size={16} className="shrink-0 text-[var(--text-muted)]" />
               </button>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <button onClick={() => onComplete(note.id)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-3.5 text-xs font-black text-white shadow-sm shadow-[var(--sage)]/15 active:translate-y-px soft-interaction">
-                  <CheckCircle2 size={14} /> Hecho
+              <div className="mt-3 grid grid-cols-[1fr_1fr_auto_auto] items-center gap-2 pl-12">
+                <button onClick={() => onComplete(note.id)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold text-[var(--on-sage)] active:translate-y-px soft-interaction">
+                  <CheckCircle2 size={13} /> {t('done')}
                 </button>
-                <button onClick={() => onCultivate(note.id)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--surface-soft)] px-3.5 text-xs font-black text-[var(--sage)] ring-1 ring-[var(--border)] active:translate-y-px soft-interaction hover:bg-[var(--surface-strong)]">
-                  <Sprout size={14} /> Proyecto
+                <button onClick={() => onCultivate(note.id)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)] active:translate-y-px soft-interaction hover:bg-[var(--surface-hover)]">
+                  <Sprout size={13} /> {t('project')}
                 </button>
-                <div className="ml-auto flex items-center gap-1 text-[11px] font-black">
-                  <button onClick={() => onSaveLater(note.id)} className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--sage)]">
-                    <Archive size={13} /> Después
-                  </button>
-                  <button onClick={() => onDelete(note.id)} className="grid h-8 w-8 place-items-center rounded-full text-red-400 transition-colors hover:bg-red-50 hover:text-red-600" aria-label={`Soltar ${note.title}`}>
-                    <Trash2 size={13} />
-                  </button>
-                </div>
+                <button onClick={() => onSaveLater(note.id)} className="grid h-9 w-9 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)] hover:text-[var(--sage)]" aria-label={t('later')}>
+                  <Archive size={14} />
+                </button>
+                <button onClick={() => onDelete(note.id)} className="grid h-9 w-9 place-items-center rounded-full text-red-400 transition-colors hover:bg-red-50 hover:text-red-600" aria-label={`Soltar ${note.title}`}>
+                  <Trash2 size={14} />
+                </button>
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>
@@ -1206,39 +1374,40 @@ function ProjectsView({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }}
-      className="pb-24 space-y-5"
+      className="space-y-5 pb-24"
     >
-      <section className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-5 md:p-6 shadow-sm">
-        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Brotes</p>
-        <h3 className="mt-1 font-serif text-3xl md:text-4xl font-black text-[var(--earth)]">Proyectos que están creciendo</h3>
-        <p className="mt-2 max-w-2xl text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-          Aquí viven las ideas que necesitan pasos. No tienes que organizar demasiado: elige un paso y avanza.
+      <section>
+        <h3 className="text-3xl font-semibold tracking-tight text-[var(--earth)]">{t('sprouts')}</h3>
+        <p className="mt-1 text-sm font-medium text-[var(--text-muted)]">
+          {appLanguage === 'en'
+            ? `${sortedProjects.length} active project${sortedProjects.length === 1 ? '' : 's'}`
+            : `${sortedProjects.length} proyecto${sortedProjects.length === 1 ? '' : 's'} activo${sortedProjects.length === 1 ? '' : 's'}`}
         </p>
       </section>
 
       {recommended && (
-        <section className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-5 shadow-sm">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+        <section className="rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Siguiente brote recomendado</p>
-              <h4 className="mt-1 truncate font-serif text-2xl font-black text-[var(--earth)]">{recommended.title}</h4>
-              <p className="mt-2 text-sm font-semibold text-[var(--text-muted)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Siguiente</p>
+              <h4 className="mt-1 truncate text-xl font-semibold tracking-tight text-[var(--earth)]">{recommended.title}</h4>
+              <p className="mt-1 line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
                 {recommendedTask?.text || 'Agrega el siguiente paso para poder enfocarte.'}
               </p>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--surface-strong)]">
+              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--bg-app)]">
                 <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${getProgress(recommended)}%` }} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 md:w-56">
               <button
                 onClick={() => onFocusNote(recommended.id)}
-                className="rounded-2xl bg-[var(--sage)] px-4 py-3 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
+                className="rounded-full bg-[var(--sage)] px-4 py-3 text-sm font-semibold text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
               >
                 Enfocar
               </button>
               <button
                 onClick={() => recommendedTask ? onToggleTask(recommended.id, recommendedTask.id) : onSelectNote(recommended.id)}
-                className="rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-4 py-3 text-sm font-black text-[var(--sage)] active:translate-y-px soft-interaction"
+                className="rounded-full bg-[var(--bg-app)] px-4 py-3 text-sm font-semibold text-[var(--sage)] active:translate-y-px soft-interaction"
               >
                 {recommendedTask ? 'Hecho' : 'Editar'}
               </button>
@@ -1249,9 +1418,9 @@ function ProjectsView({
 
       <section className="space-y-3">
         {sortedProjects.length === 0 ? (
-          <div className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-8 text-center">
-            <Sprout className="mx-auto text-[var(--sage)] opacity-40 mb-4" size={44} />
-            <p className="font-serif text-2xl text-[var(--earth)]">Todavía no hay brotes</p>
+          <div className="rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)] p-8 text-center">
+            <Sprout className="mx-auto mb-4 text-[var(--sage)] opacity-40" size={38} />
+            <p className="text-xl font-semibold text-[var(--earth)]">Todavía no hay brotes</p>
             <p className="mt-2 text-sm text-[var(--text-muted)]">Convierte una semilla en proyecto cuando necesite pasos.</p>
           </div>
         ) : sortedProjects.map(note => {
@@ -1260,40 +1429,27 @@ function ProjectsView({
           const needsWater = wateringDue(note) && !note.paused;
 
           return (
-            <article key={note.id} className="rounded-[1.5rem] border border-[var(--border)] bg-[var(--card-bg)] p-4 shadow-[0_10px_30px_rgba(47,62,51,0.06)]">
-              <div className="flex items-start justify-between gap-4">
-                <button onClick={() => onSelectNote(note.id)} className="min-w-0 flex-1 text-left">
-                  <div className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${needsWater ? 'bg-sky-500' : 'bg-[var(--sage)]'}`} />
-                    <p className="truncate font-serif text-xl font-black text-[var(--earth)]">{note.title}</p>
-                  </div>
-                  <p className="mt-2 line-clamp-1 text-sm font-semibold text-[var(--text-muted)]">
-                    {nextTask?.text || 'Sin pasos pendientes'}
-                  </p>
-                </button>
-                <span className="rounded-full bg-[var(--surface-soft)] px-2.5 py-1 text-[10px] font-black text-[var(--sage)]">
-                  {progress}%
+            <article key={note.id} className="overflow-hidden rounded-[1.4rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
+              <button onClick={() => onSelectNote(note.id)} className="flex w-full items-start gap-3 px-4 py-3.5 text-left">
+                <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${needsWater ? 'bg-sky-500' : 'bg-[var(--sage)]'}`} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold text-[var(--earth)]">{note.title}</span>
+                  <span className="mt-0.5 block line-clamp-1 text-sm font-medium text-[var(--text-muted)]">{nextTask?.text || 'Sin pasos pendientes'}</span>
                 </span>
-              </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--surface-strong)]">
+                <span className="shrink-0 rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-xs font-semibold text-[var(--sage)]">{progress}%</span>
+              </button>
+              <div className="mx-4 h-1 overflow-hidden rounded-full bg-[var(--bg-app)]">
                 <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${progress}%` }} />
               </div>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <button onClick={() => onFocusNote(note.id)} className="rounded-full bg-[var(--sage)] px-3.5 py-2 text-xs font-black text-white soft-interaction">
-                  Enfocar
+              <div className="grid grid-cols-3 gap-2 px-4 py-3">
+                <button onClick={() => onFocusNote(note.id)} className="h-9 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold text-[var(--on-sage)] soft-interaction">
+                  Foco
                 </button>
-                {nextTask && (
-                  <button onClick={() => onToggleTask(note.id, nextTask.id)} className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3.5 py-2 text-xs font-black text-[var(--sage)] soft-interaction">
-                    Hecho
-                  </button>
-                )}
-                {needsWater && (
-                  <button onClick={() => onOpenWatering(note.id)} className="rounded-full border border-sky-100 bg-sky-50 px-3.5 py-2 text-xs font-black text-sky-700 soft-interaction">
-                    Regar
-                  </button>
-                )}
-                <button onClick={() => onSelectNote(note.id)} className="ml-auto rounded-full px-3 py-2 text-xs font-black text-[var(--text-muted)] hover:bg-[var(--surface-soft)]">
-                  Detalles
+                <button onClick={() => nextTask ? onToggleTask(note.id, nextTask.id) : onSelectNote(note.id)} className="h-9 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)] soft-interaction">
+                  {nextTask ? 'Hecho' : 'Editar'}
+                </button>
+                <button onClick={() => needsWater ? onOpenWatering(note.id) : onSelectNote(note.id)} className={`h-9 rounded-full px-3 text-xs font-semibold soft-interaction ${needsWater ? 'bg-sky-50 text-sky-700' : 'bg-[var(--bg-app)] text-[var(--text-muted)]'}`}>
+                  {needsWater ? 'Regar' : 'Ver'}
                 </button>
               </div>
             </article>
@@ -1344,7 +1500,7 @@ function HarvestView({ notes, onSelectNote }: { notes: SeedNote[]; onSelectNote:
               <span className="rounded-xl bg-[var(--bg-app)] px-2 py-2 text-[10px] font-black text-[var(--sage)]">{note.tasks.length} pasos</span>
               <span className="rounded-xl bg-[var(--bg-app)] px-2 py-2 text-[10px] font-black text-[var(--sage)]">{note.focusedMinutes || 0} min</span>
               <span className="rounded-xl bg-[var(--bg-app)] px-2 py-2 text-[10px] font-black text-[var(--sage)]">
-                {format(note.harvestedAt || note.createdAt, 'd MMM')}
+                {formatShortDate(note.harvestedAt || note.createdAt)}
               </span>
             </div>
           </button>
@@ -1504,77 +1660,121 @@ function FocusView({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className={`fixed inset-0 z-40 overflow-y-auto app-scrollbar ${isDay ? 'bg-[#dff5e8]' : 'bg-[#07110d]'} text-[var(--text-main)]`}
+      className={`fixed inset-0 z-40 overflow-y-auto app-scrollbar ${isDay ? 'bg-[#eef7ef]' : 'bg-[#07110d]'} text-[var(--text-main)]`}
     >
-      <div className="min-h-screen relative overflow-hidden p-3 sm:p-5">
-        <div className={`absolute inset-0 ${isDay ? 'bg-[radial-gradient(circle_at_78%_16%,rgba(255,229,143,0.75),transparent_14%),linear-gradient(180deg,#dff5e8_0%,#f8faf3_58%,#eef7e8_100%)]' : 'bg-[radial-gradient(circle_at_78%_16%,rgba(230,226,204,0.9),transparent_8%),linear-gradient(180deg,#07110d_0%,#0d1d17_55%,#14251b_100%)]'}`} />
+      <div className="relative min-h-screen overflow-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:p-5">
+        <div className={`absolute inset-0 ${isDay ? 'bg-[linear-gradient(180deg,#eef7ef_0%,#f8faf3_56%,#f4f6f1_100%)]' : 'bg-[linear-gradient(180deg,#07110d_0%,#0d1d17_55%,#14251b_100%)]'}`} />
         {!isDay && (
           <div className="absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_20%_20%,white_0_1px,transparent_1px),radial-gradient(circle_at_62%_34%,white_0_1px,transparent_1px)] bg-[length:120px_120px,180px_180px]" />
         )}
 
-        <div className="relative z-10 max-w-6xl mx-auto">
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <button onClick={() => { stopFocus(); onExit(); }} className="rounded-full bg-[var(--surface-strong)] border border-[var(--border)] px-4 py-2 text-xs font-black text-[var(--sage)] shadow-sm soft-interaction">
-              Salir de enfoque
+        <div className="relative z-10 mx-auto max-w-5xl">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <button onClick={() => { stopFocus(); onExit(); }} className="grid h-10 w-10 place-items-center rounded-full bg-[var(--surface-strong)]/86 text-[var(--sage)] shadow-sm backdrop-blur-xl soft-interaction" aria-label="Salir de enfoque">
+              <ChevronLeft size={20} />
             </button>
-            <div className="hidden sm:flex items-center gap-2 rounded-full bg-[var(--surface-strong)]/90 border border-[var(--border)] px-4 py-2 shadow-sm">
+            <div className="flex min-w-0 items-center gap-2 rounded-full bg-[var(--surface-strong)]/86 px-3 py-2 shadow-sm backdrop-blur-xl">
               <Target size={15} className="text-[var(--sage)]" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">{active ? 'Sesión activa' : 'Preparado'}</span>
+              <span className="truncate text-xs font-semibold text-[var(--text-muted)]">{active ? 'Enfoque activo' : 'Modo enfoque'}</span>
             </div>
+            <button onClick={() => { stopFocus(); onSelectNote(focusNote.id); onExit(); }} className="grid h-10 w-10 place-items-center rounded-full bg-[var(--surface-strong)]/86 text-[var(--text-muted)] shadow-sm backdrop-blur-xl soft-interaction" aria-label="Editar idea">
+              <Settings size={17} />
+            </button>
           </div>
 
-          <section className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start lg:items-stretch lg:h-[calc(100vh-6.5rem)]">
-            <div className="rounded-[2rem] bg-[var(--card-bg)] backdrop-blur-xl border border-[var(--border)] shadow-[0_24px_90px_rgb(47,62,51,0.14)] p-4 md:p-5 flex min-h-0 flex-col">
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
-                <div className="text-center xl:text-left">
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Modo enfoque</p>
-                  <h3 className="text-2xl md:text-4xl font-serif font-black text-[var(--earth)] mt-2 leading-tight">{focusNote.title}</h3>
-                  <p className="text-sm text-[var(--text-muted)] mt-3 leading-relaxed max-w-2xl mx-auto xl:mx-0 line-clamp-3">{focusNote.content}</p>
+          <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+            <div className="min-w-0">
+              <section className="relative overflow-hidden rounded-[2rem] border border-white/60 bg-[var(--surface-strong)]/78 p-5 text-center shadow-[0_24px_80px_rgba(47,62,51,0.14)] backdrop-blur-2xl sm:p-7">
+                <div className="mx-auto max-w-xl">
+                  <p className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">{focusNote.title}</p>
+                  <p className="mt-3 font-mono text-6xl font-semibold leading-none tracking-tight text-[var(--earth)] tabular-nums sm:text-7xl">{formattedTime}</p>
+                  <p className="mt-2 text-sm font-medium text-[var(--text-muted)]">{active ? 'Protegiendo tu atención' : finished ? 'Sesión terminada' : `Bloque de ${duration} min`}</p>
                 </div>
 
-                <div className="rounded-[1.75rem] bg-[var(--bg-app)]/80 border border-[var(--border)] p-4">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-[var(--sage)]">Preparar bloque</p>
-                  <label className="block mt-2">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Idea</span>
-                    <div className="mt-1">
-                      <AppSelect
-                      value={focusNote.id}
+                <div className={`relative mx-auto mt-5 flex h-56 max-w-sm items-end justify-center overflow-hidden rounded-[1.75rem] ${isDay ? 'bg-gradient-to-b from-sky-100 via-emerald-50 to-white' : 'bg-gradient-to-b from-[#14251b] via-[#1d3425] to-[#edf7ea]'}`}>
+                  <div className="absolute bottom-8 h-5 w-40 rounded-full bg-green-900/10 blur-md" />
+                  <motion.div
+                    animate={{ scale: 1 + progress / 220, y: active ? [0, -4, 0] : 0 }}
+                    transition={{ duration: 3.5, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
+                  >
+                    <PlantIllustration stage={focusNote.growthStage} progress={progress} isGrowth={focusNote.isGrowth} theme={theme} />
+                  </motion.div>
+                </div>
+
+                <div className="mt-5 flex items-center gap-2 overflow-x-auto app-scrollbar">
+                  {[5, 10, 30].map(minutes => (
+                    <button
+                      key={minutes}
+                      type="button"
                       disabled={active}
-                      onChange={onPickFocus}
-                      ariaLabel="Elegir idea para enfoque"
-                      options={focusOptions}
-                    />
-                    </div>
-                  </label>
-                  <div className="mt-3 rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Tiempo</p>
-                      <p className="text-sm font-black text-[var(--sage)]">{duration < 60 ? `${duration} min` : `${Math.floor(duration / 60)}h ${duration % 60}m`}</p>
-                    </div>
-                    <label className="mt-2 block">
-                      <span className="sr-only">Elegir tiempo de enfoque</span>
+                      onClick={() => setFocusDuration(minutes)}
+                      className={`h-9 shrink-0 rounded-full px-4 text-sm font-semibold transition-colors disabled:opacity-45 ${
+                        duration === minutes ? 'bg-[var(--sage)] text-[var(--on-sage)]' : 'bg-[var(--bg-app)] text-[var(--sage)]'
+                      }`}
+                    >
+                      {minutes} min
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={active}
+                    onClick={() => setFocusDuration(customDuration)}
+                    className={`h-9 shrink-0 rounded-full px-4 text-sm font-semibold transition-colors disabled:opacity-45 ${
+                      ![5, 10, 30].includes(duration) ? 'bg-[var(--sage)] text-[var(--on-sage)]' : 'bg-[var(--bg-app)] text-[var(--sage)]'
+                    }`}
+                  >
+                    {customDuration < 60 ? `${customDuration} min` : `${Math.floor(customDuration / 60)}h ${customDuration % 60}m`}
+                  </button>
+                </div>
+              </section>
+
+              <section className="mt-4 rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Paso actual</p>
+                    <h3 className="mt-1 text-xl font-semibold tracking-tight text-[var(--earth)]">{nextTask?.text || 'Define una acción pequeña'}</h3>
+                    <p className="mt-2 line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{focusNote.content || 'Mantén el foco en una sola acción.'}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-xs font-semibold text-[var(--sage)]">{progress}%</span>
+                </div>
+
+                <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--bg-app)]">
+                  <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${progress}%` }} />
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
+                  <button onClick={active ? stopFocus : () => startFocus(duration)} className="h-12 rounded-full bg-[var(--sage)] px-5 text-sm font-semibold text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction">
+                    {active ? 'Guardar sesión' : `Empezar ${duration} min`}
+                  </button>
+                  <button onClick={completeCurrentTask} disabled={!nextTask} className="h-12 rounded-full bg-[var(--bg-app)] px-5 text-sm font-semibold text-[var(--sage)] disabled:opacity-40 soft-interaction">
+                    Hecho
+                  </button>
+                  <button onClick={() => onOpenWatering(focusNote.id)} className="h-12 rounded-full bg-[var(--bg-app)] px-5 text-sm font-semibold text-[var(--text-muted)] soft-interaction">
+                    Bloqueo
+                  </button>
+                </div>
+              </section>
+
+              <section className="mt-4 overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
+                <details>
+                  <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-[var(--earth)]">
+                    Pasos y ajustes
+                    <ChevronRight size={16} className="text-[var(--text-muted)]" />
+                  </summary>
+                  <div className="border-t border-[var(--border)] px-4 py-3">
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-semibold text-[var(--text-muted)]">Idea</span>
                       <AppSelect
-                        value={[5, 10, 30].includes(duration) ? String(duration) : 'custom'}
+                        value={focusNote.id}
                         disabled={active}
-                        onChange={(value) => {
-                          if (value === 'custom') {
-                            setFocusDuration(customDuration);
-                            return;
-                          }
-                          setFocusDuration(Number(value));
-                        }}
-                        ariaLabel="Elegir tiempo de enfoque"
-                        options={[
-                          { value: '5', label: 'Riego corto', description: '5 min' },
-                          { value: '10', label: 'Cultivo ligero', description: '10 min' },
-                          { value: '30', label: 'Cultivo profundo', description: '30 min' },
-                          { value: 'custom', label: 'Tiempo personalizado', description: `${customHours}h ${customMinutes}m` },
-                        ]}
+                        onChange={onPickFocus}
+                        ariaLabel="Elegir idea para enfoque"
+                        options={focusOptions}
                       />
                     </label>
-                    <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div className="mt-3 grid grid-cols-2 gap-2">
                       <label className="block">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Horas</span>
+                        <span className="text-xs font-semibold text-[var(--text-muted)]">Horas</span>
                         <input
                           type="number"
                           min={0}
@@ -1583,12 +1783,12 @@ function FocusView({
                           value={customHours}
                           disabled={active}
                           onChange={(event) => setCustomFocusDuration(Number(event.target.value) || 0, customMinutes)}
-                          className="mt-1 w-full rounded-xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2 text-sm font-black text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)] disabled:opacity-60"
+                          className="mt-1 h-10 w-full rounded-xl bg-[var(--bg-app)] px-3 text-sm font-semibold text-[var(--earth)] outline-none disabled:opacity-60"
                           aria-label="Horas personalizadas"
                         />
                       </label>
                       <label className="block">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Min</span>
+                        <span className="text-xs font-semibold text-[var(--text-muted)]">Min</span>
                         <input
                           type="number"
                           min={0}
@@ -1597,113 +1797,72 @@ function FocusView({
                           value={customMinutes}
                           disabled={active}
                           onChange={(event) => setCustomFocusDuration(customHours, Number(event.target.value) || 0)}
-                          className="mt-1 w-full rounded-xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2 text-sm font-black text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)] disabled:opacity-60"
+                          className="mt-1 h-10 w-full rounded-xl bg-[var(--bg-app)] px-3 text-sm font-semibold text-[var(--earth)] outline-none disabled:opacity-60"
                           aria-label="Minutos personalizados"
                         />
                       </label>
                     </div>
-                  </div>
-                </div>
-              </div>
 
-              <div className="mt-4 rounded-[2rem] bg-[var(--bg-app)]/80 border border-[var(--border)] p-4 flex min-h-0 flex-1 flex-col">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)] mb-2">Pasos</p>
-                    <p className="font-serif text-xl font-black text-[var(--earth)]">Una acción clara</p>
-                  </div>
-                  <span className="text-xs font-black text-[var(--sage)]">{progress}%</span>
-                </div>
-
-                <div className="space-y-2 mt-4 min-h-0 flex-1 overflow-y-auto app-scrollbar pr-1">
-                  {focusNote.tasks.length === 0 ? (
-                    <p className="text-sm text-[var(--text-muted)]">Agrega un primer paso pequeño para empezar.</p>
-                  ) : focusNote.tasks.map(task => (
-                    <div key={task.id} className={`rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] p-2.5 flex items-start gap-3 transition-all ${task.completed ? 'opacity-55' : 'hover:border-[var(--sage)]/30 hover:shadow-sm'}`}>
-                      <button
-                        onClick={() => onToggleTask(focusNote.id, task.id)}
-                        className={`mt-1 h-6 w-6 rounded-lg border-2 flex items-center justify-center shrink-0 ${task.completed ? 'bg-[var(--sage)] border-[var(--sage)] text-white' : 'border-[var(--border)] text-transparent'}`}
-                        aria-label={task.completed ? 'Marcar paso pendiente' : 'Completar paso'}
-                      >
-                        <CheckCircle2 size={14} />
+                    <div className="mt-4 space-y-2">
+                      <p className="text-xs font-semibold text-[var(--text-muted)]">Lista</p>
+                      {focusNote.tasks.length === 0 ? (
+                        <p className="text-sm text-[var(--text-muted)]">Agrega un primer paso pequeño para empezar.</p>
+                      ) : focusNote.tasks.map(task => (
+                        <div key={task.id} className={`flex items-start gap-3 border-b border-[var(--border)] py-2.5 last:border-b-0 ${task.completed ? 'opacity-55' : ''}`}>
+                          <button
+                            onClick={() => onToggleTask(focusNote.id, task.id)}
+                            className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${task.completed ? 'border-[var(--sage)] bg-[var(--sage)] text-[var(--on-sage)]' : 'border-[var(--border)] text-transparent'}`}
+                            aria-label={task.completed ? 'Marcar paso pendiente' : 'Completar paso'}
+                          >
+                            <CheckCircle2 size={14} />
                       </button>
-                      <input
-                        value={task.text}
-                        onChange={(event) => onUpdateTask(focusNote.id, task.id, event.target.value)}
-                        className={`flex-1 bg-transparent outline-none text-sm ${task.completed ? 'line-through italic' : ''}`}
-                        placeholder="Describe este paso"
-                      />
+                          <input
+                            value={task.text}
+                            onChange={(event) => onUpdateTask(focusNote.id, task.id, event.target.value)}
+                            className={`flex-1 bg-transparent text-sm outline-none ${task.completed ? 'line-through' : ''}`}
+                            placeholder="Describe este paso"
+                          />
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
 
-                <div className="flex flex-col sm:flex-row gap-2 mt-3">
-                  <input
-                    value={step}
-                    onChange={(event) => setStep(event.target.value)}
-                    placeholder="Nuevo paso pequeño..."
-                    className="flex-1 rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-4 py-2.5 outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                  />
-                  <button
-                    onClick={() => { onAddTinyStep(focusNote.id, step); setStep(''); }}
-                    className="rounded-2xl bg-[var(--sage)] text-white px-5 py-2.5 font-black"
-                  >
-                    Agregar
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-center">
-                <button onClick={active ? stopFocus : () => startFocus(duration)} className="rounded-2xl bg-[var(--sage)] text-white py-3.5 px-5 font-black shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction">
-                  {active ? 'Guardar cultivo' : `Cultivar ${duration} min`}
-                </button>
-                <button onClick={() => onOpenWatering(focusNote.id)} className="rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-5 py-3.5 text-xs font-black text-[var(--sage)] hover:border-[var(--sage)]/40 soft-interaction">
-                  Me bloqueé
-                </button>
-                <button onClick={() => { stopFocus(); onSelectNote(focusNote.id); onExit(); }} className="rounded-2xl bg-transparent border border-transparent px-4 py-3.5 text-xs font-black text-[var(--text-muted)] hover:text-[var(--sage)] soft-interaction">
-                  Editar idea
-                </button>
-              </div>
+                    <div className="mt-3 flex gap-2">
+                      <input
+                        value={step}
+                        onChange={(event) => setStep(event.target.value)}
+                        placeholder="Nuevo paso pequeño"
+                        className="h-10 min-w-0 flex-1 rounded-xl bg-[var(--bg-app)] px-3 text-sm outline-none"
+                      />
+                      <button
+                        onClick={() => { onAddTinyStep(focusNote.id, step); setStep(''); }}
+                        className="h-10 rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)]"
+                      >
+                        Añadir
+                      </button>
+                    </div>
+                  </div>
+                </details>
+              </section>
             </div>
 
-            <aside className="rounded-[2rem] bg-[var(--surface-strong)] backdrop-blur-xl border border-[var(--border)] p-4 shadow-[0_24px_90px_rgb(47,62,51,0.12)] lg:sticky lg:top-5 lg:h-full flex flex-col self-start lg:self-stretch">
-              <div className="text-center rounded-[2rem] bg-[var(--bg-app)]/70 border border-[var(--border)] px-4 py-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Tiempo restante</p>
-                <p className="font-mono text-5xl md:text-6xl font-black text-[var(--earth)] mt-1 tabular-nums">{formattedTime}</p>
-                <p className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] mt-2">{active ? 'Protegiendo tu atención' : finished ? 'Sesión terminada' : 'Listo para empezar'}</p>
-              </div>
-
-              <div className={`mt-4 min-h-40 flex-1 rounded-[2rem] border border-[var(--border)] flex items-center justify-center relative overflow-hidden ${isDay ? 'bg-gradient-to-b from-sky-100 via-emerald-50 to-white' : 'bg-gradient-to-b from-[#14251b] via-[#1d3425] to-[#edf7ea]'}`}>
-                <div className="seed-card-sheen" />
-                <div className="absolute bottom-8 w-40 h-5 rounded-full bg-green-900/10 blur-md" />
-                <motion.div
-                  animate={{ scale: 1 + progress / 220, y: active ? [0, -4, 0] : 0 }}
-                  transition={{ duration: 3.5, repeat: active ? Infinity : 0, ease: "easeInOut" }}
-                >
-                  <PlantIllustration stage={focusNote.growthStage} progress={progress} isGrowth={focusNote.isGrowth} theme={theme} />
-                </motion.div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-2 text-center">
-                <div className="rounded-2xl bg-[var(--bg-app)]/70 border border-[var(--border)] p-3">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Pasos</p>
-                  <p className="text-2xl font-serif font-black text-[var(--earth)]">{focusNote.tasks.filter(task => task.completed).length}/{focusNote.tasks.length}</p>
+            <aside className="rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-sm lg:sticky lg:top-5">
+              <div className="grid grid-cols-2 gap-2 text-center">
+                <div className="rounded-2xl bg-[var(--bg-app)] p-3">
+                  <p className="text-xs font-medium text-[var(--text-muted)]">Pasos</p>
+                  <p className="mt-1 text-xl font-semibold text-[var(--earth)]">{completedSteps}/{focusNote.tasks.length}</p>
                 </div>
-                <div className="rounded-2xl bg-[var(--bg-app)]/70 border border-[var(--border)] p-3">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Enfoque</p>
-                  <p className="text-2xl font-serif font-black text-[var(--earth)]">{focusNote.focusedMinutes || 0}m</p>
+                <div className="rounded-2xl bg-[var(--bg-app)] p-3">
+                  <p className="text-xs font-medium text-[var(--text-muted)]">Enfoque</p>
+                  <p className="mt-1 text-xl font-semibold text-[var(--earth)]">{focusNote.focusedMinutes || 0}m</p>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-[1.75rem] bg-[var(--bg-app)]/70 border border-[var(--border)] p-3">
-                <p className="text-[9px] font-black uppercase tracking-widest text-[var(--sage)]">Consejos del jardinero</p>
-                <div className="mt-3 space-y-2">
-                  {focusTips.map(tip => (
-                    <p key={tip} className="rounded-2xl bg-[var(--surface-strong)] px-3 py-2 text-[11px] font-semibold leading-relaxed text-[var(--text-muted)]">
-                      {tip}
-                    </p>
-                  ))}
-                </div>
+              <div className="mt-4 space-y-2">
+                {focusTips.slice(0, 2).map(tip => (
+                  <p key={tip} className="rounded-2xl bg-[var(--bg-app)] px-3 py-2 text-xs font-medium leading-relaxed text-[var(--text-muted)]">
+                    {tip}
+                  </p>
+                ))}
               </div>
             </aside>
           </section>
@@ -2240,6 +2399,115 @@ function LandingPage({
     ];
   }, []);
 
+  const welcomeHighlights = [
+    { label: 'Planta', value: 'Ideas' },
+    { label: 'Cuida', value: 'Proyectos' },
+    { label: 'Vuelve', value: 'Foco' },
+  ];
+
+  return (
+    <main className="min-h-screen overflow-y-auto bg-[#f5f6f2] text-[#111813]">
+      <section className="relative min-h-screen overflow-hidden px-5 py-[calc(env(safe-area-inset-top)+1.25rem)] sm:px-8 lg:px-12">
+        <HeroGardenScene />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(245,246,242,0.46),rgba(245,246,242,0.94)_62%,#f5f6f2)]" />
+
+        <nav className="relative z-10 mx-auto flex max-w-6xl items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="/icon-192.png" alt="Seed" className="h-12 w-12 rounded-[1.15rem] shadow-sm" />
+            <div>
+              <p className="text-xl font-semibold leading-none tracking-tight text-[#111813]">Seed</p>
+              <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.22em] text-[#71836b]">Grow What Matters</p>
+            </div>
+          </div>
+          <button onClick={onShowLogin} className="rounded-full border border-white/70 bg-white/70 px-4 py-2 text-sm font-semibold text-[#1c241f] shadow-sm backdrop-blur-xl transition-colors hover:bg-white">
+            Iniciar sesión
+          </button>
+        </nav>
+
+        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-6rem)] max-w-6xl grid-cols-1 gap-8 py-10 lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-center">
+          <section className="mx-auto max-w-3xl text-center lg:mx-0 lg:text-left">
+            <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#6e835d]">
+              Bienvenido a Seed
+            </motion.p>
+            <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }} className="mt-5 text-5xl font-semibold leading-[0.96] tracking-tight text-[#101612] sm:text-7xl lg:text-8xl">
+              Haz crecer lo que importa.
+            </motion.h1>
+            <motion.p initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="mx-auto mt-6 max-w-2xl text-lg font-medium leading-relaxed text-[#536159] sm:text-xl lg:mx-0">
+              Guarda ideas, conviértelas en pasos pequeños y vuelve a ellas con calma. Un jardín privado para proyectos, hábitos y pensamientos que no quieres perder.
+            </motion.p>
+
+            <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }} className="mt-9 flex flex-col gap-3 sm:mx-auto sm:max-w-md lg:mx-0">
+              <button onClick={onShowRegister} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-[#111813] px-6 text-base font-semibold text-white shadow-[0_18px_50px_rgba(17,24,19,0.22)] transition-transform active:scale-[0.99]">
+                Crear cuenta
+                <ArrowRight size={18} />
+              </button>
+              <button onClick={onShowLogin} className="flex h-14 items-center justify-center rounded-2xl border border-white/80 bg-white/78 px-6 text-base font-semibold text-[#111813] shadow-sm backdrop-blur-xl transition-colors hover:bg-white">
+                Ya tengo cuenta
+              </button>
+              <button onClick={onEnter} className="h-12 text-sm font-semibold text-[#647160] transition-colors hover:text-[#111813]">
+                Explorar sin cuenta
+              </button>
+            </motion.div>
+
+            <div className="mx-auto mt-8 grid max-w-md grid-cols-3 gap-2 lg:mx-0">
+              {welcomeHighlights.map((item) => (
+                <div key={item.label} className="rounded-2xl border border-white/70 bg-white/58 px-3 py-3 text-center shadow-sm backdrop-blur-xl">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#7c8876]">{item.label}</p>
+                  <p className="mt-1 text-sm font-semibold text-[#172019]">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <aside className="mx-auto w-full max-w-[25rem] rounded-[2.2rem] border border-white/70 bg-white/72 p-4 shadow-[0_30px_90px_rgba(31,45,35,0.16)] backdrop-blur-2xl">
+            <div className="rounded-[1.7rem] bg-[#f7faf4] p-4 shadow-inner shadow-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#75856f]">Hoy</p>
+                  <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[#111813]">Tu jardín</h2>
+                </div>
+                <span className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-[#6f7d4f] shadow-sm">
+                  <Leaf size={22} />
+                </span>
+              </div>
+
+              <div className="mt-5 overflow-hidden rounded-[1.45rem] bg-[#dfead8] p-5">
+                <div className="relative mx-auto h-48 w-48 rounded-full bg-[#88af68] shadow-[inset_-22px_-28px_48px_rgba(33,61,38,0.22),0_24px_60px_rgba(75,112,70,0.22)]">
+                  <div className="absolute left-8 top-9 h-9 w-16 rotate-[-18deg] rounded-full bg-[#b8d69c]" />
+                  <div className="absolute bottom-10 right-8 h-12 w-20 rotate-[18deg] rounded-full bg-[#5f935f]" />
+                  <div className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2">
+                    <div className="absolute bottom-0 left-1/2 h-7 w-8 -translate-x-1/2 rounded-b-2xl rounded-t-lg bg-[#b8794d]" />
+                    <div className="absolute bottom-6 left-1/2 h-10 w-1.5 -translate-x-1/2 rounded-full bg-[#315735]" />
+                    <div className="absolute bottom-12 left-1 h-6 w-10 rounded-full bg-[#83b86b]" />
+                    <div className="absolute bottom-12 right-1 h-6 w-10 rounded-full bg-[#c0df92]" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {[
+                  { title: 'Idea lista para cuidar', detail: 'Elegir el primer paso' },
+                  { title: 'Riego pendiente', detail: 'Revisar en 20 segundos' },
+                  { title: 'Foco sugerido', detail: '25 minutos sin ruido' },
+                ].map((item) => (
+                  <div key={item.title} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm">
+                    <span className="grid h-9 w-9 place-items-center rounded-full bg-[#edf4e8] text-[#6e835d]">
+                      <CheckCircle2 size={17} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-[#172019]">{item.title}</span>
+                      <span className="mt-0.5 block truncate text-xs font-medium text-[#73806f]">{item.detail}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+  );
+
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#f8faf7] text-[#162019]">
       <section className="relative min-h-[88vh] overflow-hidden border-b border-[#e4ebe1] px-5 sm:px-8 lg:px-12">
@@ -2506,8 +2774,8 @@ function AuthEntryPage({
       ];
 
   return (
-    <main className="min-h-screen overflow-y-auto bg-[#f8faf7] text-[#162019]">
-      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-5 py-5 sm:px-8 lg:px-12">
+    <main className="min-h-dvh overflow-y-auto bg-[#f8faf7] text-[#162019]">
+      <div className="mx-auto flex min-h-dvh max-w-7xl flex-col px-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-[calc(env(safe-area-inset-top)+1rem)] sm:px-8 lg:px-12">
         <header className="flex items-center justify-between gap-4">
           <button onClick={onBack} className="inline-flex items-center gap-3 rounded-full border border-[#dfe8dd] bg-white px-4 py-2 text-sm font-black text-[#1f2d23] shadow-sm transition-colors hover:bg-[#f1f6ef]">
             <ChevronLeft size={17} />
@@ -2603,36 +2871,43 @@ function AuthEntryPage({
               {isRegister && (
                 <label className="block">
                   <span className="text-xs font-black uppercase text-[#536f45]">Nombre</span>
-                  <input
-                    value={accountName}
-                    onChange={(event) => setAccountName(event.target.value)}
-                    placeholder="Tu nombre"
-                    className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
-                  />
+	                  <input
+	                    value={accountName}
+	                    onChange={(event) => setAccountName(event.target.value)}
+	                    placeholder="Tu nombre"
+	                    autoComplete="name"
+	                    enterKeyHint="next"
+	                    className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
+	                  />
                 </label>
               )}
               <label className="block">
                 <span className="text-xs font-black uppercase text-[#536f45]">Correo</span>
                 <input
-                  type="email"
-                  value={authEmail}
-                  onChange={(event) => setAuthEmail(event.target.value)}
-                  placeholder="tu@email.com"
-                  className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
-                />
+	                  type="email"
+	                  value={authEmail}
+	                  onChange={(event) => setAuthEmail(event.target.value)}
+	                  placeholder="tu@email.com"
+	                  autoComplete="email"
+	                  inputMode="email"
+	                  enterKeyHint="next"
+	                  className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
+	                />
               </label>
               <label className="block">
                 <span className="text-xs font-black uppercase text-[#536f45]">Contraseña</span>
                 <input
-                  type="password"
-                  value={authPassword}
-                  onChange={(event) => setAuthPassword(event.target.value)}
+	                  type="password"
+	                  value={authPassword}
+	                  onChange={(event) => setAuthPassword(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') submit();
-                  }}
-                  placeholder="Mayúscula, número y mínimo 6 caracteres"
-                  className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
-                />
+	                  }}
+	                  placeholder="Mayúscula, número y mínimo 6 caracteres"
+	                  autoComplete={isRegister ? 'new-password' : 'current-password'}
+	                  enterKeyHint={isRegister ? 'next' : 'done'}
+	                  className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
+	                />
               </label>
               {isRegister && (
                 <>
@@ -2640,14 +2915,16 @@ function AuthEntryPage({
                     <span className="text-xs font-black uppercase text-[#536f45]">Confirmar contraseña</span>
                     <input
                       type="password"
-                      value={authConfirmPassword}
-                      onChange={(event) => setAuthConfirmPassword(event.target.value)}
+	                      value={authConfirmPassword}
+	                      onChange={(event) => setAuthConfirmPassword(event.target.value)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') submit();
-                      }}
-                      placeholder="Repite tu contraseña"
-                      className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
-                    />
+	                      }}
+	                      placeholder="Repite tu contraseña"
+	                      autoComplete="new-password"
+	                      enterKeyHint="done"
+	                      className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
+	                    />
                   </label>
                   <div className="rounded-2xl bg-[#f8faf7] px-4 py-3">
                     <p className="text-[10px] font-black uppercase text-[#7a8f63]">Contraseña segura</p>
@@ -2667,7 +2944,7 @@ function AuthEntryPage({
               <p className="mt-3 text-xs font-semibold leading-relaxed text-[#667466]">{authStatus || disabledReason}</p>
             )}
 
-            <div className="mt-6 rounded-2xl bg-[#f8faf7] p-4">
+            <div className="mt-6 hidden rounded-2xl bg-[#f8faf7] p-4 sm:block">
               <p className="text-xs font-black uppercase text-[#7a8f63]">{isRegister ? 'Qué obtienes' : 'Al entrar'}</p>
               <p className="mt-2 text-sm font-semibold leading-relaxed text-[#536159]">
                 {isRegister ? 'Un lugar simple para ideas de trabajo, estudio o vida personal, con jardines separados y recordatorios amables.' : 'Tus jardines, ideas pendientes y próximos pasos listos para seguir avanzando sin empezar de cero.'}
@@ -2692,7 +2969,7 @@ function AuthEntryPage({
 export default function App() {
   const [notes, setNotes] = useState<SeedNote[]>([]);
   const [notesLoaded, setNotesLoaded] = useState(false);
-  const [showLanding, setShowLanding] = useState(() => localStorage.getItem('seed-landing-seen') !== 'true');
+  const [showLanding, setShowLanding] = useState(() => localStorage.getItem('seed-welcome-v2-seen') !== 'true');
   const [landingRoute, setLandingRoute] = useState<'landing' | 'login' | 'register'>('landing');
   const importInputRef = useRef<HTMLInputElement>(null);
   const [planets, setPlanets] = useState<Planet[]>(() => {
@@ -2721,11 +2998,14 @@ export default function App() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [isAdding, setIsAdding] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [recentlyCreatedNoteId, setRecentlyCreatedNoteId] = useState<string | null>(null);
   const [newNote, setNewNote] = useState<{ title: string; content: string; dueDate: string; seedType: NonNullable<SeedNote['seedType']> }>({ title: '', content: '', dueDate: '', seedType: 'idea' });
   const [quickNote, setQuickNote] = useState('');
   const [isLinking, setIsLinking] = useState(false);
   const [wateringNoteId, setWateringNoteId] = useState<string | null>(null);
   const [wateringNote, setWateringNote] = useState('');
+  const [sproutPromptNoteId, setSproutPromptNoteId] = useState<string | null>(null);
+  const [sproutFirstStep, setSproutFirstStep] = useState('');
   const [focusNoteId, setFocusNoteId] = useState<string | null>(null);
   const [celebration, setCelebration] = useState<string | null>(null);
   const [flowerReward, setFlowerReward] = useState<{ id: string; title: string } | null>(null);
@@ -2738,11 +3018,12 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState('');
   const [authConfirmPassword, setAuthConfirmPassword] = useState('');
   const [authStatus, setAuthStatus] = useState('');
-  const [syncStatus, setSyncStatus] = useState('');
-  const [isSyncing, setIsSyncing] = useState(false);
-  const applyingRemoteSyncRef = useRef(false);
-  const remoteSyncReadyRef = useRef(false);
-  const autoSyncTimerRef = useRef<number | null>(null);
+	  const [syncStatus, setSyncStatus] = useState('');
+	  const [isSyncing, setIsSyncing] = useState(false);
+	  const applyingRemoteSyncRef = useRef(false);
+	  const remoteSyncReadyRef = useRef(false);
+	  const autoSyncTimerRef = useRef<number | null>(null);
+	  const mobileGardenFullscreenOpenedRef = useRef(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('seed-notifications') === 'true');
   const [defaultWateringInterval, setDefaultWateringInterval] = useState(() => Number(localStorage.getItem('seed-default-watering') || 1));
   const [reminderHour, setReminderHour] = useState(() => Number(localStorage.getItem('seed-reminder-hour') || 9));
@@ -2863,13 +3144,29 @@ export default function App() {
     }
   }, [activePlanetId, planets]);
 
-  useEffect(() => {
-    localStorage.setItem('seed-active-planet', activePlanetId);
-  }, [activePlanetId]);
+	  useEffect(() => {
+	    localStorage.setItem('seed-active-planet', activePlanetId);
+	  }, [activePlanetId]);
 
-  useEffect(() => {
-    localStorage.setItem('seed-theme', theme);
-    document.documentElement.setAttribute('data-theme', theme);
+	  useEffect(() => {
+	    if (view !== '3D') {
+	      mobileGardenFullscreenOpenedRef.current = false;
+	      setShowGardenFullscreen(false);
+	      return;
+	    }
+
+	    if (mobileGardenFullscreenOpenedRef.current || typeof window === 'undefined') return;
+	    const isMobileViewport = window.matchMedia('(max-width: 767px)').matches;
+	    if (!isMobileViewport) return;
+
+	    mobileGardenFullscreenOpenedRef.current = true;
+	    const timer = window.setTimeout(() => setShowGardenFullscreen(true), 180);
+	    return () => window.clearTimeout(timer);
+	  }, [view]);
+	
+	  useEffect(() => {
+	    localStorage.setItem('seed-theme', theme);
+	    document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
   useEffect(() => {
@@ -3087,32 +3384,37 @@ export default function App() {
     return () => clearInterval(interval);
   }, [notes]);
 
-  const addNote = () => {
-    if (!newNote.content.trim()) return;
-    
-    const note: SeedNote = {
-      id: crypto.randomUUID(),
-      title: newNote.title || 'Nueva Semilla',
-      content: newNote.content,
-      createdAt: Date.now(),
-      tags: [],
-      isGrowth: false,
+	  const addNote = () => {
+	    const title = newNote.title.trim();
+	    const content = newNote.content.trim();
+	    if (!title && !content) return;
+	    const fallbackContent = content || title;
+	    
+	    const note: SeedNote = {
+	      id: crypto.randomUUID(),
+	      title: title || (fallbackContent.length > 42 ? `${fallbackContent.slice(0, 42)}...` : fallbackContent) || 'Nueva Semilla',
+	      content: fallbackContent,
+	      createdAt: Date.now(),
+	      tags: [],
+	      isGrowth: false,
       tasks: [],
       growthStage: 'seed',
-      dueDate: newNote.dueDate ? new Date(newNote.dueDate).getTime() : undefined,
-      lastWateredAt: Date.now(),
-      wateringIntervalDays: defaultWateringInterval,
-      inbox: false,
-      seedType: newNote.seedType,
-      planetId: activePlanetId,
-    };
+	      dueDate: newNote.dueDate ? new Date(newNote.dueDate).getTime() : undefined,
+	      lastWateredAt: Date.now(),
+	      wateringIntervalDays: defaultWateringInterval,
+	      inbox: true,
+	      seedType: newNote.seedType,
+	      planetId: activePlanetId,
+	    };
     
-    setNotes([touchNote(note), ...notes]);
-    setNewNote({ title: '', content: '', dueDate: '', seedType: 'idea' });
-    setIsAdding(false);
-    setSelectedNoteId(note.id);
-    setView('garden');
-  };
+	    setNotes([touchNote(note), ...notes]);
+	    setNewNote({ title: '', content: '', dueDate: '', seedType: 'idea' });
+	    setIsAdding(false);
+	    setSelectedNoteId(null);
+	    setRecentlyCreatedNoteId(note.id);
+	    window.setTimeout(() => setRecentlyCreatedNoteId(current => current === note.id ? null : current), 1800);
+	    setView('inbox');
+	  };
 
   const addQuickNote = () => {
     const content = quickNote.trim();
@@ -3172,10 +3474,11 @@ export default function App() {
     window.setTimeout(() => setRecentlyWateredId(current => current === id ? null : current), 5000);
   };
 
-  const growNote = (id: string) => {
+  const growNote = (id: string, firstStep?: string) => {
     setNotes(notes.map(n => {
       if (n.id === id && !n.isGrowth) {
         const seedType = SEED_TYPES.find(type => type.id === (n.seedType || 'idea')) || SEED_TYPES[0];
+        const taskText = firstStep?.trim() || seedType.task;
         return touchNote({ 
           ...n, 
           isGrowth: true, 
@@ -3183,11 +3486,33 @@ export default function App() {
           paused: false,
           inbox: false,
           lastWateredAt: Date.now(),
-          tasks: [{ id: crypto.randomUUID(), text: seedType.task, completed: false }]
+          tasks: [{ id: crypto.randomUUID(), text: taskText, completed: false }]
         });
       }
       return n;
     }));
+  };
+
+  const openSproutPrompt = (id: string) => {
+    setSproutPromptNoteId(id);
+    setSproutFirstStep('');
+  };
+
+  const confirmSproutPrompt = () => {
+    if (!sproutPromptNoteId) return;
+    const note = notes.find(n => n.id === sproutPromptNoteId);
+    const firstStep = sproutFirstStep || 'Dar el primer paso de 5 minutos';
+    if (note?.isGrowth) {
+      addTinyStep(sproutPromptNoteId, firstStep);
+    } else {
+      growNote(sproutPromptNoteId, firstStep);
+      setSelectedNoteId(null);
+      setFilterStage('all');
+      setSearch('');
+      setView('projects');
+    }
+    setSproutPromptNoteId(null);
+    setSproutFirstStep('');
   };
 
   const waterNote = (id: string, note = 'Riego rápido: sigue viva') => {
@@ -3198,28 +3523,31 @@ export default function App() {
     setWateringNote('');
   };
 
+  const harvestFromWatering = (id: string) => {
+    const completedNote = notes.find(n => n.id === id);
+    setNotes(notes.map(n => n.id === id ? touchNote({
+      ...n,
+      inbox: false,
+      paused: false,
+      growthStage: 'bloom',
+      harvestedAt: n.harvestedAt || Date.now(),
+      lastWateredAt: Date.now(),
+      reflection: n.reflection || wateringNote.trim() || 'Cosechada desde riego.',
+    }) : n));
+    recordWateringRitual();
+    markRecentlyWatered(id);
+    setWateringNoteId(null);
+    setWateringNote('');
+    if (completedNote) setFlowerReward({ id, title: completedNote.title });
+  };
+
   const openWatering = (id: string) => {
     setWateringNoteId(id);
     setWateringNote('');
   };
 
   const cultivateInboxNote = (id: string) => {
-    setNotes(notes.map(n => {
-      if (n.id !== id) return n;
-      const cultivated = cultivateNote(n);
-      return touchNote({
-        ...cultivated,
-        isGrowth: true,
-        growthStage: cultivated.growthStage === 'seed' ? 'sprout' : cultivated.growthStage,
-        tasks: cultivated.tasks.length > 0
-          ? cultivated.tasks
-          : [{ id: crypto.randomUUID(), text: 'Dar el primer paso de 5 minutos', completed: false }],
-      });
-    }));
-    setSelectedNoteId(id);
-    setFilterStage('all');
-    setSearch('');
-    setView('projects');
+    openSproutPrompt(id);
   };
 
   const completeQuickSeed = (id: string) => {
@@ -3434,9 +3762,12 @@ export default function App() {
     const completed = note.tasks.filter(t => t.completed).length;
     return Math.round((completed / note.tasks.length) * 100);
   };
-  const selectedProgress = selectedNote ? getProgress(selectedNote) : 0;
-  const selectedCompletedSteps = selectedNote?.tasks.filter(task => task.completed).length || 0;
-  const selectedReviewDays = selectedNote ? daysSince(selectedNote.lastWateredAt || selectedNote.createdAt) : 0;
+	  const selectedProgress = selectedNote ? getProgress(selectedNote) : 0;
+	  const selectedCompletedSteps = selectedNote?.tasks.filter(task => task.completed).length || 0;
+	  const selectedReviewDays = selectedNote ? daysSince(selectedNote.lastWateredAt || selectedNote.createdAt) : 0;
+	  const selectedGuidance = selectedNote ? getIdeaGuidance(selectedNote) : null;
+	  const selectedSeedType = selectedNote ? (SEED_TYPES.find(type => type.id === (selectedNote.seedType || 'idea')) || SEED_TYPES[0]) : SEED_TYPES[0];
+	  const selectedNextTask = selectedNote?.tasks.find(task => !task.completed);
 
   const exportGarden = () => {
     const markdown = planetNotes.map(note => {
@@ -3494,13 +3825,12 @@ export default function App() {
     setOnboardingStep(0);
   };
 
-  const startPlanting = () => {
-    setSelectedNoteId(null);
-    setFilterStage('all');
-    setSearch('');
-    setView('garden');
-    setIsAdding(true);
-  };
+	  const startPlanting = () => {
+	    setSelectedNoteId(null);
+	    setFilterStage('all');
+	    setSearch('');
+	    setIsAdding(true);
+	  };
 
   const showWateringQueue = () => {
     setSelectedNoteId(null);
@@ -3657,6 +3987,7 @@ export default function App() {
 
   const enterApp = () => {
     localStorage.setItem('seed-landing-seen', 'true');
+    localStorage.setItem('seed-welcome-v2-seen', 'true');
     setShowLanding(false);
     setLandingRoute('landing');
   };
@@ -3723,15 +4054,33 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-transparent text-[var(--text-main)] font-sans">
-      <button
-        type="button"
-        onClick={() => setShowMobileMenu(true)}
-        className={`fixed left-4 top-[calc(env(safe-area-inset-top)+1rem)] z-40 h-11 w-11 place-items-center rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--sage)] shadow-2xl shadow-black/10 backdrop-blur-xl md:hidden ${view === 'focus' || showGardenFullscreen ? 'hidden' : 'grid'}`}
-        aria-label="Abrir menú"
-      >
-        <Menu size={19} />
-      </button>
+    <div className="safe-app-shell flex h-screen flex-col overflow-hidden bg-transparent font-sans text-[var(--text-main)] md:flex-row">
+      <div className={`fixed left-4 right-4 top-[var(--safe-top-control)] z-40 h-12 items-center justify-between rounded-[1.25rem] border border-[var(--border)] bg-[var(--surface-strong)]/88 px-2 shadow-xl shadow-black/10 backdrop-blur-2xl md:hidden ${view === 'focus' || showGardenFullscreen || isAdding ? 'hidden' : 'flex'}`}>
+        <button
+          type="button"
+          onClick={() => setShowMobileMenu(true)}
+          className="grid h-9 w-9 place-items-center rounded-full text-[var(--sage)] transition-colors active:bg-[var(--bg-app)]"
+          aria-label="Abrir menú"
+        >
+          <Menu size={19} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowMobileMenu(true)}
+          className="min-w-0 flex-1 px-2 text-center"
+        >
+          <span className="block truncate text-[15px] font-semibold text-[var(--earth)]">{activePlanet.name}</span>
+          <span className="block truncate text-[11px] font-medium text-[var(--text-muted)]">{planetNotes.length} ideas</span>
+        </button>
+	        <button
+	          type="button"
+	          onClick={() => setShowSettings(true)}
+	          className="grid h-9 w-9 place-items-center rounded-full text-[var(--sage)] transition-colors active:bg-[var(--bg-app)]"
+	          aria-label={t('settings')}
+	        >
+	          <Settings size={18} strokeWidth={2.3} />
+	        </button>
+      </div>
       <AnimatePresence>
         {showMobileMenu && (
           <motion.button
@@ -3741,26 +4090,26 @@ export default function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setShowMobileMenu(false)}
-            className="fixed inset-0 z-40 bg-black/35 backdrop-blur-sm md:hidden"
+	            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-md md:hidden"
           />
         )}
       </AnimatePresence>
       {/* Sidebar Navigation */}
-      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[86vw] max-w-[21rem] shrink-0 flex-col overflow-y-auto border-r border-[var(--border)] bg-[var(--sidebar-bg)]/95 p-5 shadow-2xl shadow-black/20 backdrop-blur-xl transition-transform duration-300 app-scrollbar md:static md:z-20 md:w-72 md:max-w-none md:translate-x-0 md:bg-[var(--sidebar-bg)]/80 md:p-8 md:shadow-[-10px_0_30px_rgba(0,0,0,0.02)_inset] ${showMobileMenu ? 'translate-x-0' : '-translate-x-full'}`}>
+	      <aside className={`fixed bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-3 right-3 top-auto z-50 flex max-h-[calc(100vh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] shrink-0 flex-col overflow-y-auto rounded-[2rem] border border-white/60 bg-[var(--sidebar-bg)]/94 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-2xl transition-all duration-300 app-scrollbar md:static md:z-20 md:h-screen md:max-h-none md:w-72 md:max-w-none md:translate-y-0 md:scale-100 md:rounded-none md:border-r md:border-[var(--border)] md:bg-[var(--sidebar-bg)] md:p-6 md:opacity-100 md:shadow-none ${showMobileMenu ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-8 scale-[0.96] opacity-0 md:pointer-events-auto'}`}>
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--border)] md:hidden" />
         <motion.div 
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-4 mb-6 group cursor-pointer"
+          className="mb-6 flex items-center gap-3 group cursor-pointer"
         >
           <div className="relative">
-            <div className="absolute inset-0 bg-[var(--seed-primary)] rounded-2xl blur-lg opacity-20 group-hover:opacity-40 transition-opacity" />
-            <div className="relative w-12 h-12 bg-gradient-to-br from-[var(--seed-primary)] to-[var(--sage)] rounded-2xl flex items-center justify-center shadow-xl shadow-[var(--sage)]/20 rotate-3 group-hover:rotate-0 transition-transform duration-500">
-              <Leaf className="text-white sway" size={26} />
+            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-strong)] text-[var(--sage)] ring-1 ring-[var(--border)]">
+              <Leaf size={22} />
             </div>
           </div>
           <div>
-            <h1 className="text-3xl font-serif font-black text-[var(--sage)] leading-none">Seed</h1>
-            <p className="text-[9px] font-black tracking-[0.3em] uppercase text-[var(--seed-accent)] opacity-60">Grow What Matters</p>
+            <h1 className="text-xl font-semibold tracking-tight text-[var(--earth)] leading-none">Seed</h1>
+            <p className="mt-1 text-[11px] font-medium text-[var(--text-muted)]">Ideas y proyectos</p>
           </div>
           <button
             type="button"
@@ -3779,17 +4128,16 @@ export default function App() {
             <button
               type="button"
               onClick={() => setShowGardenSwitcher(value => !value)}
-              className="group flex w-full items-center gap-3 rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)]/90 p-3 text-left shadow-xl shadow-black/[0.04] ring-1 ring-white/40 backdrop-blur-xl soft-interaction hover:border-[var(--sage)]/25"
+              className="group flex w-full items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] p-3 text-left shadow-sm soft-interaction hover:border-[var(--sage)]/25"
               aria-expanded={showGardenSwitcher}
               aria-label="Cambiar jardín"
             >
-              <span className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[1.2rem] bg-[var(--bg-app)] font-serif text-lg font-black text-[var(--sage)] ring-1 ring-[var(--border)]">
-                <span className="absolute inset-0 bg-[radial-gradient(circle_at_35%_20%,rgba(255,255,255,0.85),transparent_36%)]" />
-                <span className="relative">{activePlanet.name.slice(0, 1).toUpperCase()}</span>
-              </span>
+	              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[1.2rem] bg-[var(--bg-app)] font-serif text-lg font-black text-[var(--sage)] ring-1 ring-[var(--border)]">
+	                {activePlanet.name.slice(0, 1).toUpperCase()}
+	              </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-base font-black tracking-tight text-[var(--earth)]">{activePlanet.name}</span>
-                <span className="mt-0.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                <span className="block truncate text-[15px] font-semibold tracking-tight text-[var(--earth)]">{activePlanet.name}</span>
+                <span className="mt-0.5 block text-[11px] font-medium text-[var(--text-muted)]">
                   {planetNoteCounts.get(activePlanet.id) || 0} ideas
                 </span>
               </span>
@@ -3805,7 +4153,7 @@ export default function App() {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -6, scale: 0.98 }}
                   transition={{ duration: 0.18 }}
-                  className="mt-2 overflow-hidden rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)]/95 p-2 shadow-2xl shadow-black/[0.08] ring-1 ring-white/40 backdrop-blur-xl"
+                  className="mt-2 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] p-2 shadow-lg shadow-black/[0.06] backdrop-blur-xl"
                 >
                   <div className="max-h-52 space-y-1 overflow-y-auto pr-1 app-scrollbar">
                     {planets.map((planet) => {
@@ -3847,7 +4195,7 @@ export default function App() {
                       }}
                       className={`flex h-11 w-full items-center justify-between gap-3 rounded-2xl px-3 text-left text-xs font-black transition-all ${
                         isAddingPlanet
-                          ? 'bg-[var(--sage)] text-white shadow-lg shadow-[var(--sage)]/20'
+                          ? 'bg-[var(--sage)] text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20'
                           : 'bg-[var(--sage)]/10 text-[var(--sage)] hover:bg-[var(--sage)]/15'
                       }`}
                     >
@@ -3906,7 +4254,7 @@ export default function App() {
                         <button
                           onClick={addPlanet}
                           disabled={!newPlanetName.trim()}
-                          className="h-11 rounded-2xl bg-[var(--sage)] text-xs font-black text-white shadow-lg shadow-[var(--sage)]/15 disabled:opacity-40"
+                          className="h-11 rounded-2xl bg-[var(--sage)] text-xs font-black text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/15 disabled:opacity-40"
                         >
                           Crear
                         </button>
@@ -3949,7 +4297,7 @@ export default function App() {
                         <button
                           onClick={renameActivePlanet}
                           disabled={!editingPlanetName.trim()}
-                          className="h-11 rounded-2xl bg-[var(--sage)] text-xs font-black text-white shadow-lg shadow-[var(--sage)]/15 disabled:opacity-40"
+                          className="h-11 rounded-2xl bg-[var(--sage)] text-xs font-black text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/15 disabled:opacity-40"
                         >
                           Guardar
                         </button>
@@ -3970,31 +4318,18 @@ export default function App() {
           </div>
         </div>
 
-        <div className="space-y-5 mb-8 md:mb-12">
-          {[
-            {
-              title: 'Cultivar',
-              items: [
-                { id: 'today', label: 'Hoy', icon: Droplets },
-                { id: 'inbox', label: 'Semillas', icon: Sprout },
-                { id: 'projects', label: 'Brotes', icon: Target },
-                { id: 'garden', label: 'Jardín', icon: LayoutGrid },
-              ],
-            },
-            {
-              title: 'Tu progreso',
-              items: [
-                { id: 'profile', label: 'Perfil', icon: User },
-                { id: '3D', label: 'Planeta', icon: Box },
-                { id: 'calendar', label: 'Camino', icon: CalendarIcon },
-              ],
-            },
-          ].map((section) => (
-            <div key={section.title} className="space-y-1.5">
-              <p className="text-[10px] uppercase font-black text-[var(--seed-accent)] px-4 mb-2 tracking-[0.25em] opacity-50">{section.title}</p>
-              {section.items.map((item) => (
-                <button
-                  key={item.id}
+	        <div className="mb-8 space-y-1.5 md:mb-12">
+	          {[
+	                    { id: 'today', label: t('today'), detail: 'Una decisión clara', icon: Droplets },
+	                    { id: 'inbox', label: t('seeds'), detail: 'Ideas sin presión', icon: Sprout },
+	                    { id: 'projects', label: t('sprouts'), detail: 'Siguiente paso', icon: Target },
+	                    { id: 'garden', label: t('garden'), detail: 'Recompensa visual', icon: LayoutGrid },
+	                    { id: '3D', label: t('planet'), detail: 'Mundo vivo', icon: Box },
+	                    { id: 'calendar', label: t('path'), detail: 'Ritmo y memoria', icon: CalendarIcon },
+	                    { id: 'profile', label: t('profile'), detail: 'Tu jardín', icon: User },
+	          ].map((item) => (
+	                <button
+	                  key={item.id}
                   onClick={() => {
                     setSelectedNoteId(null);
                     if (item.id === 'projects') {
@@ -4004,42 +4339,47 @@ export default function App() {
                     setView(item.id as AppView);
                     setShowMobileMenu(false);
                   }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl soft-interaction relative group ${
-                    view === item.id
-                      ? 'bg-[var(--surface-strong)] shadow-xl shadow-black/5 text-[var(--sage)] ring-1 ring-black/5'
-                      : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'
-                  }`}
-                >
-                  {view === item.id && (
-                    <motion.div
-                      layoutId="active-pill"
-                      className="absolute left-2 w-1 h-5 bg-[var(--sage)] rounded-full"
-                    />
-                  )}
-                  <item.icon size={18} className={view === item.id ? 'text-[var(--sage)]' : 'text-[var(--earth)] opacity-70'} />
-                  <span className="font-bold tracking-tight text-sm">{item.label}</span>
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-
-        <button 
-          onClick={() => {
-            startPlanting();
-            setShowMobileMenu(false);
-          }}
-          className="mb-8 flex w-full items-center justify-center gap-3 rounded-[2rem] bg-[var(--sage)] py-4 font-black text-white shadow-2xl shadow-[var(--sage)]/30 active:translate-y-px active:shadow-inner soft-interaction hover:bg-[var(--ink)]"
-        >
-          <Plus size={20} strokeWidth={3} />
-          <span className="tracking-tight">Plantar Idea</span>
-        </button>
+	                  className={`relative flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 py-2 text-left soft-interaction group ${
+	                    view === item.id
+	                      ? 'bg-[var(--surface-strong)] text-[var(--sage)] shadow-sm ring-1 ring-[var(--border)]'
+	                      : 'text-[var(--earth)] hover:bg-[var(--surface-soft)]'
+	                  }`}
+	                >
+	                  {view === item.id && (
+	                    <motion.div
+	                      layoutId="active-pill"
+	                      className="absolute left-1.5 h-6 w-1 rounded-full bg-[var(--sage)]"
+	                    />
+	                  )}
+	                  <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${view === item.id ? 'bg-[var(--bg-app)] text-[var(--sage)]' : 'bg-transparent text-[var(--earth)]/65 group-hover:bg-[var(--surface-strong)] group-hover:text-[var(--sage)]'}`}>
+	                    <item.icon size={17} />
+	                  </span>
+	                  <span className="min-w-0 flex-1">
+	                    <span className="block text-sm font-semibold tracking-tight">{item.label}</span>
+	                    <span className="mt-0.5 block truncate text-[11px] font-medium text-[var(--text-muted)]">{item.detail}</span>
+	                  </span>
+	                </button>
+	          ))}
+	        </div>
 
         <div className="mt-auto space-y-6">
-          <div className="flex items-center gap-4 px-2 py-4 border-t border-[var(--border)]">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[var(--sage)] to-[var(--seed-accent)] flex items-center justify-center text-white font-serif font-bold italic shadow-lg ring-2 ring-[var(--surface-strong)]">
-              {accountInitials}
-            </div>
+          <button
+            type="button"
+            onClick={() => {
+              startPlanting();
+              setShowMobileMenu(false);
+            }}
+	            className="flex h-12 w-full items-center gap-3 rounded-2xl bg-[var(--surface-strong)] px-3 text-sm font-semibold text-[var(--sage)] shadow-sm soft-interaction hover:bg-[var(--surface-hover)]"
+	          >
+	            <span className="grid h-7 w-7 place-items-center rounded-full bg-[var(--sage)] text-[var(--on-sage)] shadow-sm">
+	              <Plus size={16} strokeWidth={2.5} />
+	            </span>
+	            Plantar semilla
+	          </button>
+	          <div className="flex items-center gap-4 px-2 py-4 border-t border-[var(--border)]">
+	            <div className="w-10 h-10 rounded-full bg-[var(--sage)] flex items-center justify-center text-[var(--on-sage)] font-serif font-bold italic ring-2 ring-[var(--surface-strong)]">
+	              {accountInitials}
+	            </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-black text-[var(--earth)] truncate">{account.name || 'Jardinero Digital'}</p>
               <p className="text-[10px] font-medium text-[var(--text-muted)] truncate">{account.email || 'Sin correo'}</p>
@@ -4065,7 +4405,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-        <section className={`flex-1 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${view === 'calendar' ? 'px-3 pb-3 pt-20 sm:px-5 sm:pb-5 md:p-6' : 'px-4 pb-28 pt-20 sm:px-6 sm:pb-28 md:p-10'} ${selectedNoteId ? 'md:mr-[400px]' : ''}`}>
+        <section className={`flex-1 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${view === 'calendar' ? 'px-3 pb-3 pt-[var(--safe-top-space)] sm:px-5 sm:pb-5 md:p-6' : 'px-4 pb-[var(--safe-bottom-space)] pt-[var(--safe-top-space)] sm:px-6 md:p-10'} ${selectedNoteId ? 'md:mr-[400px]' : ''}`}>
           <div className={`${view === 'calendar' ? 'mx-auto max-w-[100rem]' : 'max-w-4xl mx-auto'}`}>
             <header className="mb-6 flex flex-col md:mb-10 md:flex-row justify-between items-start gap-4 md:gap-6">
               <div className="w-full">
@@ -4086,8 +4426,8 @@ export default function App() {
                 </motion.div>
                 <div className="mt-5 grid grid-cols-3 gap-2 sm:mt-6 sm:gap-3">
                   {[
-                    { id: 'seed', label: 'Semillas', value: gardenStats.seeds, tone: 'bg-amber-100 text-amber-700' },
-                    { id: 'sprout', label: 'Brotes', value: gardenStats.active, tone: 'bg-emerald-100 text-emerald-700' },
+            { id: 'seed', label: t('seeds'), value: gardenStats.seeds, tone: 'bg-amber-100 text-amber-700' },
+            { id: 'sprout', label: t('sprouts'), value: gardenStats.active, tone: 'bg-emerald-100 text-emerald-700' },
                     { id: 'bloom', label: 'Cosechas', value: gardenStats.completed, tone: 'bg-green-100 text-green-700' },
                   ].map((stat) => (
                     <motion.button
@@ -4166,10 +4506,11 @@ export default function App() {
                   onQuickCapture={addQuickNote}
                   onCultivate={cultivateInboxNote}
                   onComplete={completeQuickSeed}
-                  onSaveLater={saveInboxForLater}
-                  onDelete={deleteNote}
-                  onSelectNote={setSelectedNoteId}
-                />
+	                  onSaveLater={saveInboxForLater}
+	                  onDelete={deleteNote}
+	                  onSelectNote={setSelectedNoteId}
+	                  recentlyCreatedNoteId={recentlyCreatedNoteId}
+	                />
               ) : view === 'projects' ? (
                 <ProjectsView
                   notes={planetNotes}
@@ -4202,60 +4543,64 @@ export default function App() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 12 }}
-                  className="pb-24 space-y-6"
+                  className="space-y-5 pb-24"
                 >
-                  <section className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-6 shadow-sm">
-                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Perfil del jardinero</p>
-                    <div className="mt-4 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="grid h-16 w-16 place-items-center rounded-[1.5rem] bg-gradient-to-tr from-[var(--sage)] to-[var(--seed-accent)] font-serif text-2xl font-black text-white shadow-lg">
-                          {accountInitials}
-                        </div>
-                        <div>
-                          <h3 className="font-serif text-3xl font-black text-[var(--earth)]">{account.name || 'Jardinero Digital'}</h3>
-                          <p className="mt-1 text-sm font-semibold text-[var(--text-muted)]">{account.purpose || 'Un jardín para ideas y proyectos'}</p>
-                        </div>
+                  <section className="overflow-hidden rounded-[1.8rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
+                    <div className="flex items-center gap-4 px-5 py-5">
+	                      <div className="grid h-16 w-16 shrink-0 place-items-center rounded-[1.35rem] bg-[var(--sage)] text-2xl font-semibold text-[var(--on-sage)]">
+                        {accountInitials}
                       </div>
-                      <button
-                        onClick={() => setShowSettings(true)}
-                        className="rounded-2xl bg-[var(--sage)] px-5 py-3 font-black text-white shadow-lg shadow-[var(--sage)]/20 soft-interaction"
-                      >
-                        Ajustes
-                      </button>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate text-2xl font-semibold tracking-tight text-[var(--earth)]">{account.name || 'Jardinero Digital'}</h3>
+                        <p className="mt-1 truncate text-sm font-medium text-[var(--text-muted)]">{account.purpose || 'Un jardín para ideas y proyectos'}</p>
+                        <p className="mt-0.5 truncate text-xs font-medium text-[var(--text-muted)]">{session?.user?.email || account.email || 'Modo local'}</p>
+                      </div>
                     </div>
-                  </section>
-
-                  <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    {[
-                      { label: 'Semillas', value: gardenStats.seeds },
-                      { label: 'Brotes', value: profileStats.active },
-                      { label: 'Cosechas', value: profileStats.harvests },
-                      { label: 'Racha', value: wateringRitual.streak },
-                    ].map(item => (
-                      <div key={item.label} className="rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] p-4 text-center">
-                        <p className="font-serif text-3xl font-black text-[var(--earth)]">{item.value}</p>
-                        <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
-                      </div>
-                    ))}
-                  </section>
-
-                  <section className="rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-6">
-                    <h3 className="font-serif text-2xl font-black text-[var(--earth)]">Tu premisa</h3>
-                    <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-                      Seed es un jardín simple: capturas semillas rápidas, conviertes las importantes en brotes con pasos y llenas tu planeta con flores y árboles al terminar.
-                    </p>
-                    <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="grid grid-cols-4 border-t border-[var(--border)]">
                       {[
-                        { title: 'Flor', text: 'Una nota rápida completada.' },
-                        { title: 'Brote', text: 'Un proyecto con pasos.' },
-                        { title: 'Árbol', text: 'Un proyecto terminado.' },
+                        { label: t('seeds'), value: gardenStats.seeds },
+                        { label: t('sprouts'), value: profileStats.active },
+                        { label: 'Cosechas', value: profileStats.harvests },
+                        { label: 'Racha', value: wateringRitual.streak },
                       ].map(item => (
-                        <div key={item.title} className="rounded-2xl bg-[var(--card-bg)] border border-[var(--border)] p-4">
-                          <p className="font-serif text-xl font-black text-[var(--earth)]">{item.title}</p>
-                          <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">{item.text}</p>
+                        <div key={item.label} className="border-r border-[var(--border)] px-2 py-3 text-center last:border-r-0">
+                          <p className="text-lg font-semibold text-[var(--earth)]">{item.value}</p>
+                          <p className="mt-0.5 truncate text-[9px] font-medium text-[var(--text-muted)]">{item.label}</p>
                         </div>
                       ))}
                     </div>
+                  </section>
+
+                  <section className="overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
+                    {[
+                      { icon: Settings, title: t('settings'), detail: appLanguage === 'en' ? 'Account, theme, watering and reminders' : 'Cuenta, tema, riego y recordatorios', onClick: () => setShowSettings(true) },
+                      { icon: CalendarIcon, title: t('path'), detail: appLanguage === 'en' ? 'Review activity by day' : 'Revisa actividad por día', onClick: () => setView('calendar') },
+                      { icon: Box, title: t('planet'), detail: appLanguage === 'en' ? 'Open the 3D garden when you need it' : 'Abre el jardín 3D cuando lo necesites', onClick: () => setView('3D') },
+                      { icon: Archive, title: 'Cosechas', detail: `${profileStats.harvests} idea${profileStats.harvests === 1 ? '' : 's'} terminada${profileStats.harvests === 1 ? '' : 's'}`, onClick: () => setView('harvest') },
+                    ].map((item, index) => (
+                      <button
+                        key={item.title}
+                        type="button"
+                        onClick={item.onClick}
+                        className={`flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-hover)] ${index > 0 ? 'border-t border-[var(--border)]' : ''}`}
+                      >
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--bg-app)] text-[var(--sage)]">
+                          <item.icon size={17} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[15px] font-semibold text-[var(--earth)]">{item.title}</span>
+                          <span className="mt-0.5 block truncate text-sm font-medium text-[var(--text-muted)]">{item.detail}</span>
+                        </span>
+                        <ChevronRight size={16} className="text-[var(--text-muted)]" />
+                      </button>
+                    ))}
+                  </section>
+
+                  <section className="rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">{profileStats.season}</p>
+                    <p className="mt-2 text-sm font-medium leading-relaxed text-[var(--earth)]">
+                      {account.mantra?.trim() || 'Estoy cultivando ideas que merecen volver a existir fuera de mi cabeza.'}
+                    </p>
                   </section>
                 </motion.div>
               ) : view === 'harvest' ? (
@@ -4263,36 +4608,33 @@ export default function App() {
               ) : view === 'garden' ? (
                 <motion.div
                   key={`${view}-view`}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  transition={{ duration: 0.3 }}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 12 }}
+                  transition={{ type: 'spring', stiffness: 280, damping: 28 }}
                 >
-                  <section className="mb-5 rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-5 shadow-sm">
-                    <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                  <section className="mb-5 overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
+                    <div className="flex flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Jardín</p>
-                        <h3 className="mt-1 font-serif text-3xl font-black text-[var(--earth)]">Todo lo que has plantado</h3>
-                        <p className="mt-2 max-w-xl text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-                          Flores son notas completadas, brotes son proyectos activos y árboles son proyectos terminados.
-                        </p>
+                        <h3 className="text-3xl font-semibold tracking-tight text-[var(--earth)]">{t('garden')}</h3>
+                        <p className="mt-1 text-sm font-medium text-[var(--text-muted)]">{gardenStats.total} ideas plantadas en {activePlanet.name}</p>
                       </div>
                       <button
                         onClick={() => setView('3D')}
-                        className="rounded-2xl bg-[var(--sage)] px-5 py-3 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 soft-interaction"
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] soft-interaction"
                       >
-                        Ver planeta
+                        <Box size={15} /> {t('planet')}
                       </button>
                     </div>
-                    <div className="mt-5 grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 border-t border-[var(--border)]">
                       {[
                         { label: 'Flores', value: gardenStats.flowers },
-                        { label: 'Brotes', value: gardenStats.active },
+                        { label: t('sprouts'), value: gardenStats.active },
                         { label: 'Árboles', value: gardenStats.trees },
                       ].map(item => (
-                        <div key={item.label} className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-3 text-center">
-                          <p className="font-serif text-2xl font-black text-[var(--earth)]">{item.value}</p>
-                          <p className="mt-1 text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
+                        <div key={item.label} className="border-r border-[var(--border)] px-3 py-3 text-center last:border-r-0">
+                          <p className="text-xl font-semibold text-[var(--earth)]">{item.value}</p>
+                          <p className="mt-0.5 text-[11px] font-medium text-[var(--text-muted)]">{item.label}</p>
                         </div>
                       ))}
                     </div>
@@ -4302,8 +4644,8 @@ export default function App() {
                     {[
                       { id: 'all', label: 'Todo el jardín', count: gardenStats.total },
                       { id: 'water', label: 'Por regar', count: gardenStats.watering },
-                      { id: 'seed', label: 'Semillas', count: gardenStats.seeds },
-                      { id: 'sprout', label: 'Brotes', count: gardenStats.active },
+                      { id: 'seed', label: t('seeds'), count: gardenStats.seeds },
+                      { id: 'sprout', label: t('sprouts'), count: gardenStats.active },
                       { id: 'bloom', label: 'Cosechas', count: gardenStats.completed },
                     ].map(item => {
                       const isActive =
@@ -4330,7 +4672,7 @@ export default function App() {
                           }}
                           className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black transition-colors ${
                             isActive
-                              ? 'bg-[var(--sage)] text-white border-[var(--sage)] shadow-lg shadow-[var(--sage)]/20'
+                              ? 'bg-[var(--sage)] text-[var(--on-sage)] border-[var(--sage)] shadow-lg shadow-[var(--sage)]/20'
                               : 'bg-[var(--surface-soft)] text-[var(--earth)] border-[var(--border)] hover:bg-[var(--surface-strong)]'
                           }`}
                         >
@@ -4340,220 +4682,102 @@ export default function App() {
                     })}
                   </div>
 
-                  {isAdding && (
-                    <motion.div
-                      layout
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      className="bg-[var(--surface-strong)] p-8 rounded-3xl border border-[var(--seed-accent)] mb-8 shadow-xl relative"
-                    >
-                      <button onClick={() => setIsAdding(false)} className="absolute top-6 right-6 text-[var(--text-muted)] hover:text-red-500" aria-label="Cerrar formulario">
-                        <X size={20} />
-                      </button>
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)] mb-4">Plantando en {activePlanet.name}</p>
-                      <input
-                        autoFocus
-                        type="text"
-                        placeholder="Título de la idea..."
-                        value={newNote.title}
-                        onChange={(e) => setNewNote({ ...newNote, title: e.target.value })}
-                        className="text-2xl font-serif font-bold bg-transparent outline-none mb-4 w-full placeholder:opacity-30"
-                      />
-                      <textarea
-                        placeholder="Escribe aquí tu pensamiento..."
-                        rows={4}
-                        value={newNote.content}
-                        onChange={(e) => setNewNote({ ...newNote, content: e.target.value })}
-                        className="bg-transparent outline-none resize-none text-[var(--text-main)] w-full placeholder:opacity-30 mb-6 leading-relaxed"
-                      />
-                      <div className="mb-8 p-4 bg-[var(--bg-app)] rounded-xl flex items-center gap-4">
-                        <CalendarIcon className="text-[var(--sage)]" size={20} />
-                        <div className="flex-1">
-                          <p className="text-[10px] font-bold text-[var(--sage)] uppercase mb-1">Fecha límite (Opcional)</p>
-                          <input 
-                            type="date"
-                            value={newNote.dueDate}
-                            onChange={(e) => setNewNote({ ...newNote, dueDate: e.target.value })}
-                            className="bg-transparent outline-none text-sm w-full"
-                          />
-                        </div>
-                      </div>
-                      <div className="mb-8">
-                        <p className="text-[10px] font-bold text-[var(--sage)] uppercase mb-3">Tipo de semilla</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          {SEED_TYPES.map(type => (
-                            <button
-                              key={type.id}
-                              onClick={() => setNewNote({ ...newNote, seedType: type.id })}
-                              className={`px-3 py-2 rounded-xl text-xs font-black transition-all ${
-                                newNote.seedType === type.id
-                                  ? 'bg-[var(--sage)] text-white shadow-md'
-                                  : 'bg-[var(--bg-app)] text-[var(--sage)] hover:bg-[var(--surface-strong)]'
-                              }`}
-                            >
-                              {type.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="flex gap-4">
-                        <button
-                          onClick={addNote}
-                          disabled={!newNote.content.trim()}
-                          className="bg-[var(--sage)] text-white px-8 py-3 rounded-xl font-bold disabled:opacity-50 hover:brightness-105 soft-interaction shadow-md active:translate-y-px"
-                        >
-                          Plantar idea
-                        </button>
-                        <button onClick={() => setIsAdding(false)} className="px-6 py-3 text-sm font-medium hover:bg-[var(--surface-hover)] rounded-xl transition-colors">
-                          Cancelar
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-
-                  <div className="grid grid-cols-1 gap-4 pb-28 sm:gap-6 md:pb-20 lg:grid-cols-2">
+                  <div className="overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] pb-28 shadow-sm md:pb-20">
                     {visibleGardenNotes.map((note) => {
                       const progress = getProgress(note);
-                      const stageMeta = STAGE_META[note.growthStage];
-                      const nextTask = note.tasks.find(task => !task.completed);
-                      const guidance = getIdeaGuidance(note);
+	                      const stageMeta = STAGE_META[note.growthStage];
+	                      const nextTask = note.tasks.find(task => !task.completed);
+	                      const guidance = getIdeaGuidance(note);
+	                      const StageIcon =
+	                        note.growthStage === 'bloom' ? CheckCircle2 :
+	                        note.growthStage === 'withered' ? Skull :
+	                        note.growthStage === 'sprout' ? Sprout :
+	                        Leaf;
+	                      const stageTone =
+	                        note.growthStage === 'bloom' ? 'bg-green-50 text-green-600 ring-green-100' :
+	                        note.growthStage === 'withered' ? 'bg-red-50 text-red-500 ring-red-100' :
+	                        note.growthStage === 'sprout' ? 'bg-emerald-50 text-emerald-600 ring-emerald-100' :
+	                        'bg-amber-50 text-amber-600 ring-amber-100';
 
-                      return (
-                      <motion.div
+	                      return (
+	                      <motion.div
                         key={note.id}
                         initial={{ opacity: 0, y: 14 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        whileHover={{ y: -3 }}
-                        whileTap={{ y: -1 }}
+                        whileTap={{ scale: 0.995 }}
                         transition={{ type: 'tween', duration: 0.18 }}
                         onClick={() => setSelectedNoteId(note.id)}
-                        className={`seed-card bg-[var(--surface-strong)] border group relative cursor-pointer overflow-hidden ${
-                          selectedNoteId === note.id 
-                            ? 'border-[var(--sage)] shadow-xl ring-2 ring-[var(--sage)]/35' 
-                            : 'border-[var(--border)] shadow-[0_12px_34px_rgb(47,62,51,0.08)] hover:border-[var(--seed)]/55 hover:shadow-[0_18px_52px_rgb(47,62,51,0.12)]'
-                        }`}
-                      >
-                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent opacity-80" />
-                        <div className={`relative flex h-44 items-center justify-center overflow-hidden bg-gradient-to-b pt-7 sm:h-52 sm:pt-8 ${stageMeta.aura}`}>
-                          <div className="seed-card-sheen" />
-                          <div className="absolute inset-x-8 bottom-7 h-8 rounded-full bg-[#3e2723]/10 blur-xl" />
-                          <div className="absolute bottom-5 w-3/5 h-3 bg-[#3e2723]/20 rounded-full" />
-                          <div className="absolute left-6 top-6 flex items-center gap-2 rounded-full bg-[var(--surface-soft)] border border-[var(--border)] px-3 py-1.5 shadow-sm backdrop-blur">
-                            <span className={`w-2 h-2 rounded-full ${stageMeta.bg}`} />
-                            <span className={`text-[9px] font-black uppercase tracking-[0.18em] ${stageMeta.color}`}>
-                              {guidance.label}
-                            </span>
-                          </div>
-                          
-                          <motion.div
-                            className="relative z-10"
-                            animate={{ y: note.growthStage === 'withered' ? 0 : [0, -2, 0] }}
-                            transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
-                          >
-                            <PlantIllustration 
-                              stage={note.growthStage} 
-                              progress={progress} 
-                              isGrowth={note.isGrowth} 
-                              theme={activePlanet.theme || theme}
-                            />
-                          </motion.div>
-                        </div>
+	                        className={`group relative cursor-pointer border-b border-[var(--border)] px-4 py-3.5 transition-colors last:border-b-0 hover:bg-[var(--surface-hover)] ${
+	                          selectedNoteId === note.id 
+	                            ? 'bg-[var(--bg-app)]' 
+	                            : ''
+	                        }`}
+	                      >
+	                        <div className="flex items-start gap-3">
+	                          <div className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-[1.1rem] ring-1 ${stageTone}`}>
+	                            <StageIcon size={18} strokeWidth={2.2} />
+	                            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-current opacity-35" />
+	                          </div>
 
-                        <div className="p-5 sm:p-6">
-                          <div className="flex justify-between items-start mb-3">
-                            <div className="flex items-center gap-2">
-                              <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] ${stageMeta.bg} ${stageMeta.color}`}>
-                                {stageMeta.label}
-                              </div>
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] opacity-60">
-                                {new Date(note.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
-                              </span>
-                            </div>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
-                              className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 text-[var(--text-muted)] hover:text-red-500 soft-interaction p-2 bg-[var(--surface-soft)] rounded-full"
-                              aria-label={`Eliminar ${note.title}`}
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
+	                          <div className="min-w-0 flex-1">
+	                            <div className="flex min-w-0 items-start justify-between gap-2">
+	                              <h3 className={`min-w-0 truncate text-[15px] font-semibold leading-tight transition-colors ${selectedNoteId === note.id ? 'text-[var(--sage)]' : note.growthStage === 'withered' ? 'text-[var(--text-muted)]' : 'text-[var(--earth)]'}`}>{note.title}</h3>
+	                              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${stageTone}`}>
+	                                {stageMeta.shortLabel}
+	                              </span>
+	                            </div>
+                            <p className="mt-1 line-clamp-1 text-sm leading-relaxed text-[var(--text-muted)]">
+                              {nextTask?.text || note.content}
+                            </p>
 
-                          <h3 className={`mb-3 text-xl font-serif font-bold leading-tight transition-colors sm:text-2xl ${selectedNoteId === note.id ? 'text-[var(--sage)]' : note.growthStage === 'withered' ? 'text-[var(--text-muted)]' : 'text-[var(--earth)]'}`}>{note.title}</h3>
-                          <p className="text-sm leading-relaxed text-[var(--text-muted)] line-clamp-2 min-h-[2.75rem]">
-                            {note.content}
-                          </p>
-
-                          <div className={`mt-5 rounded-2xl border px-4 py-3 ${guidance.tone}`}>
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="text-[9px] font-black uppercase tracking-[0.22em] opacity-70">Ahora</p>
-                                <p className="mt-1 text-sm font-black leading-tight">{guidance.title}</p>
-                                <p className="mt-1 text-xs font-semibold leading-relaxed opacity-75 line-clamp-2">{guidance.detail}</p>
-                              </div>
-                              {guidance.kind === 'water' ? <Droplets size={18} className="shrink-0 mt-1" /> :
-                               guidance.kind === 'focus' ? <Target size={18} className="shrink-0 mt-1" /> :
-                               guidance.kind === 'grow' ? <Sprout size={18} className="shrink-0 mt-1" /> :
-                               guidance.kind === 'pause' ? <Pause size={18} className="shrink-0 mt-1" /> :
-                               <ArrowRight size={18} className="shrink-0 mt-1" />}
-                            </div>
-                          </div>
-                          
-                          {note.dueDate && (
-                            <div className={`flex items-center gap-2 text-[11px] font-black mt-4 ${note.growthStage === 'withered' ? 'text-red-400' : 'text-[var(--seed)]'}`}>
-                              {note.growthStage === 'withered' ? <Skull size={14} /> : <CalendarIcon size={14} />}
-                              <span className="uppercase tracking-widest">{note.growthStage === 'withered' ? 'MARCHITA' : 'COSECHA'}: {format(note.dueDate, 'd MMM')}</span>
-                            </div>
-                          )}
-
-                          {note.isGrowth && (
-                            <div className="mt-8">
-                              {nextTask && (
-                                <div className="mb-4 rounded-2xl bg-[var(--bg-app)] px-4 py-3 border border-[var(--border)]">
-                                  <p className="text-[9px] font-black uppercase tracking-widest text-[var(--sage)] mb-1">Siguiente paso</p>
-                                  <p className="text-sm font-semibold text-[var(--earth)] line-clamp-1">{nextTask.text || 'Describe el siguiente paso'}</p>
-                                </div>
+	                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-[var(--text-muted)]">
+	                              <span>{note.tasks.length} pasos</span>
+	                              {note.isGrowth && <span>{progress}%</span>}
+	                              <span>{note.focusedMinutes || 0} min</span>
+                              {note.dueDate && (
+                                <span className={note.growthStage === 'withered' ? 'text-red-500' : 'text-[var(--sage)]'}>
+                                  {formatShortDate(note.dueDate)}
+                                </span>
                               )}
-                              <div className="flex justify-between items-end mb-2">
-                                <span className="text-[10px] font-black text-[var(--sage)] tracking-[0.2em]">DESARROLLO</span>
-                                <span className="text-xs font-black text-[var(--sage)]">{progress}%</span>
-                              </div>
-                              <div className="h-2.5 w-full bg-[var(--surface-soft)] rounded-full overflow-hidden p-0.5 border border-[var(--border)]">
-                                <motion.div 
+                            </div>
+
+                            {note.isGrowth && (
+                              <div className="mt-2 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-[var(--bg-app)]">
+                                <motion.div
                                   initial={{ width: 0 }}
                                   animate={{ width: `${progress}%` }}
                                   transition={{ type: 'spring', stiffness: 80, damping: 18 }}
                                   className={`h-full rounded-full ${note.growthStage === 'bloom' ? 'bg-green-500' : 'bg-[var(--sage)]'}`}
                                 />
                               </div>
-                            </div>
-                          )}
+                            )}
+                          </div>
 
-                          <div className="mt-5 flex flex-col justify-between gap-3 border-t border-[var(--border)] pt-4 sm:mt-6 sm:flex-row sm:items-center sm:pt-5">
-                            <div className="flex flex-wrap items-center gap-3 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
-                              <span>{note.tasks.length} pasos</span>
-                              <span>{note.connections?.length || 0} vínculos</span>
-                              <span>{note.focusedMinutes || 0} min</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  runCardAction(note, guidance.kind);
-                                }}
-                                className={`flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-3 text-[10px] font-black uppercase tracking-widest shadow-sm soft-interaction active:translate-y-px sm:h-9 sm:w-auto ${guidance.actionTone}`}
-                                title={guidance.title}
-                              >
-                                {guidance.kind === 'water' ? <Droplets size={15} /> :
-                                 guidance.kind === 'focus' ? <Target size={15} /> :
-                                 guidance.kind === 'grow' ? <Sprout size={15} /> :
-                                 guidance.kind === 'pause' ? <Pause size={15} /> :
-                                 <ArrowRight size={15} />}
-                                <span>{guidance.action}</span>
-                              </button>
-                              <ArrowRight size={16} className="text-[var(--sage)] opacity-0 transition-opacity group-hover:opacity-100" />
-                            </div>
+	                          <div className="flex shrink-0 items-center gap-1">
+	                            <button 
+	                              onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
+	                              className="hidden h-8 w-8 place-items-center rounded-full text-[var(--text-muted)] opacity-100 transition-colors hover:bg-red-50 hover:text-red-500 sm:grid sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+	                              aria-label={`Eliminar ${note.title}`}
+	                            >
+	                              <Trash2 size={14} />
+	                            </button>
+	                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                runCardAction(note, guidance.kind);
+                              }}
+	                              className={`grid h-10 min-w-10 place-items-center rounded-full px-2 text-xs font-semibold shadow-sm soft-interaction active:translate-y-px ${guidance.actionTone}`}
+                              title={guidance.title}
+                              aria-label={guidance.action}
+                            >
+                              {guidance.kind === 'water' ? <Droplets size={14} /> :
+                               guidance.kind === 'focus' ? <Target size={14} /> :
+                               guidance.kind === 'grow' ? <Sprout size={14} /> :
+                               guidance.kind === 'pause' ? <Pause size={14} /> :
+                               <ArrowRight size={14} />}
+                            </button>
+                            <ChevronRight size={16} className="hidden text-[var(--text-muted)] sm:block" />
                           </div>
                         </div>
                       </motion.div>
@@ -4578,13 +4802,13 @@ export default function App() {
                   exit={{ opacity: 0 }}
                   className="relative"
                 >
-                  <button
-                    type="button"
-                    onClick={() => setShowGardenFullscreen(true)}
-                    className="absolute left-1/2 top-5 z-20 grid h-11 w-11 -translate-x-1/2 place-items-center rounded-2xl border border-white/20 bg-black/25 text-white shadow-2xl backdrop-blur-xl transition-colors hover:bg-black/35"
-                    aria-label="Ver planeta en pantalla completa"
-                    title="Pantalla completa"
-                  >
+	                  <button
+	                    type="button"
+	                    onClick={() => setShowGardenFullscreen(true)}
+	                    className="absolute right-4 top-[var(--safe-top-control)] z-20 grid h-10 w-10 place-items-center rounded-2xl border border-white/24 bg-white/[0.13] text-white shadow-[0_18px_60px_rgba(0,0,0,0.24)] backdrop-blur-2xl transition-colors hover:bg-white/[0.18] sm:left-1/2 sm:right-auto sm:h-11 sm:w-11 sm:-translate-x-1/2"
+	                    aria-label="Ver planeta en pantalla completa"
+	                    title="Pantalla completa"
+	                  >
                     <Maximize2 size={18} />
                   </button>
                   <Suspense fallback={
@@ -4626,14 +4850,14 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setShowGardenFullscreen(false)}
-                    className="absolute right-5 top-5 z-50 grid h-12 w-12 place-items-center rounded-2xl border border-white/20 bg-black/35 text-white shadow-2xl backdrop-blur-xl transition-colors hover:bg-black/50"
+	                    className="absolute right-5 top-[var(--safe-top-control)] z-50 grid h-12 w-12 place-items-center rounded-2xl border border-white/24 bg-white/[0.13] text-white shadow-[0_18px_60px_rgba(0,0,0,0.28)] backdrop-blur-2xl transition-colors hover:bg-white/[0.18]"
                     aria-label="Cerrar pantalla completa"
                     title="Cerrar"
                   >
                     <X size={20} />
                   </button>
                   <Suspense fallback={
-                    <div className="grid h-screen place-items-center bg-[var(--earth)] text-center text-white">
+                    <div className="grid h-screen place-items-center bg-[var(--earth)] text-center text-[var(--on-earth)]">
                       <div>
                         <Box className="mx-auto mb-4 animate-pulse text-white/70" size={44} />
                         <p className="font-serif text-3xl font-black">Cargando planeta</p>
@@ -4689,7 +4913,7 @@ export default function App() {
                   onClick={() => {
                     startPlanting();
                   }}
-                  className="mt-10 bg-[var(--sage)] text-white px-10 py-4 rounded-2xl font-bold shadow-xl shadow-[var(--sage)]/20 soft-interaction hover:brightness-110"
+                  className="mt-10 bg-[var(--sage)] text-[var(--on-sage)] px-10 py-4 rounded-2xl font-bold shadow-xl shadow-[var(--sage)]/20 soft-interaction hover:brightness-110"
                 >
                   Plantar mi primera semilla
                 </motion.button>
@@ -4698,312 +4922,390 @@ export default function App() {
           </div>
         </section>
 
-        {/* Selected Note Detail Panel (Focus Mode) */}
-        <AnimatePresence>
-          {selectedNoteId && selectedNote && (
-            <motion.aside 
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="absolute right-0 top-0 bottom-0 z-50 flex w-full flex-col border-l border-[var(--border)] bg-[var(--surface-strong)] shadow-2xl md:z-30 md:w-[400px]"
-            >
-              <div className="flex items-center justify-between border-b border-[var(--border)] p-5 pb-3 pt-[calc(env(safe-area-inset-top)+1rem)] md:pt-5">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${
-                    selectedNote.growthStage === 'bloom' ? 'bg-green-500' : 
-                    selectedNote.growthStage === 'withered' ? 'bg-red-500' : 'bg-[var(--seed)]'
-                  }`} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
-                    {selectedNote.inbox ? 'Semilla en semillero' :
-                     selectedNote.growthStage === 'bloom' ? selectedNote.isGrowth ? 'Árbol cosechado' : 'Flor completada' : 
-                     selectedNote.growthStage === 'withered' ? 'Idea Marchita' :
-                     selectedNote.isGrowth ? 'Brote activo' : 'Semilla rápida'}
-                  </span>
-                </div>
-                <button onClick={() => setSelectedNoteId(null)} className="p-2 hover:bg-[var(--surface-hover)] rounded-full transition-colors">
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto app-scrollbar p-5 pb-28 md:pb-5">
-                <div className="mb-5 flex items-start gap-4 rounded-[1.5rem] border border-[var(--border)] bg-[var(--bg-app)] p-4">
-                  <div className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-b ${STAGE_META[selectedNote.growthStage].aura} border border-white/70 shadow-sm`}>
-                    <div className="absolute bottom-1 left-1/2 origin-bottom -translate-x-1/2 scale-[0.46]">
-                      <PlantIllustration
-                        stage={selectedNote.growthStage}
-                        progress={selectedProgress}
-                        isGrowth={selectedNote.isGrowth}
-                        theme={activePlanet.theme || theme}
-                      />
-                    </div>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <input
-                      type="text"
-                      value={selectedNote.title}
-                      onChange={(e) => updateNote(selectedNote.id, { title: e.target.value })}
-                      className="w-full bg-transparent font-serif text-2xl font-black leading-tight text-[var(--earth)] outline-none"
-                      placeholder="Sin título"
-                    />
-                    <div className="mt-3 grid grid-cols-3 gap-2">
-                      {[
-                        { label: 'Riego', value: selectedNote.growthStage === 'bloom' ? 'Listo' : `${selectedReviewDays}d` },
-                        { label: 'Pasos', value: selectedNote.isGrowth ? `${selectedCompletedSteps}/${selectedNote.tasks.length}` : 'Rápida' },
-                        { label: 'Foco', value: `${selectedNote.focusedMinutes || 0}m` },
-                      ].map(item => (
-                        <div key={item.label} className="rounded-xl bg-[var(--surface-strong)] px-2 py-2 text-center">
-                          <p className="text-sm font-black text-[var(--earth)]">{item.value}</p>
-                          <p className="text-[7px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="sticky bottom-3 z-20 -mx-1 mb-5 grid grid-cols-2 gap-2 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)]/95 p-2 shadow-2xl shadow-black/10 backdrop-blur-xl md:static md:mx-0 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none">
-                  {selectedIsDone ? (
-                    <>
-                      <button
-                        onClick={() => {
-                          setFilterStage('bloom');
-                          setSearch('');
-                          setView('garden');
-                          setSelectedNoteId(null);
-                        }}
-                        className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 py-2.5 text-xs font-black text-white soft-interaction hover:brightness-105"
-                      >
-                        <Leaf size={15} /> Ver en jardín
-                      </button>
-                      <button
-                        onClick={() => setView('3D')}
-                        className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-xs font-black text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
-                      >
-                        <Box size={15} /> Planeta
-                      </button>
-                    </>
-                  ) : selectedIsQuickSeed ? (
-                    <>
-                      <button
-                        onClick={() => completeQuickSeed(selectedNote.id)}
-                        className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 py-2.5 text-xs font-black text-white soft-interaction hover:brightness-105"
-                      >
-                        <CheckCircle2 size={15} /> Hecho
-                      </button>
-                      <button
-                        onClick={() => selectedNote.inbox ? cultivateInboxNote(selectedNote.id) : growNote(selectedNote.id)}
-                        className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-xs font-black text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
-                      >
-                        <Sprout size={15} /> Proyecto
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => {
-                          setFocusNoteId(selectedNote.id);
-                          setView('focus');
-                        }}
-                        className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 py-2.5 text-xs font-black text-white soft-interaction hover:brightness-105"
-                      >
-                        <Target size={15} /> Enfocar
-                      </button>
-                      <button
-                        onClick={() => addTask(selectedNote.id)}
-                        className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-xs font-black text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
-                      >
-                        <Plus size={15} /> Paso
-                      </button>
-                    </>
-                  )}
-                  {selectedIsProject && (
-                    <>
-                      <button
-                        onClick={() => openWatering(selectedNote.id)}
-                        className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-xs font-black text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
-                      >
-                        <Droplets size={15} /> Regar
-                      </button>
-                      <button
-                        onClick={() => togglePauseNote(selectedNote.id)}
-                        className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-xs font-black text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
-                      >
-                        <Pause size={15} /> {selectedNote.paused ? 'Reactivar' : 'Pausar'}
-                      </button>
-                    </>
-                  )}
-                </div>
-                
-                <p className="text-[10px] uppercase font-bold text-[var(--seed-accent)] mb-2 tracking-widest">Nota</p>
-                <textarea
-                  value={selectedNote.content}
-                  onChange={(e) => updateNote(selectedNote.id, { content: e.target.value })}
-                  rows={5}
-                  className="text-[var(--text-main)] bg-[var(--bg-app)] border border-[var(--border)] rounded-2xl outline-none w-full leading-relaxed resize-none mb-5 p-4 placeholder:opacity-30 focus:bg-[var(--surface-soft)]"
-                  placeholder="Escribe lo importante..."
-                />
-
-                <div className="mb-5">
-                  <p className="text-[10px] uppercase font-bold text-[var(--seed-accent)] mb-3 tracking-widest">Tipo</p>
-                  <div className="flex gap-2 overflow-x-auto pb-1 app-scrollbar">
-                    {SEED_TYPES.map(type => (
-                      <button
-                        key={type.id}
-                        onClick={() => updateNote(selectedNote.id, { seedType: type.id })}
-                        className={`shrink-0 rounded-full px-3 py-2 text-[11px] font-black transition-all ${
-                          (selectedNote.seedType || 'idea') === type.id
-                            ? 'bg-[var(--sage)] text-white'
-                            : 'bg-[var(--bg-app)] text-[var(--sage)] hover:bg-[var(--surface-strong)]'
-                        }`}
-                      >
-                        {type.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <details className="mb-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] p-4">
-                  <summary className="cursor-pointer list-none text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">
-                    Cuidado
-                  </summary>
-                  <div className="mt-4 space-y-4">
-                    <label className="block">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Fecha objetivo</span>
-                      <input
-                        type="date"
-                        value={selectedNote.dueDate ? new Date(selectedNote.dueDate).toISOString().split('T')[0] : ''}
-                        onChange={(e) => updateNote(selectedNote.id, { dueDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
-                        className="mt-1 h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                      />
-                    </label>
-                    <div>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Riego</p>
-                      <div className="mt-2 grid grid-cols-3 gap-2">
-                        {[
-                          { value: 1, label: 'Diario' },
-                          { value: 3, label: '3 días' },
-                          { value: 7, label: 'Semana' },
-                        ].map(option => (
-                          <button
-                            key={option.value}
-                            onClick={() => updateNote(selectedNote.id, { wateringIntervalDays: option.value })}
-                            className={`rounded-full px-3 py-2 text-[11px] font-black transition-all ${
-                              (selectedNote.wateringIntervalDays || 1) === option.value
-                                ? 'bg-[var(--sage)] text-white'
-                                : 'bg-[var(--surface-soft)] text-[var(--sage)] hover:bg-[var(--surface-strong)]'
-                            }`}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </details>
-
-                {!selectedNote.isGrowth ? (
-                  <div className={`p-4 rounded-2xl border border-dashed text-center ${
-                    selectedNote.growthStage === 'withered' ? 'bg-red-50 border-red-200' : 'bg-[var(--bg-app)] border-[var(--sage)]'
-                  }`}>
-                    <p className="text-sm font-semibold text-[var(--text-muted)] mb-4">
-                      {selectedNote.growthStage === 'withered' 
-                        ? 'Esta semilla puede volver como proyecto.' 
-                        : 'Si necesita pasos, conviértela en brote.'}
-                    </p>
-                    <button 
-                      onClick={() => growNote(selectedNote.id)}
-                      className={`${
-                        selectedNote.growthStage === 'withered' ? 'bg-red-500' : 'bg-[var(--sage)]'
-                      } text-white w-full py-3 rounded-full text-sm font-black shadow-md hover:brightness-105 soft-interaction flex items-center justify-center gap-2`}
+	        {/* Selected Note Detail Panel */}
+	        <AnimatePresence>
+	          {selectedNoteId && selectedNote && selectedGuidance && (
+	            <motion.aside 
+	              initial={{ x: '100%' }}
+	              animate={{ x: 0 }}
+	              exit={{ x: '100%' }}
+	              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+	              className="absolute bottom-0 right-0 top-0 z-50 flex w-full flex-col border-l border-[var(--border)] bg-[var(--bg-app)] shadow-2xl md:z-30 md:w-[420px]"
+	            >
+	              <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-strong)]/82 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.9rem)] backdrop-blur-2xl md:pt-4">
+	                <div className="min-w-0">
+	                  <p className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+	                    {selectedNote.inbox ? 'Semillero' : selectedNote.paused ? 'Pausada' : STAGE_META[selectedNote.growthStage].label}
+	                  </p>
+	                  <p className="mt-0.5 truncate text-sm font-semibold text-[var(--earth)]">{activePlanet.name}</p>
+	                </div>
+	                <button onClick={() => setSelectedNoteId(null)} className="grid h-9 w-9 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)]">
+	                  <X size={18} />
+	                </button>
+	              </div>
+	
+	              <div className="flex-1 overflow-y-auto app-scrollbar px-4 py-4 pb-44 md:pb-36">
+	                <section className="overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
+	                  <div className="relative p-5">
+	                    <div className="absolute inset-x-0 top-0 h-24 bg-[linear-gradient(135deg,var(--surface-soft),transparent)]" />
+	                    <div className="relative">
+	                      <div className="mb-4 flex items-center justify-between gap-3">
+	                        <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold ${STAGE_META[selectedNote.growthStage].bg} ${STAGE_META[selectedNote.growthStage].color}`}>
+	                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+	                          {selectedNote.paused ? 'Pausada' : STAGE_META[selectedNote.growthStage].shortLabel}
+	                        </span>
+	                        <span className="rounded-full bg-[var(--bg-app)] px-3 py-1.5 text-[11px] font-semibold text-[var(--text-muted)]">
+	                          {selectedSeedType.label}
+	                        </span>
+	                      </div>
+	
+	                      <input
+	                        type="text"
+	                        value={selectedNote.title}
+	                        onChange={(e) => updateNote(selectedNote.id, { title: e.target.value })}
+	                        className="w-full bg-transparent text-[2rem] font-semibold leading-none tracking-tight text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/38"
+	                        placeholder="Sin título"
+	                      />
+	
+	                      <textarea
+	                        value={selectedNote.content}
+	                        onChange={(e) => updateNote(selectedNote.id, { content: e.target.value })}
+	                        rows={4}
+	                        className="mt-4 w-full resize-none bg-transparent text-[15px] font-medium leading-relaxed text-[var(--text-main)] outline-none placeholder:text-[var(--text-muted)]/50"
+	                        placeholder="Qué quieres recordar de esta semilla?"
+	                      />
+	                    </div>
+	                  </div>
+	                </section>
+	
+	                <section className="mt-4 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-sm">
+	                  <div className="flex items-start gap-3">
+	                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)]">
+	                      {selectedGuidance.kind === 'water' ? <Droplets size={17} /> :
+	                       selectedGuidance.kind === 'focus' ? <Target size={17} /> :
+	                       selectedGuidance.kind === 'grow' ? <Sprout size={17} /> :
+	                       <Sparkles size={17} />}
+	                    </span>
+	                    <div className="min-w-0 flex-1">
+	                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Siguiente movimiento</p>
+	                      <h4 className="mt-1 text-lg font-semibold tracking-tight text-[var(--earth)]">{selectedGuidance.title}</h4>
+	                      <p className="mt-1 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{selectedGuidance.detail}</p>
+	                    </div>
+	                  </div>
+	                  {!(selectedIsDone && selectedGuidance.kind === 'open') && (
+	                    <button
+	                      onClick={() => {
+	                        if (selectedGuidance.kind === 'grow') openSproutPrompt(selectedNote.id);
+	                        else if (selectedGuidance.kind === 'water') openWatering(selectedNote.id);
+	                        else if (selectedGuidance.kind === 'focus') {
+	                          setFocusNoteId(selectedNote.id);
+	                          setView('focus');
+	                        } else {
+	                          addTask(selectedNote.id);
+	                        }
+	                      }}
+	                      className={`mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold soft-interaction ${selectedGuidance.actionTone}`}
+	                    >
+	                      {selectedGuidance.kind === 'water' ? <Droplets size={15} /> :
+	                       selectedGuidance.kind === 'focus' ? <Target size={15} /> :
+	                       selectedGuidance.kind === 'grow' ? <Sprout size={15} /> :
+	                       <Plus size={15} />}
+	                      {selectedGuidance.kind === 'open' ? 'Añadir paso' : selectedGuidance.action}
+	                    </button>
+	                  )}
+	                </section>
+	
+	                <section className="mt-4 grid grid-cols-3 gap-2">
+	                  {[
+	                    { label: 'Revisión', value: selectedNote.growthStage === 'bloom' ? 'Lista' : `${selectedReviewDays}d` },
+	                    { label: 'Pasos', value: selectedNote.isGrowth ? `${selectedCompletedSteps}/${selectedNote.tasks.length}` : 'Libre' },
+	                    { label: 'Foco', value: `${selectedNote.focusedMinutes || 0}m` },
+	                  ].map(item => (
+	                    <div key={item.label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-3 text-center shadow-sm">
+	                      <p className="text-lg font-semibold text-[var(--earth)]">{item.value}</p>
+	                      <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
+	                    </div>
+	                  ))}
+	                </section>
+	
+	                <div className="mt-4 flex gap-2 overflow-x-auto pb-1 app-scrollbar">
+	                  {SEED_TYPES.map(type => (
+	                    <button
+	                      key={type.id}
+                      onClick={() => updateNote(selectedNote.id, { seedType: type.id })}
+                      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        (selectedNote.seedType || 'idea') === type.id
+                          ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+                          : 'bg-[var(--bg-app)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--earth)]'
+                      }`}
                     >
-                      <Sprout size={16} />
-                      <span>{selectedNote.growthStage === 'withered' ? 'Revivir como proyecto' : 'Convertir en proyecto'}</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <p className="text-[10px] uppercase font-bold text-[var(--seed-accent)] tracking-widest">Pasos</p>
-                      <span className="text-[10px] bg-[var(--bg-app)] px-2 py-1 rounded-full text-[var(--sage)] font-bold">
-                        {selectedProgress}%
-                      </span>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <AnimatePresence>
-                        {selectedNote.tasks.map(task => (
-                          <motion.div 
-                            key={task.id} 
-                            initial={{ opacity: 0, y: 5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-3 py-2.5 group/task"
-                          >
-                            <button 
-                              onClick={() => toggleTask(selectedNote.id, task.id)}
-                              className={`w-6 h-6 rounded-full border-2 transition-all shrink-0 flex items-center justify-center ${task.completed ? 'bg-[var(--sage)] border-[var(--sage)]' : 'border-[var(--border)] hover:border-[var(--sage)]'}`}
-                            >
-                              {task.completed && <CheckCircle2 className="text-white" size={14} />}
-                            </button>
-                            <div className="flex-1">
-                              <input
-                                type="text"
-                                value={task.text}
-                                onChange={(e) => updateTask(selectedNote.id, task.id, e.target.value)}
-                                className={`text-sm bg-transparent outline-none w-full transition-all ${task.completed ? 'line-through opacity-40 italic' : ''}`}
-                                placeholder="Describe el paso..."
-                              />
-                            </div>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                      <button 
-                        onClick={() => addTask(selectedNote.id)}
-                        className="inline-flex h-9 items-center gap-2 rounded-full bg-[var(--surface-soft)] px-3 text-xs font-black text-[var(--sage)] ring-1 ring-[var(--border)] soft-interaction"
-                      >
-                        <Plus size={14} /> <span>Añadir paso</span>
-                      </button>
-                    </div>
+	                      {type.label}
+	                    </button>
+	                  ))}
+	                </div>
+	
+	                {selectedNote.isGrowth ? (
+	                  <section className="mt-4 overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
+	                    <div className="border-b border-[var(--border)] p-4">
+	                      <div className="flex items-center justify-between">
+	                        <div>
+	                          <p className="text-sm font-semibold text-[var(--earth)]">Brote</p>
+	                          <p className="mt-0.5 text-xs font-medium text-[var(--text-muted)]">
+	                            {selectedNextTask ? selectedNextTask.text : selectedNote.growthStage === 'bloom' ? 'Cosecha completada' : 'Añade un paso pequeño'}
+	                          </p>
+	                        </div>
+	                        <span className="rounded-full bg-[var(--bg-app)] px-3 py-1.5 text-xs font-semibold text-[var(--sage)]">{selectedProgress}%</span>
+	                      </div>
+	                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--bg-app)]">
+	                        <motion.div
+	                          initial={{ width: 0 }}
+	                          animate={{ width: `${selectedProgress}%` }}
+	                          className="h-full rounded-full bg-[var(--sage)]"
+	                        />
+	                      </div>
+	                    </div>
+	                    <div className="p-2">
+	                      <AnimatePresence>
+	                        {selectedNote.tasks.map(task => (
+	                          <motion.div
+	                            key={task.id}
+	                            initial={{ opacity: 0, y: 5 }}
+	                            animate={{ opacity: 1, y: 0 }}
+	                            className="flex min-h-12 items-center gap-3 rounded-2xl px-3 py-2 transition-colors hover:bg-[var(--bg-app)]"
+	                          >
+	                            <button
+	                              onClick={() => toggleTask(selectedNote.id, task.id)}
+	                              className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border transition-all ${task.completed ? 'border-[var(--sage)] bg-[var(--sage)] text-[var(--on-sage)]' : 'border-[var(--border)] text-transparent hover:border-[var(--sage)]'}`}
+	                              aria-label={task.completed ? 'Marcar paso pendiente' : 'Completar paso'}
+	                            >
+	                              <CheckCircle2 size={15} />
+	                            </button>
+	                            <input
+	                              type="text"
+	                              value={task.text}
+	                              onChange={(e) => updateTask(selectedNote.id, task.id, e.target.value)}
+	                              className={`min-w-0 flex-1 bg-transparent text-sm font-medium text-[var(--earth)] outline-none transition-all placeholder:text-[var(--text-muted)]/55 ${task.completed ? 'line-through opacity-45' : ''}`}
+	                              placeholder="Describe el paso..."
+	                            />
+	                          </motion.div>
+	                        ))}
+	                      </AnimatePresence>
+	                      <button
+	                        onClick={() => addTask(selectedNote.id)}
+	                        className="mt-1 flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--bg-app)] text-xs font-semibold text-[var(--sage)] soft-interaction"
+	                      >
+	                        <Plus size={14} /> Añadir paso mínimo
+	                      </button>
+	                    </div>
+	                  </section>
+	                ) : (
+	                  <section className="mt-4 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-sm">
+	                    <p className="text-sm font-semibold text-[var(--earth)]">Semilla sin presión</p>
+	                    <p className="mt-1 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
+	                      Decide después o conviértela en brote cuando exista un primer paso de 5 minutos.
+	                    </p>
+	                    <button
+	                      onClick={() => openSproutPrompt(selectedNote.id)}
+	                      className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] soft-interaction"
+	                    >
+	                      <Sprout size={15} /> Convertir en brote
+	                    </button>
+	                  </section>
+	                )}
+	
+	                {selectedNote.growthStage === 'bloom' && (
+	                  <section className="mt-4 rounded-[1.5rem] border border-green-200 bg-green-50 p-4">
+	                    <p className="text-sm font-semibold text-green-800">Cosecha completada</p>
+	                    <textarea
+	                      value={selectedNote.reflection || ''}
+	                      onChange={(e) => updateNote(selectedNote.id, { reflection: e.target.value })}
+	                      rows={3}
+	                      className="mt-3 w-full resize-none rounded-2xl bg-white/80 p-3 text-sm font-medium text-green-950 outline-none placeholder:text-green-700/55"
+	                      placeholder="Qué aprendiste de esta cosecha?"
+	                    />
+	                  </section>
+	                )}
+	
+	                {selectedNote.growthStage === 'withered' && (
+	                  <section className="mt-4 rounded-[1.5rem] border border-red-100 bg-red-50 p-4">
+	                    <p className="text-sm font-semibold text-red-700">Esta semilla se quedó quieta</p>
+	                    <p className="mt-1 text-sm font-medium text-red-700/70">Puedes revivirla si todavía importa, o soltarla sin culpa.</p>
+	                  </section>
+	                )}
+	
+	                <details className="mt-4 overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] [&_summary::-webkit-details-marker]:hidden">
+	                  <summary className="flex min-h-13 cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-[var(--earth)]">
+	                    Cuidado
+	                    <ChevronRight size={16} className="text-[var(--text-muted)]" />
+	                  </summary>
+	                  <div className="border-t border-[var(--border)]">
+	                    <label className="flex min-h-12 items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-2">
+	                      <span className="text-sm font-medium text-[var(--text-muted)]">Fecha objetivo</span>
+	                      <input
+	                        type="date"
+	                        value={selectedNote.dueDate ? new Date(selectedNote.dueDate).toISOString().split('T')[0] : ''}
+	                        onChange={(e) => updateNote(selectedNote.id, { dueDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
+	                        className="min-w-0 bg-transparent text-right text-sm font-semibold text-[var(--earth)] outline-none"
+	                      />
+	                    </label>
+	                    <div className="flex min-h-12 items-center justify-between gap-2 px-4 py-2">
+	                      <span className="text-sm font-medium text-[var(--text-muted)]">Riego</span>
+	                      <div className="flex gap-1">
+	                        {[
+	                          { value: 1, label: 'Diario' },
+	                          { value: 3, label: '3d' },
+	                          { value: 7, label: 'Semana' },
+	                        ].map(option => (
+	                          <button
+	                            key={option.value}
+	                            onClick={() => updateNote(selectedNote.id, { wateringIntervalDays: option.value })}
+	                            className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+	                              (selectedNote.wateringIntervalDays || 1) === option.value
+	                                ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+	                                : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)]'
+	                            }`}
+	                          >
+	                            {option.label}
+	                          </button>
+	                        ))}
+	                      </div>
+	                    </div>
+	                  </div>
+	                </details>
+	              </div>
 
-                    <div className="mt-8 pt-5 border-t border-[var(--border)] text-center">
-                      {selectedNote.growthStage === 'bloom' ? (
-                        <div>
-                          <motion.div animate={{ y: [0, -6, 0] }} transition={{ duration: 2.4, repeat: Infinity }}>
-                            <CheckCircle2 className="mx-auto text-green-500 mb-4" size={32} />
-                          </motion.div>
-                          <p className="text-xs font-bold text-green-600 uppercase tracking-widest mb-4">Cosecha completada</p>
-                          <textarea
-                            value={selectedNote.reflection || ''}
-                            onChange={(e) => updateNote(selectedNote.id, { reflection: e.target.value })}
-                            rows={3}
-                            className="w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-3 text-sm outline-none resize-none"
-                            placeholder="Qué aprendiste de esta cosecha?"
-                          />
-                        </div>
-                      ) : selectedNote.growthStage === 'withered' ? (
-                        <div>
-                          <Skull className="mx-auto text-red-400 mb-4 opacity-50" size={32} />
-                          <p className="text-xs font-bold text-red-500 uppercase tracking-widest">Esta planta se ha marchitado</p>
-                          <p className="text-[10px] opacity-40 mt-1">Llegaste tarde a la cosecha.</p>
-                        </div>
-                      ) : (
-                        <p className="text-[10px] opacity-50">Completa los pasos para convertir este brote en árbol.</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between border-t border-[var(--border)] bg-[var(--surface-soft)] px-5 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] md:p-8">
-                 <button 
-                   onClick={() => deleteNote(selectedNote.id)}
-                   className="text-xs font-bold text-red-400 hover:text-red-600 transition-colors flex items-center gap-2"
-                 >
-                   <Trash2 size={14} /> Eliminar Semilla
-                 </button>
-                 <span className="text-[10px] font-mono opacity-30">REF: {selectedNote.id.split('-')[0]}</span>
+              <div className="border-t border-[var(--border)] bg-[var(--surface-strong)]/92 px-5 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-2xl md:pb-3">
+                 <div className="grid grid-cols-2 gap-2">
+                   {selectedIsDone ? (
+                     <>
+                       <button
+                         onClick={() => {
+                           setFilterStage('bloom');
+                           setSearch('');
+                           setView('garden');
+                           setSelectedNoteId(null);
+                         }}
+                         className="flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] soft-interaction"
+                       >
+                         <Leaf size={15} /> {t('garden')}
+                       </button>
+                       <button onClick={() => setView('3D')} className="flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--sage)]">
+                         <Box size={15} /> {t('planet')}
+                       </button>
+                     </>
+                   ) : selectedIsQuickSeed ? (
+                     <>
+                       <button onClick={() => completeQuickSeed(selectedNote.id)} className="flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] soft-interaction">
+                         <CheckCircle2 size={15} /> Hecho
+                       </button>
+                       <button onClick={() => selectedNote.inbox ? cultivateInboxNote(selectedNote.id) : openSproutPrompt(selectedNote.id)} className="flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--sage)]">
+                         <Sprout size={15} /> Proyecto
+                       </button>
+                     </>
+                   ) : (
+                     <>
+                       <button
+                         onClick={() => {
+                           setFocusNoteId(selectedNote.id);
+                           setView('focus');
+                         }}
+                         className="flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] soft-interaction"
+                       >
+                         <Target size={15} /> Enfocar
+                       </button>
+                       <button onClick={() => addTask(selectedNote.id)} className="flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--sage)]">
+                         <Plus size={15} /> Paso
+                       </button>
+                     </>
+                   )}
+                 </div>
+                 {selectedIsProject && (
+                   <div className="mt-2 grid grid-cols-2 gap-2">
+                     <button onClick={() => openWatering(selectedNote.id)} className="flex h-9 items-center justify-center gap-2 rounded-full bg-[var(--bg-app)] px-4 text-xs font-semibold text-[var(--sage)]">
+                       <Droplets size={14} /> Regar
+                     </button>
+                     <button onClick={() => togglePauseNote(selectedNote.id)} className="flex h-9 items-center justify-center gap-2 rounded-full bg-[var(--bg-app)] px-4 text-xs font-semibold text-[var(--sage)]">
+                       <Pause size={14} /> {selectedNote.paused ? 'Reactivar' : 'Pausar'}
+                     </button>
+                   </div>
+                 )}
+                 <div className="mt-3 flex items-center justify-between">
+                   <button 
+                     onClick={() => deleteNote(selectedNote.id)}
+                     className="flex items-center gap-2 text-xs font-semibold text-red-400 transition-colors hover:text-red-600"
+                   >
+                     <Trash2 size={14} /> Eliminar
+                   </button>
+                   <span className="text-xs text-[var(--text-muted)]">{formatShortDate(selectedNote.createdAt)}</span>
+                 </div>
               </div>
             </motion.aside>
           )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {sproutPromptNoteId && (() => {
+            const note = notes.find(n => n.id === sproutPromptNoteId);
+            if (!note) return null;
+
+            return (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[62] flex items-end justify-center bg-black/25 p-4 backdrop-blur-sm sm:items-center"
+                onClick={() => setSproutPromptNoteId(null)}
+              >
+                <motion.div
+                  initial={{ opacity: 0, y: 28, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 18, scale: 0.97 }}
+                  transition={{ type: 'spring', damping: 24, stiffness: 280 }}
+                  className="w-full max-w-md rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] p-5 shadow-2xl"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--seed-accent)]">Semilla a brote</p>
+                      <h3 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--earth)]">¿Cuál es el primer paso de 5 minutos?</h3>
+                    </div>
+                    <button onClick={() => setSproutPromptNoteId(null)} className="grid h-9 w-9 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)]" aria-label="Cerrar">
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl bg-[var(--bg-app)] p-4">
+                    <p className="text-sm font-semibold text-[var(--earth)]">{note.title}</p>
+                    <p className="mt-1 line-clamp-2 text-sm text-[var(--text-muted)]">{note.content}</p>
+                  </div>
+
+                  <textarea
+                    autoFocus
+                    value={sproutFirstStep}
+                    onChange={(event) => setSproutFirstStep(event.target.value)}
+                    rows={3}
+                    placeholder="Ej. Escribir 3 ideas, abrir el archivo, mandar un mensaje..."
+                    className="mt-4 w-full resize-none rounded-2xl bg-[var(--bg-app)] p-4 text-sm font-medium outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                  />
+
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setSproutPromptNoteId(null)}
+                      className="h-11 rounded-full bg-[var(--bg-app)] text-sm font-semibold text-[var(--text-muted)]"
+                    >
+                      Ahora no
+                    </button>
+                    <button
+                      onClick={confirmSproutPrompt}
+                      className="h-11 rounded-full bg-[var(--sage)] text-sm font-semibold text-[var(--on-sage)] shadow-sm"
+                    >
+                      Crear brote
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
         </AnimatePresence>
 
         <AnimatePresence>
@@ -5027,10 +5329,10 @@ export default function App() {
                   onClick={(event) => event.stopPropagation()}
                 >
                   <div className="flex items-start justify-between gap-4 mb-5">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Riego rápido</p>
-                      <h3 className="text-2xl font-serif font-black text-[var(--earth)] mt-1">20 segundos para no perderla</h3>
-                    </div>
+	                    <div>
+	                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Riego inteligente</p>
+	                      <h3 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--earth)]">¿Sigue viva?</h3>
+	                    </div>
                     <button onClick={() => setWateringNoteId(null)} className="p-2 rounded-full hover:bg-[var(--bg-app)] transition-colors">
                       <X size={18} />
                     </button>
@@ -5039,7 +5341,7 @@ export default function App() {
                   <div className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 mb-4">
                     <p className="font-bold text-[var(--earth)]">{note.title}</p>
                     <p className="text-xs text-[var(--text-muted)] mt-2">
-                      Regar no significa trabajar. Solo mira la idea y decide una acción ligera: sigue viva, necesita un micro-paso o puede pausar.
+	                      Regar no significa trabajar. Solo decide qué merece esta idea hoy.
                     </p>
                   </div>
 
@@ -5048,37 +5350,40 @@ export default function App() {
                     onChange={(event) => setWateringNote(event.target.value)}
                     rows={3}
                     className="w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 text-sm outline-none resize-none focus:bg-[var(--surface-strong)] focus:ring-1 focus:ring-[var(--sage)] transition-all"
-                    placeholder="Opcional: qué la bloquea o qué sigue?"
-                  />
+	                    placeholder="Opcional: qué viste al volver?"
+	                  />
 
-                  <div className="grid grid-cols-1 gap-3 mt-5">
-                    <button
-                      onClick={() => waterNote(note.id, wateringNote.trim() || 'Riego rápido: sigue viva')}
-                      className="w-full rounded-2xl bg-[var(--sage)] text-white px-4 py-3 font-black flex items-center justify-center gap-2 shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
-                    >
-                      <Droplets size={17} /> Sigue viva
-                    </button>
-                    <button
-                      onClick={() => addTinyStep(note.id)}
-                      className="w-full rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] px-4 py-3 font-black flex items-center justify-center gap-2 border border-[var(--border)] hover:bg-[var(--surface-strong)] transition-colors"
-                    >
-                      <Plus size={17} /> Crear micro-paso y enfocar
-                    </button>
-                    <div className="flex items-center justify-between px-2 pt-1 text-[11px] font-black">
-                      <button
-                        onClick={() => { togglePauseNote(note.id); recordWateringRitual(); markRecentlyWatered(note.id); setWateringNoteId(null); }}
-                        className="text-stone-500 hover:text-[var(--sage)] transition-colors flex items-center justify-center gap-1.5"
-                      >
-                        <Pause size={13} /> Pausar sin culpa
-                      </button>
-                      <button
-                        onClick={() => { setSelectedNoteId(note.id); setWateringNoteId(null); }}
-                        className="text-stone-500 hover:text-[var(--sage)] transition-colors flex items-center justify-center gap-1.5"
-                      >
-                        <ArrowRight size={13} /> Abrir detalle
-                      </button>
-                    </div>
-                  </div>
+	                  <div className="mt-5 grid grid-cols-1 gap-2">
+	                    <button
+	                      onClick={() => waterNote(note.id, wateringNote.trim() || 'Riego rápido: sigue viva')}
+	                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 py-3 text-sm font-semibold text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
+	                    >
+	                      <Droplets size={17} /> Sí, regar
+	                    </button>
+	                    <button
+	                      onClick={() => {
+	                        setWateringNoteId(null);
+	                        openSproutPrompt(note.id);
+	                      }}
+	                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--bg-app)] px-4 py-3 text-sm font-semibold text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
+	                    >
+	                      <Sprout size={17} /> Convertir en brote
+	                    </button>
+	                    <div className="grid grid-cols-2 gap-2">
+	                      <button
+	                        onClick={() => { togglePauseNote(note.id); recordWateringRitual(); markRecentlyWatered(note.id); setWateringNoteId(null); }}
+	                        className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--text-muted)] transition-colors hover:text-[var(--sage)]"
+	                      >
+	                        <Pause size={13} /> Pausar
+	                      </button>
+	                      <button
+	                        onClick={() => harvestFromWatering(note.id)}
+	                        className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-green-50 px-3 text-xs font-semibold text-green-700 transition-colors hover:bg-green-100"
+	                      >
+	                        <CheckCircle2 size={13} /> Cosechar
+	                      </button>
+	                    </div>
+	                  </div>
                 </motion.div>
               </motion.div>
             );
@@ -5143,7 +5448,7 @@ export default function App() {
                         setSearch('');
                         setView('garden');
                       }}
-                      className="rounded-2xl bg-[var(--sage)] px-4 py-3 text-sm font-black text-white shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
+                      className="rounded-2xl bg-[var(--sage)] px-4 py-3 text-sm font-black text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
                     >
                       Ver jardín
                     </button>
@@ -5204,7 +5509,7 @@ export default function App() {
                   <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       onClick={() => setHarvestNoteId(null)}
-                      className="rounded-2xl bg-[var(--sage)] text-white py-4 font-black shadow-lg shadow-[var(--sage)]/20"
+                      className="rounded-2xl bg-[var(--sage)] text-[var(--on-sage)] py-4 font-black shadow-lg shadow-[var(--sage)]/20"
                     >
                       Guardar cosecha
                     </button>
@@ -5230,245 +5535,138 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[66] bg-black/30 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+              className="fixed inset-0 z-[66] flex items-end justify-center bg-black/30 p-0 backdrop-blur-sm sm:items-center sm:p-4"
               onClick={() => setShowSettings(false)}
             >
               <motion.div
                 initial={{ opacity: 0, y: 24, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 16, scale: 0.98 }}
-                className="w-full max-w-xl max-h-[88vh] rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] shadow-2xl p-0 overflow-hidden flex flex-col"
+                className="flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-t-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] p-0 shadow-2xl sm:rounded-[2rem]"
                 onClick={(event) => event.stopPropagation()}
               >
-                <div className="flex items-start justify-between gap-4 p-5 sm:p-6 border-b border-[var(--border)] shrink-0">
+                <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-[var(--border)] sm:hidden" />
+                <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--border)] px-5 pb-4 pt-4 sm:p-6">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Ajustes</p>
-                    <h3 className="text-3xl font-serif font-black text-[var(--earth)] mt-1">Tu jardín</h3>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">{t('settings')}</p>
+                    <h3 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--earth)]">Tu jardín</h3>
                   </div>
                   <button onClick={() => setShowSettings(false)} className="p-2 rounded-full hover:bg-[var(--bg-app)] transition-colors" aria-label="Cerrar ajustes">
                     <X size={18} />
                   </button>
                 </div>
 
-                <div className="space-y-4 p-5 sm:p-6 overflow-y-auto app-scrollbar">
-                  <section className="rounded-[2rem] bg-[var(--bg-app)] border border-[var(--border)] p-4 sm:p-5">
-                    <div className="flex flex-col gap-5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-4 min-w-0">
-                        <div className="h-16 w-16 rounded-[1.35rem] bg-gradient-to-tr from-[var(--sage)] to-[var(--seed-accent)] text-white flex items-center justify-center font-serif text-2xl font-black shadow-lg shadow-[var(--sage)]/15 shrink-0">
-                          {accountInitials}
+                <div className="space-y-5 overflow-y-auto p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] app-scrollbar sm:p-6">
+                  <section className="overflow-hidden rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
+                    <div className="flex items-center gap-4 px-4 py-4">
+	                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[1.2rem] bg-[var(--sage)] text-xl font-semibold text-[var(--on-sage)]">
+                        {accountInitials}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="truncate text-xl font-semibold tracking-tight text-[var(--earth)]">{account.name || 'Tu jardín'}</h4>
+                        <p className="mt-0.5 truncate text-sm font-medium text-[var(--text-muted)]">{session?.user?.email || account.email || 'Sin sesión en la nube'}</p>
+                      </div>
+                      <span className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest ${session?.user ? 'bg-green-100 text-green-700' : isSupabaseConfigured ? 'bg-amber-100 text-amber-700' : 'bg-[var(--bg-app)] text-[var(--text-muted)]'}`}>
+                        {session?.user ? 'Sync' : 'Local'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 border-t border-[var(--border)]">
+                      {[
+                        { label: 'Ideas', value: notes.length },
+                        { label: t('sprouts'), value: profileStats.active },
+                        { label: 'Racha', value: wateringRitual.streak },
+                        { label: 'Min', value: profileStats.totalFocus },
+                      ].map(item => (
+                        <div key={item.label} className="border-r border-[var(--border)] px-2 py-3 text-center last:border-r-0">
+                          <p className="text-lg font-semibold text-[var(--earth)]">{item.value}</p>
+                          <p className="mt-0.5 truncate text-[9px] font-medium text-[var(--text-muted)]">{item.label}</p>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Cuenta</p>
-                          <h4 className="mt-1 text-2xl font-serif font-black text-[var(--earth)] truncate">{account.name || 'Tu jardín'}</h4>
-                          <p className="mt-1 text-sm font-black text-[var(--sage)] truncate">{account.purpose || 'Ideas personales'}</p>
-                          <p className="mt-1 text-xs font-semibold text-[var(--text-muted)] truncate">{session?.user?.email || account.email || 'Sin sesión en la nube'}</p>
-                        </div>
-                        </div>
-                        <span className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest shrink-0 ${session?.user ? 'bg-green-100 text-green-700' : isSupabaseConfigured ? 'bg-amber-100 text-amber-700' : 'bg-[var(--surface-strong)] text-[var(--text-muted)]'}`}>
-                          {session?.user ? 'Sync' : 'Local'}
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="overflow-hidden rounded-[1.4rem] border border-[var(--border)] bg-[var(--surface-strong)]">
+                    <details className="group border-b border-[var(--border)] [&_summary::-webkit-details-marker]:hidden">
+                      <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--bg-app)] text-[var(--sage)]">
+                          <User size={16} />
                         </span>
-                      </div>
-
-                      <div className="rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] p-4">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">{profileStats.season}</p>
-                        <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-                          {account.mantra?.trim() || 'Estoy cultivando ideas que merecen volver a existir fuera de mi cabeza.'}
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                        {[
-                          { label: 'Ideas', value: notes.length },
-                          { label: 'Creciendo', value: profileStats.active },
-                          { label: 'Racha', value: wateringRitual.streak },
-                          { label: 'Min', value: profileStats.totalFocus },
-                        ].map(item => (
-                          <div key={item.label} className="rounded-2xl bg-[var(--surface-strong)] border border-[var(--border)] px-3 py-3">
-                            <p className="text-2xl font-serif font-black text-[var(--earth)]">{item.value}</p>
-                            <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        {profileAchievements.map(item => (
-                          <div key={item.label} className={`rounded-2xl border px-3 py-2.5 text-xs font-black ${item.active ? 'border-green-100 bg-green-50 text-green-700' : 'border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-muted)]'}`}>
-                            {item.active ? '✓ ' : ''}{item.label}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] p-4 sm:p-5">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Perfil</p>
-                        <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">Personaliza cómo Seed entiende tu jardín.</p>
-                      </div>
-                    </div>
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <label className="block">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Nombre</span>
-                        <input
-                          value={account.name}
-                          onChange={(event) => setAccount(current => ({ ...current, name: event.target.value }))}
-                          className="mt-1 w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                          placeholder="Tu nombre"
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Uso principal</span>
-                        <div className="mt-1">
-                          <AppSelect
-                          value={account.purpose || 'Ideas personales'}
-                          onChange={(value) => setAccount(current => ({ ...current, purpose: value }))}
-                          ariaLabel="Uso principal"
-                          options={PROFILE_PURPOSE_OPTIONS}
-                        />
-                        </div>
-                      </label>
-                      <label className="block sm:col-span-2">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Rol</span>
-                        <input
-                          value={account.role}
-                          onChange={(event) => setAccount(current => ({ ...current, role: event.target.value }))}
-                          className="mt-1 w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                          placeholder="Creador, estudiante..."
-                        />
-                      </label>
-                      <label className="block sm:col-span-2">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Estoy cultivando</span>
-                        <textarea
-                          value={account.mantra || ''}
-                          onChange={(event) => setAccount(current => ({ ...current, mantra: event.target.value }))}
-                          rows={3}
-                          className="mt-1 w-full resize-none rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                          placeholder="Ej. Ideas para crear una vida más tranquila y proyectos que sí quiero terminar."
-                        />
-                      </label>
-                    </div>
-                  </section>
-
-                  <section className="rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] p-4 sm:p-5">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Sincronización</p>
-                        <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">
-                          {session?.user ? `Conectado como ${session.user.email}` : 'Inicia sesión para llevar tus ideas a otros dispositivos.'}
-                        </p>
-                      </div>
-                      {session?.user ? (
-                        <button onClick={signOut} className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-4 py-2.5 text-xs font-black text-[var(--sage)]">
-                          Cerrar sesión
-                        </button>
-                      ) : null}
-                    </div>
-
-                    {!session?.user ? (
-                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <input
-                          type="email"
-                          value={authEmail}
-                          onChange={(event) => setAuthEmail(event.target.value)}
-                          placeholder="correo@email.com"
-                          className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                        />
-                        <input
-                          type="password"
-                          value={authPassword}
-                          onChange={(event) => setAuthPassword(event.target.value)}
-                          placeholder="Contraseña"
-                          className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                        />
-                        <input
-                          type="password"
-                          value={authConfirmPassword}
-                          onChange={(event) => setAuthConfirmPassword(event.target.value)}
-                          placeholder="Confirmar contraseña"
-                          className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
-                        />
-                        <button
-                          onClick={signInWithEmail}
-                          disabled={Boolean(authDisabledReason)}
-                          className="rounded-2xl bg-[var(--sage)] disabled:opacity-40 text-white py-3 text-xs font-black"
-                        >
-                          Entrar y sincronizar
-                        </button>
-                        <button
-                          onClick={signUpWithEmail}
-                          disabled={Boolean(authDisabledReason)}
-                          className="sm:col-span-2 text-xs font-black text-[var(--sage)]"
-                        >
-                          Crear cuenta nueva
-                        </button>
-                        {authDisabledReason && (
-                          <p className="sm:col-span-2 text-xs font-semibold text-[var(--text-muted)]">{authDisabledReason}</p>
-                        )}
-                      </div>
-                    ) : (
-                      <button
-                        onClick={syncGarden}
-                        disabled={isSyncing}
-                        className="mt-4 w-full rounded-2xl bg-[var(--sage)] disabled:opacity-50 text-white py-3 text-xs font-black"
-                      >
-                        {isSyncing ? 'Sincronizando...' : 'Sincronizar ahora'}
-                      </button>
-                    )}
-
-                    {(authStatus || syncStatus) && (
-                      <p className="mt-3 text-xs font-semibold text-[var(--text-muted)]">{syncStatus || authStatus}</p>
-                    )}
-                  </section>
-
-                  <section className="rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] p-4 sm:p-5">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Preferencias</p>
-                    <div className="mt-4 space-y-4">
-                      <label className="flex flex-col gap-2">
-                        <span className="text-sm font-black text-[var(--earth)]">Ecosistema del jardín actual</span>
-                        <AppSelect
-                          value={activePlanet.theme || theme}
-                          onChange={(value) => {
-                            const selectedTheme = value as Theme;
-                            setTheme(selectedTheme);
-                            setPlanets(current => current.map(planet => planet.id === activePlanet.id ? touchPlanet({ ...planet, theme: selectedTheme }) : planet));
-                          }}
-                          ariaLabel="Ecosistema del jardín actual"
-                          options={THEME_SELECT_OPTIONS}
-                        />
-                      </label>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <label className="flex flex-col gap-2">
-                          <span className="text-sm font-black text-[var(--earth)]">Riego por defecto</span>
-                          <AppSelect
-                            value={String(defaultWateringInterval)}
-                            onChange={(value) => setDefaultWateringInterval(Number(value))}
-                            ariaLabel="Riego por defecto"
-                            options={WATERING_INTERVAL_OPTIONS}
-                          />
-                        </label>
-                        <label className="flex flex-col gap-2">
-                          <span className="text-sm font-black text-[var(--earth)]">Hora de recordatorio</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold text-[var(--earth)]">{t('profile')}</span>
+                          <span className="block truncate text-xs font-medium text-[var(--text-muted)]">{account.name || 'Nombre, rol e intención'}</span>
+                        </span>
+                        <ChevronRight size={16} className="shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-90" />
+                      </summary>
+                      <div className="border-t border-[var(--border)] bg-[var(--bg-app)]/45 px-4 py-3">
+                        <label className="flex min-h-12 items-center gap-3 border-b border-[var(--border)] py-2">
+                          <span className="w-24 shrink-0 text-sm font-medium text-[var(--text-muted)]">Nombre</span>
                           <input
-                            type="time"
-                            value={`${String(reminderHour).padStart(2, '0')}:00`}
-                            onChange={(event) => setReminderHour(Number(event.target.value.split(':')[0] || reminderHour))}
-                            className="w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-3 text-sm font-bold text-[var(--earth)] outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                            value={account.name}
+                            onChange={(event) => setAccount(current => ({ ...current, name: event.target.value }))}
+                            className="min-w-0 flex-1 bg-transparent text-right text-sm font-semibold text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/60"
+                            placeholder="Tu nombre"
+                          />
+                        </label>
+                        <div className="border-b border-[var(--border)] py-3">
+                          <p className="mb-2 text-sm font-medium text-[var(--text-muted)]">Uso principal</p>
+                          <AppSelect
+                            value={account.purpose || 'Ideas personales'}
+                            onChange={(value) => setAccount(current => ({ ...current, purpose: value }))}
+                            ariaLabel="Uso principal"
+                            options={PROFILE_PURPOSE_OPTIONS}
+                          />
+                        </div>
+                        <label className="flex min-h-12 items-center gap-3 border-b border-[var(--border)] py-2">
+                          <span className="w-24 shrink-0 text-sm font-medium text-[var(--text-muted)]">Rol</span>
+                          <input
+                            value={account.role}
+                            onChange={(event) => setAccount(current => ({ ...current, role: event.target.value }))}
+                            className="min-w-0 flex-1 bg-transparent text-right text-sm font-semibold text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/60"
+                            placeholder="Creador, estudiante..."
+                          />
+                        </label>
+                        <label className="block pt-3">
+                          <span className="text-sm font-medium text-[var(--text-muted)]">Estoy cultivando</span>
+                          <textarea
+                            value={account.mantra || ''}
+                            onChange={(event) => setAccount(current => ({ ...current, mantra: event.target.value }))}
+                            rows={3}
+                            className="mt-2 w-full resize-none rounded-2xl bg-[var(--surface-strong)] px-3 py-2.5 text-sm font-medium leading-relaxed text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/60"
+                            placeholder="Ideas para crear una vida más tranquila..."
                           />
                         </label>
                       </div>
+                    </details>
 
-                      <div className="flex flex-col gap-4 rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0">
-                          <p className="font-black text-[var(--earth)]">Recordatorios</p>
-                          <p className="text-xs text-[var(--text-muted)] mt-1">Avisos suaves para volver a ideas que piden riego.</p>
+                    <div className="border-b border-[var(--border)] px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--bg-app)] text-[var(--sage)]">
+                          <Sparkles size={16} />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-[var(--earth)]">Preferencias</p>
+                          <p className="truncate text-xs font-medium text-[var(--text-muted)]">Jardín, riego y recordatorios</p>
                         </div>
-                        <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
-                          <span className="text-xs font-black uppercase tracking-widest text-[var(--text-muted)]">
-                            {notificationsEnabled ? 'On' : 'Off'}
-                          </span>
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        <div>
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Ecosistema</p>
+                          <AppSelect
+                            value={activePlanet.theme || theme}
+                            onChange={(value) => {
+                              const selectedTheme = value as Theme;
+                              setTheme(selectedTheme);
+                              setPlanets(current => current.map(planet => planet.id === activePlanet.id ? touchPlanet({ ...planet, theme: selectedTheme }) : planet));
+                            }}
+                            ariaLabel="Ecosistema del jardín actual"
+                            options={THEME_SELECT_OPTIONS}
+                          />
+                        </div>
+                        <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-[var(--earth)]">Recordatorios</p>
+                            <p className="text-xs text-[var(--text-muted)]">Avisos suaves a las {String(reminderHour).padStart(2, '0')}:00</p>
+                          </div>
                           <AppSwitch
                             checked={notificationsEnabled}
                             onChange={(checked) => checked ? enableNotifications() : setNotificationsEnabled(false)}
@@ -5477,41 +5675,176 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                  </section>
 
-                  <details className="group rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] p-4 sm:p-5">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--sage)]">Datos y ayuda</p>
-                        <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">Exportar, importar, ver guía o borrar datos.</p>
+                    <details className="group border-b border-[var(--border)] [&_summary::-webkit-details-marker]:hidden">
+                      <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--bg-app)] text-[var(--sage)]">
+                          <Clock size={16} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold text-[var(--earth)]">Riego</span>
+                          <span className="block truncate text-xs font-medium text-[var(--text-muted)]">Cada {defaultWateringInterval} días · {String(reminderHour).padStart(2, '0')}:00</span>
+                        </span>
+                        <ChevronRight size={16} className="shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-90" />
+                      </summary>
+                      <div className="space-y-3 border-t border-[var(--border)] bg-[var(--bg-app)]/45 px-4 py-3">
+                        <div>
+                          <p className="mb-2 text-sm font-medium text-[var(--text-muted)]">Riego por defecto</p>
+                          <AppSelect
+                            value={String(defaultWateringInterval)}
+                            onChange={(value) => setDefaultWateringInterval(Number(value))}
+                            ariaLabel="Riego por defecto"
+                            options={WATERING_INTERVAL_OPTIONS}
+                          />
+                        </div>
+                        <label className="flex min-h-12 items-center justify-between gap-3">
+                          <span className="text-sm font-medium text-[var(--text-muted)]">Hora de recordatorio</span>
+                          <input
+                            type="time"
+                            value={`${String(reminderHour).padStart(2, '0')}:00`}
+                            onChange={(event) => setReminderHour(Number(event.target.value.split(':')[0] || reminderHour))}
+                            className="bg-transparent text-right text-sm font-semibold text-[var(--earth)] outline-none"
+                          />
+                        </label>
                       </div>
-                      <ChevronRight className="text-[var(--text-muted)] transition-transform group-open:rotate-90" size={18} />
-                    </summary>
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <button onClick={exportGarden} className="rounded-2xl bg-[var(--earth)] text-white py-3 font-black flex items-center justify-center gap-2">
-                        <Download size={17} /> Markdown
-                      </button>
-                      <button onClick={exportBackup} className="rounded-2xl bg-[var(--earth)] text-white py-3 font-black flex items-center justify-center gap-2">
-                        <Download size={17} /> Backup
-                      </button>
-                      <button onClick={() => importInputRef.current?.click()} className="rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] py-3 font-black border border-[var(--border)]">
-                        Importar backup
-                      </button>
-                      <button
-                        onClick={() => {
-                          setShowSettings(false);
-                          setOnboardingStep(0);
-                          setShowOnboarding(true);
-                        }}
-                        className="rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] py-3 font-black border border-[var(--border)]"
-                      >
-                        Ver guía
-                      </button>
-                      <button onClick={clearGardenData} className="sm:col-span-2 rounded-2xl bg-red-50 text-red-600 py-3 font-black border border-red-100">
-                        Borrar datos locales
-                      </button>
-                    </div>
-                  </details>
+                    </details>
+
+                    <details className="group border-b border-[var(--border)] [&_summary::-webkit-details-marker]:hidden">
+                      <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--bg-app)] text-[var(--sage)]">
+                          <Cloud size={16} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold text-[var(--earth)]">Sincronización</span>
+                          <span className="block truncate text-xs font-medium text-[var(--text-muted)]">
+                            {session?.user ? session.user.email : 'Modo local'}
+                          </span>
+                        </span>
+                        <ChevronRight size={16} className="shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-90" />
+                      </summary>
+                      <div className="border-t border-[var(--border)] bg-[var(--bg-app)]/45 px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-[var(--earth)]">{session?.user ? 'Cuenta conectada' : 'Modo local'}</p>
+                            <p className="mt-1 text-xs font-medium leading-relaxed text-[var(--text-muted)]">
+                              {session?.user ? session.user.email : 'Inicia sesión para llevar tus ideas a otros dispositivos.'}
+                            </p>
+                          </div>
+                          {session?.user && (
+                            <button onClick={signOut} className="shrink-0 rounded-full bg-[var(--surface-strong)] px-3 py-2 text-xs font-semibold text-[var(--sage)]">
+                              Salir
+                            </button>
+                          )}
+                        </div>
+
+                        {!session?.user ? (
+                          <div className="mt-4 space-y-2">
+                            <input
+                              type="email"
+                              value={authEmail}
+                              onChange={(event) => setAuthEmail(event.target.value)}
+                              placeholder="correo@email.com"
+                              className="h-11 w-full rounded-2xl bg-[var(--surface-strong)] px-3 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                            />
+                            <input
+                              type="password"
+                              value={authPassword}
+                              onChange={(event) => setAuthPassword(event.target.value)}
+                              placeholder="Contraseña"
+                              className="h-11 w-full rounded-2xl bg-[var(--surface-strong)] px-3 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                            />
+                            <input
+                              type="password"
+                              value={authConfirmPassword}
+                              onChange={(event) => setAuthConfirmPassword(event.target.value)}
+                              placeholder="Confirmar contraseña"
+                              className="h-11 w-full rounded-2xl bg-[var(--surface-strong)] px-3 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                            />
+                            <div className="grid grid-cols-2 gap-2 pt-1">
+                              <button
+                                onClick={signInWithEmail}
+                                disabled={Boolean(authDisabledReason)}
+                                className="h-11 rounded-full bg-[var(--sage)] text-sm font-semibold text-[var(--on-sage)] disabled:opacity-40"
+                              >
+                                Entrar
+                              </button>
+                              <button
+                                onClick={signUpWithEmail}
+                                disabled={Boolean(authDisabledReason)}
+                                className="h-11 rounded-full bg-[var(--surface-strong)] text-sm font-semibold text-[var(--sage)] disabled:opacity-40"
+                              >
+                                Crear cuenta
+                              </button>
+                            </div>
+                            {authDisabledReason && (
+                              <p className="text-xs font-medium text-[var(--text-muted)]">{authDisabledReason}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={syncGarden}
+                            disabled={isSyncing}
+                            className="mt-4 h-11 w-full rounded-full bg-[var(--sage)] text-sm font-semibold text-[var(--on-sage)] disabled:opacity-50"
+                          >
+                            {isSyncing ? 'Sincronizando...' : 'Sincronizar ahora'}
+                          </button>
+                        )}
+
+                        {(authStatus || syncStatus) && (
+                          <p className="mt-3 text-xs font-medium text-[var(--text-muted)]">{syncStatus || authStatus}</p>
+                        )}
+                      </div>
+                    </details>
+
+                    <details className="group [&_summary::-webkit-details-marker]:hidden">
+                      <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--bg-app)] text-[var(--sage)]">
+                          <Archive size={16} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold text-[var(--earth)]">Datos y ayuda</span>
+                          <span className="block truncate text-xs font-medium text-[var(--text-muted)]">Backups, guía y datos locales</span>
+                        </span>
+                        <ChevronRight size={16} className="shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-90" />
+                      </summary>
+                      <div className="border-t border-[var(--border)] bg-[var(--bg-app)]/45">
+                        {[
+                          { label: 'Exportar Markdown', icon: Download, onClick: exportGarden },
+                          { label: 'Exportar backup', icon: Download, onClick: exportBackup },
+                          { label: 'Importar backup', icon: Archive, onClick: () => importInputRef.current?.click() },
+                          {
+                            label: 'Ver guía',
+                            icon: Sparkles,
+                            onClick: () => {
+                              setShowSettings(false);
+                              setOnboardingStep(0);
+                              setShowOnboarding(true);
+                            },
+                          },
+                        ].map((item, index) => (
+                          <button
+                            key={item.label}
+                            type="button"
+                            onClick={item.onClick}
+                            className={`flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--surface-hover)] ${index > 0 ? 'border-t border-[var(--border)]' : ''}`}
+                          >
+                            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--surface-strong)] text-[var(--sage)]">
+                              <item.icon size={15} />
+                            </span>
+                            <span className="min-w-0 flex-1 text-sm font-semibold text-[var(--earth)]">{item.label}</span>
+                            <ChevronRight size={15} className="text-[var(--text-muted)]" />
+                          </button>
+                        ))}
+                        <button onClick={clearGardenData} className="flex min-h-12 w-full items-center gap-3 border-t border-[var(--border)] px-4 py-2.5 text-left text-sm font-semibold text-red-600">
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-red-50 text-red-600">
+                            <Trash2 size={15} />
+                          </span>
+                          <span className="min-w-0 flex-1">Borrar datos locales</span>
+                          <ChevronRight size={15} className="text-red-300" />
+                        </button>
+                      </div>
+                    </details>
+                  </section>
                   <input
                     ref={importInputRef}
                     type="file"
@@ -5594,7 +5927,7 @@ export default function App() {
                             className="rounded-[1.75rem] border border-[var(--border)] bg-[var(--bg-app)] p-4 sm:p-5"
                           >
                             <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-                              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[var(--sage)] text-white shadow-lg shadow-[var(--sage)]/20">
+                              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[var(--sage)] text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20">
                                 <StepIcon size={24} />
                               </span>
                               <div>
@@ -5626,7 +5959,7 @@ export default function App() {
                               }
                               setOnboardingStep(value => Math.min(ONBOARDING_STEPS.length - 1, value + 1));
                             }}
-                            className="rounded-2xl bg-[var(--sage)] px-5 py-3 font-black text-white shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
+                            className="rounded-2xl bg-[var(--sage)] px-5 py-3 font-black text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
                           >
                             {isLastStep ? 'Plantar primera semilla' : 'Siguiente'}
                           </button>
@@ -5649,18 +5982,132 @@ export default function App() {
           )}
         </AnimatePresence>
 
+        <AnimatePresence>
+          {isAdding && (
+            <motion.div
+              className="fixed inset-0 z-[70] flex h-dvh items-end justify-center bg-black/20 text-[var(--text-main)] backdrop-blur-sm sm:items-center sm:p-5"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                layoutId="new-seed-surface"
+                className="flex h-[min(92dvh,48rem)] w-full max-w-3xl flex-col overflow-hidden rounded-t-[2rem] border border-[var(--border)] bg-[var(--bg-app)] shadow-[0_24px_80px_rgba(0,0,0,0.20)] sm:rounded-[2rem]"
+                initial={{ y: 80, scale: 0.96, borderRadius: 36 }}
+                animate={{ y: 0, scale: 1, borderRadius: 32 }}
+                exit={{ y: 80, scale: 0.96, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 38, mass: 0.86 }}
+              >
+              <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-[var(--border)] sm:hidden" />
+              <div className="flex h-[calc(env(safe-area-inset-top)+3.75rem)] shrink-0 items-end border-b border-[var(--border)]/70 bg-[var(--surface-strong)]/88 px-4 pb-3 backdrop-blur-2xl sm:h-16 sm:px-6">
+                <div className="mx-auto flex w-full items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsAdding(false)}
+                    className="h-10 rounded-full px-1 text-[15px] font-semibold text-[var(--sage)]"
+                  >
+                    {t('cancel')}
+                  </button>
+                  <div className="min-w-0 text-center">
+                    <p className="truncate text-[15px] font-semibold text-[var(--earth)]">{t('newSeed')}</p>
+                    <p className="truncate text-xs font-medium text-[var(--text-muted)]">{activePlanet.name}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addNote}
+                    disabled={!newNote.title.trim() && !newNote.content.trim()}
+                    className="h-10 rounded-full px-1 text-[15px] font-semibold text-[var(--sage)] disabled:opacity-35"
+                  >
+                    {t('plant')}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto app-scrollbar">
+                <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-5 py-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:px-8 sm:py-8">
+                  <div className="flex-1">
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder={appLanguage === 'en' ? 'Title' : 'Título'}
+                    value={newNote.title}
+                    onChange={(event) => setNewNote({ ...newNote, title: event.target.value })}
+                    enterKeyHint="next"
+                      className="w-full bg-transparent text-3xl font-semibold leading-tight tracking-tight text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/38 sm:text-4xl"
+                  />
+                  <textarea
+                    placeholder={appLanguage === 'en' ? 'Optional note' : 'Nota opcional'}
+                    rows={10}
+                    value={newNote.content}
+                    onChange={(event) => setNewNote({ ...newNote, content: event.target.value })}
+                    enterKeyHint="done"
+                    onKeyDown={(event) => {
+                      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                        addNote();
+                      }
+                    }}
+                      className="mt-3 min-h-[18rem] w-full resize-none bg-transparent text-lg font-medium leading-relaxed text-[var(--text-main)] outline-none placeholder:text-[var(--text-muted)]/50"
+                  />
+                  </div>
+
+                  <div className="sticky bottom-0 -mx-5 border-t border-[var(--border)]/70 bg-[var(--bg-app)]/92 px-5 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-2xl sm:-mx-8 sm:px-8">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex gap-2 overflow-x-auto app-scrollbar">
+                        {SEED_TYPES.map(type => (
+                          <button
+                            key={type.id}
+                            type="button"
+                            onClick={() => setNewNote({ ...newNote, seedType: type.id })}
+                            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                              newNote.seedType === type.id
+                                ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+                                : 'bg-[var(--surface-soft)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--earth)]'
+                            }`}
+                          >
+                            {type.label}
+                          </button>
+                        ))}
+                      </div>
+                      <details className="group shrink-0">
+                        <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-full bg-[var(--surface-soft)] px-3 text-xs font-semibold text-[var(--text-muted)]">
+                          <Settings size={14} className="text-[var(--sage)]" />
+                          {t('options')}
+                        </summary>
+                        <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+4.4rem)] left-5 right-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] p-3 shadow-2xl backdrop-blur-2xl sm:left-auto sm:right-8 sm:w-72">
+                          <label className="flex h-10 items-center gap-2 rounded-xl bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--text-muted)]">
+                            <CalendarIcon size={15} className="shrink-0 text-[var(--sage)]" />
+                            <span className="shrink-0">{t('date')}</span>
+                            <input
+                              type="date"
+                              value={newNote.dueDate}
+                              onChange={(event) => setNewNote({ ...newNote, dueDate: event.target.value })}
+                              className="min-w-0 flex-1 bg-transparent text-right text-xs font-semibold text-[var(--earth)] outline-none"
+                            />
+                          </label>
+                        </div>
+                      </details>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Floating Action Button */}
-        {!isAdding && !selectedNoteId && (
+        {!isAdding && view !== 'focus' && !showGardenFullscreen && (
           <motion.button
             whileTap={{ y: 1 }}
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             onClick={startPlanting}
-            className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-4 right-4 z-50 flex h-14 items-center justify-center gap-2 overflow-hidden rounded-[1.5rem] bg-[var(--sage)] font-black text-white shadow-2xl shadow-[var(--sage)]/25 soft-interaction hover:shadow-[0_18px_45px_rgba(47,62,51,0.28)] md:bottom-8 md:left-auto md:right-8 md:w-14 md:rounded-full"
-            aria-label="Plantar idea"
+            title={t('newSeed')}
+            layoutId="new-seed-surface"
+            className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.1rem)] right-5 z-50 grid h-13 w-13 place-items-center rounded-full border border-white/40 bg-[var(--sage)] text-[var(--on-sage)] shadow-[0_14px_38px_rgba(47,62,51,0.24)] backdrop-blur-xl soft-interaction hover:scale-[1.03] hover:shadow-[0_18px_45px_rgba(47,62,51,0.28)] md:bottom-8 md:right-8"
+            aria-label={t('newSeed')}
           >
-            <Leaf size={24} />
-            <span className="md:hidden">Plantar idea</span>
+            <Plus size={25} strokeWidth={2.4} />
           </motion.button>
         )}
       </main>

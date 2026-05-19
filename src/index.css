@@ -1,9 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Cormorant Garamond", serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
+  --font-serif: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
 }
 
 @keyframes sway {
@@ -17,7 +16,7 @@
 }
 
 .seed-card {
-  border-radius: 28px;
+  border-radius: 18px;
   transform: translateZ(0);
   backface-visibility: hidden;
   contain: layout paint;
@@ -34,8 +33,13 @@
   background:
     radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.78), transparent 24%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.42), transparent 42%);
-  opacity: 0.76;
+  opacity: 0.22;
   pointer-events: none;
+}
+
+.font-serif {
+  font-family: var(--font-sans) !important;
+  letter-spacing: -0.01em;
 }
 
 .app-scrollbar {
@@ -75,6 +79,20 @@
     transform 160ms ease;
 }
 
+.safe-app-shell {
+  --safe-top-space: calc(env(safe-area-inset-top, 0px) + 5rem);
+  --safe-top-control: calc(env(safe-area-inset-top, 0px) + 1rem);
+  --safe-bottom-space: calc(env(safe-area-inset-bottom, 0px) + 7rem);
+}
+
+@media (min-width: 768px) {
+  .safe-app-shell {
+    --safe-top-space: 2.5rem;
+    --safe-top-control: 1.25rem;
+    --safe-bottom-space: 2.5rem;
+  }
+}
+
 @media (hover: none) {
   .seed-card {
     will-change: auto;
@@ -83,26 +101,30 @@
 
 @layer base {
   :root {
-    --bg-app: #f7f3e8;
-    --sidebar-bg: #eee7d8;
-    --card-bg: rgba(255, 252, 245, 0.84);
-    --surface-soft: rgba(255, 252, 245, 0.58);
-    --surface-strong: rgba(255, 255, 255, 0.9);
-    --surface-hover: rgba(255, 255, 255, 0.72);
-    --sage: #6f7d4f;
-    --earth: #5a4635;
-    --seed: #c98f58;
-    --ink: #2f3b2f;
-    --sky-1: #f7f3e8;
-    --sky-2: #efe5cf;
-    --glow: rgba(201, 143, 88, 0.18);
-    --shadow-color: rgba(77, 61, 43, 0.12);
+    --bg-app: #f5f5f7;
+    --sidebar-bg: #eeeeef;
+    --card-bg: rgba(255, 255, 255, 0.86);
+    --surface-soft: rgba(255, 255, 255, 0.58);
+    --surface-strong: rgba(255, 255, 255, 0.94);
+    --surface-hover: rgba(242, 242, 247, 0.9);
+    --sage: #436f52;
+    --earth: #1d1d1f;
+    --seed: #8a8f7a;
+    --ink: #1d1d1f;
+    --sky-1: #f5f5f7;
+    --sky-2: #ececf0;
+    --glow: rgba(79, 127, 95, 0.08);
+    --shadow-color: rgba(0, 0, 0, 0.08);
     
     --seed-primary: var(--sage);
     --seed-accent: var(--seed);
+    --accent: var(--seed-accent);
     --text-main: var(--ink);
-    --text-muted: #6b7280;
-    --border: rgba(78, 63, 45, 0.1);
+    --text-muted: #6e6e73;
+    --on-sage: #ffffff;
+    --on-earth: #ffffff;
+    --on-accent: #111111;
+    --border: rgba(60, 60, 67, 0.12);
   }
 
   [data-theme="forest"] {
@@ -120,10 +142,14 @@
     --sky-2: #18343a;
     --glow: rgba(115, 151, 127, 0.18);
     --shadow-color: rgba(0, 0, 0, 0.22);
-    --seed-primary: #9fbf88;
+    --seed-primary: var(--sage);
     --seed-accent: #bfa06a;
+    --accent: var(--seed-accent);
     --text-main: #f4f8ee;
     --text-muted: #bdcfc7;
+    --on-sage: #0b1d14;
+    --on-earth: #0b1d14;
+    --on-accent: #1d1408;
     --border: rgba(194, 216, 203, 0.16);
   }
 
@@ -134,7 +160,7 @@
     --surface-soft: rgba(255, 239, 244, 0.68);
     --surface-strong: rgba(255, 255, 255, 0.94);
     --surface-hover: rgba(255, 255, 255, 0.78);
-    --sage: #7c8f4f;
+    --sage: #63733c;
     --earth: #64344c;
     --seed: #d94f75;
     --ink: #3f2432;
@@ -142,10 +168,14 @@
     --sky-2: #ffe1d4;
     --glow: rgba(217, 79, 117, 0.18);
     --shadow-color: rgba(105, 50, 74, 0.12);
-    --seed-primary: #7c8f4f;
+    --seed-primary: var(--sage);
     --seed-accent: #d94f75;
+    --accent: var(--seed-accent);
     --text-main: #3f2432;
     --text-muted: #7a5b68;
+    --on-sage: #ffffff;
+    --on-earth: #ffffff;
+    --on-accent: #1d1016;
     --border: rgba(217, 79, 117, 0.14);
   }
 
@@ -164,20 +194,24 @@
     --sky-2: #162137;
     --glow: rgba(156, 201, 255, 0.18);
     --shadow-color: rgba(0, 0, 0, 0.32);
-    --seed-primary: #9cc9ff;
+    --seed-primary: var(--sage);
     --seed-accent: #c7a5ff;
+    --accent: var(--seed-accent);
     --text-main: #f4f7fb;
     --text-muted: #aebbd0;
+    --on-sage: #08111c;
+    --on-earth: #090f1a;
+    --on-accent: #120d1f;
     --border: rgba(174, 187, 208, 0.16);
   }
 
   [data-theme="jungle"] {
     --bg-app: #063b2a;
     --sidebar-bg: #042f24;
-    --card-bg: rgba(18, 105, 70, 0.84);
-    --surface-soft: rgba(12, 92, 62, 0.64);
-    --surface-strong: rgba(30, 135, 83, 0.92);
-    --surface-hover: rgba(41, 165, 93, 0.78);
+    --card-bg: rgba(12, 88, 60, 0.88);
+    --surface-soft: rgba(9, 74, 52, 0.68);
+    --surface-strong: rgba(18, 102, 68, 0.94);
+    --surface-hover: rgba(25, 127, 78, 0.82);
     --sage: #b7f35a;
     --earth: #fff7d6;
     --seed: #ffb84d;
@@ -186,10 +220,14 @@
     --sky-2: #19a974;
     --glow: rgba(255, 198, 76, 0.24);
     --shadow-color: rgba(0, 0, 0, 0.28);
-    --seed-primary: #b7f35a;
+    --seed-primary: var(--sage);
     --seed-accent: #ffb84d;
+    --accent: var(--seed-accent);
     --text-main: #fffbe8;
-    --text-muted: #dff7ad;
+    --text-muted: #eaf8c8;
+    --on-sage: #10200a;
+    --on-earth: #14200b;
+    --on-accent: #211506;
     --border: rgba(255, 244, 180, 0.18);
   }
 
@@ -208,10 +246,14 @@
     --sky-2: #34205e;
     --glow: rgba(121, 242, 192, 0.2);
     --shadow-color: rgba(0, 0, 0, 0.34);
-    --seed-primary: #79f2c0;
+    --seed-primary: var(--sage);
     --seed-accent: #d46cff;
+    --accent: var(--seed-accent);
     --text-main: #fbf7ff;
     --text-muted: #cabbe4;
+    --on-sage: #100b20;
+    --on-earth: #160d2b;
+    --on-accent: #13071a;
     --border: rgba(212, 108, 255, 0.18);
   }
 
@@ -222,7 +264,7 @@
     --surface-soft: rgba(255, 243, 204, 0.68);
     --surface-strong: rgba(255, 253, 244, 0.94);
     --surface-hover: rgba(255, 246, 218, 0.8);
-    --sage: #6f8b52;
+    --sage: #526a39;
     --earth: #67452f;
     --seed: #cf7f3f;
     --ink: #3f2f24;
@@ -230,10 +272,14 @@
     --sky-2: #f1bf76;
     --glow: rgba(207, 127, 63, 0.2);
     --shadow-color: rgba(103, 69, 47, 0.14);
-    --seed-primary: #6f8b52;
+    --seed-primary: var(--sage);
     --seed-accent: #cf7f3f;
+    --accent: var(--seed-accent);
     --text-main: #3f2f24;
     --text-muted: #7b6048;
+    --on-sage: #ffffff;
+    --on-earth: #ffffff;
+    --on-accent: #211508;
     --border: rgba(103, 69, 47, 0.14);
   }
 
@@ -244,7 +290,7 @@
     --surface-soft: rgba(235, 250, 255, 0.74);
     --surface-strong: rgba(255, 255, 255, 0.96);
     --surface-hover: rgba(237, 249, 255, 0.84);
-    --sage: #4f9bbb;
+    --sage: #2d7591;
     --earth: #284c5d;
     --seed: #7ab9d6;
     --ink: #183542;
@@ -252,34 +298,42 @@
     --sky-2: #cfeef8;
     --glow: rgba(122, 185, 214, 0.22);
     --shadow-color: rgba(40, 76, 93, 0.12);
-    --seed-primary: #4f9bbb;
+    --seed-primary: var(--sage);
     --seed-accent: #7ab9d6;
+    --accent: var(--seed-accent);
     --text-main: #183542;
-    --text-muted: #5f7f8f;
+    --text-muted: #4d6f7f;
+    --on-sage: #ffffff;
+    --on-earth: #ffffff;
+    --on-accent: #071923;
     --border: rgba(79, 155, 187, 0.16);
   }
 
   body {
-    background:
-      radial-gradient(circle at 82% 12%, var(--glow), transparent 28%),
-      linear-gradient(145deg, var(--sky-1), var(--sky-2));
+    background: var(--bg-app);
     color: var(--text-main);
     transition: background-color 0.3s ease, color 0.3s ease;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
 
   body::before {
-    content: "";
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-image: url("https://www.transparenttextures.com/patterns/felt.png");
-    opacity: 0.025;
-    pointer-events: none;
-    z-index: 9999;
+    content: none;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input,
+  textarea,
+  select {
+    -webkit-appearance: none;
+    appearance: none;
   }
 
   @media (prefers-reduced-motion: reduce) {
