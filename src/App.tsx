@@ -3389,10 +3389,14 @@ export default function App() {
 	    const content = newNote.content.trim();
 	    if (!title && !content) return;
 	    const fallbackContent = content || title;
+	    const inferredTitle = fallbackContent
+	      .split('\n')
+	      .map(line => line.trim())
+	      .find(Boolean) || fallbackContent;
 	    
 	    const note: SeedNote = {
 	      id: crypto.randomUUID(),
-	      title: title || (fallbackContent.length > 42 ? `${fallbackContent.slice(0, 42)}...` : fallbackContent) || 'Nueva Semilla',
+	      title: title || (inferredTitle.length > 42 ? `${inferredTitle.slice(0, 42)}...` : inferredTitle) || 'Nueva Semilla',
 	      content: fallbackContent,
 	      createdAt: Date.now(),
 	      tags: [],
@@ -4095,7 +4099,7 @@ export default function App() {
         )}
       </AnimatePresence>
       {/* Sidebar Navigation */}
-	      <aside className={`fixed bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-3 right-3 top-auto z-50 flex max-h-[calc(100vh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] shrink-0 flex-col overflow-y-auto rounded-[2rem] border border-white/60 bg-[var(--sidebar-bg)]/94 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-2xl transition-all duration-300 app-scrollbar md:static md:z-20 md:h-screen md:max-h-none md:w-72 md:max-w-none md:translate-y-0 md:scale-100 md:rounded-none md:border-r md:border-[var(--border)] md:bg-[var(--sidebar-bg)] md:p-6 md:opacity-100 md:shadow-none ${showMobileMenu ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-8 scale-[0.96] opacity-0 md:pointer-events-auto'}`}>
+      <aside className={`fixed left-3 right-3 top-[calc(var(--safe-top-control)+3.7rem)] z-50 flex max-h-[calc(100vh-var(--safe-top-control)-env(safe-area-inset-bottom)-5rem)] shrink-0 origin-top flex-col overflow-y-auto rounded-[2rem] border border-white/60 bg-[var(--sidebar-bg)]/94 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-2xl transition-all duration-300 app-scrollbar md:static md:z-20 md:h-screen md:max-h-none md:w-72 md:max-w-none md:origin-center md:translate-y-0 md:scale-100 md:rounded-none md:border-r md:border-[var(--border)] md:bg-[var(--sidebar-bg)] md:p-6 md:opacity-100 md:shadow-none ${showMobileMenu ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none -translate-y-3 scale-[0.97] opacity-0 md:pointer-events-auto'}`}>
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--border)] md:hidden" />
         <motion.div 
           initial={{ opacity: 0, y: 4 }}
@@ -5985,59 +5989,57 @@ export default function App() {
         <AnimatePresence>
           {isAdding && (
             <motion.div
-              className="fixed inset-0 z-[70] flex h-dvh items-end justify-center bg-black/20 text-[var(--text-main)] backdrop-blur-sm sm:items-center sm:p-5"
+              className="fixed inset-0 z-[70] flex h-dvh items-center justify-center bg-black/10 px-3 py-[calc(env(safe-area-inset-top)+0.8rem)] text-[var(--text-main)] backdrop-blur-md sm:p-5"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
+              onClick={() => setIsAdding(false)}
             >
               <motion.div
-                layoutId="new-seed-surface"
-                className="flex h-[min(92dvh,48rem)] w-full max-w-3xl flex-col overflow-hidden rounded-t-[2rem] border border-[var(--border)] bg-[var(--bg-app)] shadow-[0_24px_80px_rgba(0,0,0,0.20)] sm:rounded-[2rem]"
-                initial={{ y: 80, scale: 0.96, borderRadius: 36 }}
-                animate={{ y: 0, scale: 1, borderRadius: 32 }}
-                exit={{ y: 80, scale: 0.96, opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 420, damping: 38, mass: 0.86 }}
+                className="relative flex h-[min(54dvh,28rem)] min-h-[22.5rem] w-full max-w-lg flex-col overflow-hidden rounded-[2.15rem] border border-white/45 bg-[var(--surface-strong)]/96 shadow-[0_26px_90px_rgba(0,0,0,0.18)] backdrop-blur-2xl"
+                initial={{ y: 10, scale: 0.965, opacity: 0 }}
+                animate={{ y: 0, scale: 1, opacity: 1 }}
+                exit={{ y: 8, scale: 0.975, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 560, damping: 44, mass: 0.68 }}
+                onClick={(event) => event.stopPropagation()}
               >
-              <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-[var(--border)] sm:hidden" />
-              <div className="flex h-[calc(env(safe-area-inset-top)+3.75rem)] shrink-0 items-end border-b border-[var(--border)]/70 bg-[var(--surface-strong)]/88 px-4 pb-3 backdrop-blur-2xl sm:h-16 sm:px-6">
-                <div className="mx-auto flex w-full items-center justify-between gap-3">
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[linear-gradient(180deg,var(--bg-app)_0%,transparent_82%)] opacity-55" />
+                <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-white/70" />
+                <div className="relative mx-auto mt-3 h-1 w-10 rounded-full bg-[var(--border)]/75 sm:hidden" />
+                <div className="relative z-10 flex h-[4.85rem] shrink-0 items-center border-b border-[var(--border)]/55 px-4 pt-1 sm:px-5">
                   <button
                     type="button"
                     onClick={() => setIsAdding(false)}
-                    className="h-10 rounded-full px-1 text-[15px] font-semibold text-[var(--sage)]"
+                    className="absolute left-4 top-1/2 z-10 h-9 -translate-y-1/2 rounded-full text-left text-[15px] font-semibold text-[var(--sage)]"
                   >
                     {t('cancel')}
                   </button>
-                  <div className="min-w-0 text-center">
-                    <p className="truncate text-[15px] font-semibold text-[var(--earth)]">{t('newSeed')}</p>
-                    <p className="truncate text-xs font-medium text-[var(--text-muted)]">{activePlanet.name}</p>
+                  <div className="pointer-events-none absolute inset-x-24 top-1/2 min-w-0 -translate-y-1/2 text-center">
+                    <p className="truncate text-[16px] font-semibold leading-5 text-[var(--earth)]">
+                      {appLanguage === 'en' ? 'New seed' : 'Nueva semilla'}
+                    </p>
+                    <p className="mt-1 truncate text-[11px] font-medium text-[var(--text-muted)]">
+                      {appLanguage === 'en' ? 'Capture now. Decide later.' : 'Captura ahora. Decide después.'}
+                    </p>
                   </div>
                   <button
                     type="button"
                     onClick={addNote}
                     disabled={!newNote.title.trim() && !newNote.content.trim()}
-                    className="h-10 rounded-full px-1 text-[15px] font-semibold text-[var(--sage)] disabled:opacity-35"
+                    className={`absolute right-4 top-1/2 z-10 h-9 -translate-y-1/2 rounded-full text-right text-[15px] font-semibold transition-colors disabled:opacity-35 ${
+                      newNote.title.trim() || newNote.content.trim() ? 'text-[var(--sage)]' : 'text-[var(--text-muted)]'
+                    }`}
                   >
                     {t('plant')}
                   </button>
                 </div>
-              </div>
 
-              <div className="flex-1 overflow-y-auto app-scrollbar">
-                <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-5 py-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:px-8 sm:py-8">
-                  <div className="flex-1">
-                  <input
-                    autoFocus
-                    type="text"
-                    placeholder={appLanguage === 'en' ? 'Title' : 'Título'}
-                    value={newNote.title}
-                    onChange={(event) => setNewNote({ ...newNote, title: event.target.value })}
-                    enterKeyHint="next"
-                      className="w-full bg-transparent text-3xl font-semibold leading-tight tracking-tight text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/38 sm:text-4xl"
-                  />
+                <div className="relative z-10 flex min-h-0 flex-1 flex-col px-5 pt-6 sm:px-6">
                   <textarea
-                    placeholder={appLanguage === 'en' ? 'Optional note' : 'Nota opcional'}
-                    rows={10}
+                    autoFocus
+                    placeholder={appLanguage === 'en' ? 'Write the idea as it arrives...' : 'Escribe la idea tal como llega...'}
+                    rows={5}
                     value={newNote.content}
                     onChange={(event) => setNewNote({ ...newNote, content: event.target.value })}
                     enterKeyHint="done"
@@ -6046,13 +6048,34 @@ export default function App() {
                         addNote();
                       }
                     }}
-                      className="mt-3 min-h-[18rem] w-full resize-none bg-transparent text-lg font-medium leading-relaxed text-[var(--text-main)] outline-none placeholder:text-[var(--text-muted)]/50"
+                    className="quick-seed-textarea min-h-0 flex-1 resize-none bg-transparent text-[1.32rem] font-medium leading-[1.55] tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/38 sm:text-[1.45rem]"
                   />
-                  </div>
 
-                  <div className="sticky bottom-0 -mx-5 border-t border-[var(--border)]/70 bg-[var(--bg-app)]/92 px-5 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-2xl sm:-mx-8 sm:px-8">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex gap-2 overflow-x-auto app-scrollbar">
+                  <details className="group shrink-0 pb-3 [&_summary::-webkit-details-marker]:hidden">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-full bg-[var(--bg-app)]/62 px-3 text-xs font-semibold text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-soft)]">
+                      <span className="flex min-w-0 items-center gap-2 truncate">
+                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--surface-strong)] text-[var(--sage)] shadow-[inset_0_0_0_1px_var(--border)]">
+                          <Leaf size={13} />
+                        </span>
+                        <span className="truncate">
+                          {appLanguage === 'en' ? 'Seedbed' : 'Semillero'} · {SEED_TYPES.find(type => type.id === newNote.seedType)?.label || 'Idea'}
+                          {newNote.dueDate ? ` · ${formatShortDate(new Date(newNote.dueDate).getTime())}` : ''}
+                        </span>
+                      </span>
+                      <span className="inline-flex shrink-0 items-center gap-1.5">
+                        {appLanguage === 'en' ? 'Details' : 'Detalles'}
+                        <ChevronDown size={13} className="transition-transform group-open:rotate-180" />
+                      </span>
+                    </summary>
+                    <div className="mt-2 space-y-3 rounded-[1.45rem] border border-[var(--border)]/80 bg-[var(--bg-app)]/72 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
+                      <input
+                        type="text"
+                        placeholder={appLanguage === 'en' ? 'Optional title' : 'Título opcional'}
+                        value={newNote.title}
+                        onChange={(event) => setNewNote({ ...newNote, title: event.target.value })}
+                        className="h-10 w-full rounded-xl bg-[var(--surface-strong)] px-3 text-base font-semibold text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/55"
+                      />
+                      <div className="flex gap-1.5 overflow-x-auto app-scrollbar">
                         {SEED_TYPES.map(type => (
                           <button
                             key={type.id}
@@ -6060,36 +6083,29 @@ export default function App() {
                             onClick={() => setNewNote({ ...newNote, seedType: type.id })}
                             className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
                               newNote.seedType === type.id
-                                ? 'bg-[var(--sage)] text-[var(--on-sage)]'
-                                : 'bg-[var(--surface-soft)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--earth)]'
+                                ? 'bg-[var(--sage)] text-[var(--on-sage)] shadow-[0_8px_18px_rgba(47,62,51,0.16)]'
+                                : 'bg-[var(--surface-strong)] text-[var(--text-muted)] hover:text-[var(--earth)]'
                             }`}
                           >
                             {type.label}
                           </button>
                         ))}
                       </div>
-                      <details className="group shrink-0">
-                        <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-full bg-[var(--surface-soft)] px-3 text-xs font-semibold text-[var(--text-muted)]">
-                          <Settings size={14} className="text-[var(--sage)]" />
-                          {t('options')}
-                        </summary>
-                        <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+4.4rem)] left-5 right-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] p-3 shadow-2xl backdrop-blur-2xl sm:left-auto sm:right-8 sm:w-72">
-                          <label className="flex h-10 items-center gap-2 rounded-xl bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--text-muted)]">
-                            <CalendarIcon size={15} className="shrink-0 text-[var(--sage)]" />
-                            <span className="shrink-0">{t('date')}</span>
-                            <input
-                              type="date"
-                              value={newNote.dueDate}
-                              onChange={(event) => setNewNote({ ...newNote, dueDate: event.target.value })}
-                              className="min-w-0 flex-1 bg-transparent text-right text-xs font-semibold text-[var(--earth)] outline-none"
-                            />
-                          </label>
-                        </div>
-                      </details>
+                      <label className="flex h-10 items-center gap-2 rounded-xl bg-[var(--surface-strong)] px-3 text-xs font-semibold text-[var(--text-muted)]">
+                        <CalendarIcon size={14} className="shrink-0 text-[var(--sage)]" />
+                        <span className="shrink-0">{t('date')}</span>
+                        <input
+                          type="date"
+                          value={newNote.dueDate}
+                          onChange={(event) => setNewNote({ ...newNote, dueDate: event.target.value })}
+                          className="min-w-0 flex-1 bg-transparent text-right text-base font-semibold text-[var(--earth)] outline-none"
+                        />
+                      </label>
                     </div>
-                  </div>
+                  </details>
                 </div>
-              </div>
+
+                <div className="h-[env(safe-area-inset-bottom)] shrink-0" />
               </motion.div>
             </motion.div>
           )}
@@ -6099,12 +6115,11 @@ export default function App() {
         {!isAdding && view !== 'focus' && !showGardenFullscreen && (
           <motion.button
             whileTap={{ y: 1 }}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            onClick={startPlanting}
-            title={t('newSeed')}
-            layoutId="new-seed-surface"
-            className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.1rem)] right-5 z-50 grid h-13 w-13 place-items-center rounded-full border border-white/40 bg-[var(--sage)] text-[var(--on-sage)] shadow-[0_14px_38px_rgba(47,62,51,0.24)] backdrop-blur-xl soft-interaction hover:scale-[1.03] hover:shadow-[0_18px_45px_rgba(47,62,51,0.28)] md:bottom-8 md:right-8"
+	            initial={{ scale: 0 }}
+	            animate={{ scale: 1 }}
+	            onClick={startPlanting}
+	            title={t('newSeed')}
+	            className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.1rem)] right-5 z-50 grid h-13 w-13 place-items-center rounded-full border border-white/40 bg-[var(--sage)] text-[var(--on-sage)] shadow-[0_14px_38px_rgba(47,62,51,0.24)] backdrop-blur-xl soft-interaction hover:scale-[1.03] hover:shadow-[0_18px_45px_rgba(47,62,51,0.28)] md:bottom-8 md:right-8"
             aria-label={t('newSeed')}
           >
             <Plus size={25} strokeWidth={2.4} />

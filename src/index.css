@@ -69,6 +69,12 @@
   box-shadow: none;
 }
 
+.quick-seed-textarea:focus,
+.quick-seed-textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .soft-interaction {
   transition:
     background-color 160ms ease,
