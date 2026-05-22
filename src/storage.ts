@@ -4,6 +4,16 @@ const DB_NAME = 'seed-db';
 const DB_VERSION = 1;
 const NOTES_STORE = 'notes';
 
+function loadLocalNotesFallback(): SeedNote[] {
+  try {
+    const saved = localStorage.getItem('seed-notes');
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function openSeedDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -22,17 +32,20 @@ function openSeedDb(): Promise<IDBDatabase> {
 
 export async function loadNotesFromDb(): Promise<SeedNote[]> {
   if (!('indexedDB' in window)) {
-    const saved = localStorage.getItem('seed-notes');
-    return saved ? JSON.parse(saved) : [];
+    return loadLocalNotesFallback();
   }
 
-  const db = await openSeedDb();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(NOTES_STORE, 'readonly');
-    const request = transaction.objectStore(NOTES_STORE).getAll();
-    request.onsuccess = () => resolve(request.result as SeedNote[]);
-    request.onerror = () => reject(request.error);
-  });
+  try {
+    const db = await openSeedDb();
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(NOTES_STORE, 'readonly');
+      const request = transaction.objectStore(NOTES_STORE).getAll();
+      request.onsuccess = () => resolve(request.result as SeedNote[]);
+      request.onerror = () => reject(request.error);
+    });
+  } catch {
+    return loadLocalNotesFallback();
+  }
 }
 
 export async function saveNotesToDb(notes: SeedNote[]) {
@@ -59,5 +72,5 @@ export async function migrateLocalNotesToDb() {
   const existing = await loadNotesFromDb();
   if (existing.length > 0) return;
 
-  await saveNotesToDb(JSON.parse(saved));
+  await saveNotesToDb(loadLocalNotesFallback());
 }

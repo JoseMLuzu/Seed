@@ -629,6 +629,7 @@ function CalendarView({
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(monthStart);
   const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const mobileTodayRef = useRef<HTMLButtonElement | null>(null);
   const [selectedDay, setSelectedDay] = useState(() => {
     const now = new Date();
     return isSameMonth(now, monthStart) ? now : monthStart;
@@ -728,6 +729,17 @@ function CalendarView({
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
+  useEffect(() => {
+    const now = new Date();
+    if (!isSameMonth(now, monthStart)) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      mobileTodayRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [currentMonth]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -743,6 +755,19 @@ function CalendarView({
       className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-[var(--bg-app)] text-[var(--text-main)]"
     >
       <header className="relative z-20 shrink-0 border-b border-[var(--border)] bg-[var(--surface-strong)]/88 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-2xl sm:px-6">
+        <div className="mb-3 flex items-center justify-between sm:hidden">
+          <span className="rounded-full bg-[var(--bg-app)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+            Path
+          </span>
+          <button
+            onClick={onExit}
+            className="inline-flex h-9 items-center gap-2 rounded-full bg-[var(--earth)] px-3.5 text-sm font-semibold text-[var(--on-earth)] shadow-lg shadow-black/10"
+            aria-label="Cerrar calendario"
+          >
+            <X size={15} />
+            <span>{appLanguage === 'en' ? 'Close' : 'Cerrar'}</span>
+          </button>
+        </div>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center justify-between gap-3">
@@ -769,9 +794,6 @@ function CalendarView({
               <span>·</span>
               <span>{activeStreak} {t('streak')}</span>
               <button onClick={() => setCurrentMonth(new Date())} className="ml-1 rounded-full bg-[var(--bg-app)] px-2 py-1 text-xs font-semibold text-[var(--sage)]">{t('today')}</button>
-              <button onClick={onExit} className="ml-1 grid h-7 w-7 place-items-center rounded-full bg-[var(--earth)] text-[var(--on-earth)] sm:hidden" aria-label="Cerrar calendario">
-                <X size={14} />
-              </button>
             </div>
           </div>
           <div className="hidden items-center gap-2 overflow-x-auto pb-0.5 app-scrollbar sm:flex xl:flex-wrap xl:overflow-visible">
@@ -836,6 +858,7 @@ function CalendarView({
               return (
                 <motion.button
                   key={dateKey}
+                  ref={isTodayDay ? mobileTodayRef : undefined}
                   type="button"
                   onClick={() => setSelectedDay(day)}
                   initial={{ opacity: 0, y: 8 }}
@@ -3010,10 +3033,16 @@ export default function App() {
   const [celebration, setCelebration] = useState<string | null>(null);
   const [flowerReward, setFlowerReward] = useState<{ id: string; title: string } | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('seed-onboarded') !== 'true');
-  const [showSettings, setShowSettings] = useState(false);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [showGardenSwitcher, setShowGardenSwitcher] = useState(false);
-  const [session, setSession] = useState<Session | null>(null);
+	  const [showSettings, setShowSettings] = useState(false);
+	  const [showMobileMenu, setShowMobileMenu] = useState(false);
+	  const [showGardenSwitcher, setShowGardenSwitcher] = useState(false);
+	  const [quickEntryFocused, setQuickEntryFocused] = useState(false);
+	  const [quickEntryViewport, setQuickEntryViewport] = useState<{ height: number | null; offsetTop: number; keyboardOpen: boolean }>({
+	    height: null,
+	    offsetTop: 0,
+	    keyboardOpen: false
+	  });
+	  const [session, setSession] = useState<Session | null>(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authConfirmPassword, setAuthConfirmPassword] = useState('');
@@ -3024,6 +3053,7 @@ export default function App() {
 	  const remoteSyncReadyRef = useRef(false);
 	  const autoSyncTimerRef = useRef<number | null>(null);
 	  const mobileGardenFullscreenOpenedRef = useRef(false);
+	  const mobileMenuRef = useRef<HTMLElement | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('seed-notifications') === 'true');
   const [defaultWateringInterval, setDefaultWateringInterval] = useState(() => Number(localStorage.getItem('seed-default-watering') || 1));
   const [reminderHour, setReminderHour] = useState(() => Number(localStorage.getItem('seed-reminder-hour') || 9));
@@ -3089,13 +3119,42 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => {
-    if (!notesLoaded) return;
-    saveNotesToDb(notes);
-  }, [notes, notesLoaded]);
+	  useEffect(() => {
+	    if (!notesLoaded) return;
+	    saveNotesToDb(notes);
+	  }, [notes, notesLoaded]);
 
-  useEffect(() => {
-    if (!import.meta.env.DEV || !notesLoaded) return;
+	  useEffect(() => {
+	    if (!isAdding || typeof window === 'undefined') {
+	      setQuickEntryViewport({ height: null, offsetTop: 0, keyboardOpen: false });
+	      setQuickEntryFocused(false);
+	      return;
+	    }
+
+	    const visualViewport = window.visualViewport;
+	    if (!visualViewport) return;
+
+	    const updateQuickEntryViewport = () => {
+	      const keyboardHeight = Math.max(0, window.innerHeight - visualViewport.height - visualViewport.offsetTop);
+	      setQuickEntryViewport({
+	        height: visualViewport.height,
+	        offsetTop: visualViewport.offsetTop,
+	        keyboardOpen: keyboardHeight > 120
+	      });
+	    };
+
+	    updateQuickEntryViewport();
+	    visualViewport.addEventListener('resize', updateQuickEntryViewport);
+	    visualViewport.addEventListener('scroll', updateQuickEntryViewport);
+
+	    return () => {
+	      visualViewport.removeEventListener('resize', updateQuickEntryViewport);
+	      visualViewport.removeEventListener('scroll', updateQuickEntryViewport);
+	    };
+	  }, [isAdding]);
+
+	  useEffect(() => {
+	    if (!import.meta.env.DEV || !notesLoaded) return;
 
     const demoNote: SeedNote = {
       id: 'demo-watering-note',
@@ -3120,6 +3179,16 @@ export default function App() {
       return current.map(note => note.id === demoNote.id ? demoNote : note);
     });
   }, [activePlanetId, notesLoaded]);
+
+  useEffect(() => {
+    if (!showMobileMenu) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      mobileMenuRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [showMobileMenu]);
 
   useEffect(() => {
     localStorage.setItem('seed-planets', JSON.stringify(planets));
@@ -3836,7 +3905,28 @@ export default function App() {
 	    setIsAdding(true);
 	  };
 
-  const showWateringQueue = () => {
+	  useEffect(() => {
+	    const openSeedFromWidget = () => {
+	      localStorage.removeItem('seed-pending-action');
+	      startPlanting();
+	    };
+
+	    if (localStorage.getItem('seed-pending-action') === 'new-seed') {
+	      window.requestAnimationFrame(openSeedFromWidget);
+	    }
+
+	    const handleNativeUrl = (event: Event) => {
+	      const detail = (event as CustomEvent<{ url?: string }>).detail;
+	      if (detail?.url?.includes('new-seed')) {
+	        openSeedFromWidget();
+	      }
+	    };
+
+	    window.addEventListener('seed:native-url', handleNativeUrl);
+	    return () => window.removeEventListener('seed:native-url', handleNativeUrl);
+	  }, []);
+
+	  const showWateringQueue = () => {
     setSelectedNoteId(null);
     setFilterStage('all');
     setSearch('riego');
@@ -3996,7 +4086,7 @@ export default function App() {
     setLandingRoute('landing');
   };
 
-  const runCardAction = (note: SeedNote, action: ReturnType<typeof getIdeaGuidance>['kind']) => {
+	  const runCardAction = (note: SeedNote, action: ReturnType<typeof getIdeaGuidance>['kind']) => {
     if (action === 'grow') {
       growNote(note.id);
       return;
@@ -4018,8 +4108,24 @@ export default function App() {
       return;
     }
 
-    setSelectedNoteId(note.id);
+	    setSelectedNoteId(note.id);
+	  };
+
+  const openCalendarToday = () => {
+    setSelectedNoteId(null);
+    setCurrentMonth(new Date());
+    setView('calendar');
   };
+
+  const navigateToView = (nextView: AppView) => {
+    if (nextView === 'calendar') {
+      openCalendarToday();
+      return;
+    }
+    setView(nextView);
+  };
+
+	  const quickEntryKeyboardMode = quickEntryViewport.keyboardOpen || quickEntryFocused;
 
   if (showLanding) {
     if (landingRoute !== 'landing') {
@@ -4099,7 +4205,7 @@ export default function App() {
         )}
       </AnimatePresence>
       {/* Sidebar Navigation */}
-      <aside className={`fixed left-3 right-3 top-[calc(var(--safe-top-control)+3.7rem)] z-50 flex max-h-[calc(100vh-var(--safe-top-control)-env(safe-area-inset-bottom)-5rem)] shrink-0 origin-top flex-col overflow-y-auto rounded-[2rem] border border-white/60 bg-[var(--sidebar-bg)]/94 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-2xl transition-all duration-300 app-scrollbar md:static md:z-20 md:h-screen md:max-h-none md:w-72 md:max-w-none md:origin-center md:translate-y-0 md:scale-100 md:rounded-none md:border-r md:border-[var(--border)] md:bg-[var(--sidebar-bg)] md:p-6 md:opacity-100 md:shadow-none ${showMobileMenu ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none -translate-y-3 scale-[0.97] opacity-0 md:pointer-events-auto'}`}>
+      <aside ref={mobileMenuRef} className={`fixed left-3 right-3 top-[calc(var(--safe-top-control)+3.25rem)] z-50 flex max-h-[calc(100vh-var(--safe-top-control)-env(safe-area-inset-bottom)-8.25rem)] shrink-0 origin-top flex-col overflow-y-auto rounded-[2rem] border border-white/60 bg-[var(--sidebar-bg)]/94 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-2xl transition-all duration-300 app-scrollbar md:static md:z-20 md:h-screen md:max-h-none md:w-72 md:max-w-none md:origin-center md:translate-y-0 md:scale-100 md:rounded-none md:border-r md:border-[var(--border)] md:bg-[var(--sidebar-bg)] md:p-6 md:opacity-100 md:shadow-none ${showMobileMenu ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none -translate-y-3 scale-[0.97] opacity-0 md:pointer-events-auto'}`}>
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--border)] md:hidden" />
         <motion.div 
           initial={{ opacity: 0, y: 4 }}
@@ -4340,7 +4446,7 @@ export default function App() {
                       setSearch('');
                       setFilterStage('all');
                     }
-                    setView(item.id as AppView);
+                    navigateToView(item.id as AppView);
                     setShowMobileMenu(false);
                   }}
 	                  className={`relative flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 py-2 text-left soft-interaction group ${
@@ -4496,7 +4602,7 @@ export default function App() {
                     setView('focus');
                   }}
                   onEnableNotifications={enableNotifications}
-                  onNavigate={setView}
+                  onNavigate={navigateToView}
                   onShowWateringQueue={showWateringQueue}
                   wateredToday={wateredToday}
                   wateringStreak={wateringRitual.streak}
@@ -4578,7 +4684,7 @@ export default function App() {
                   <section className="overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
                     {[
                       { icon: Settings, title: t('settings'), detail: appLanguage === 'en' ? 'Account, theme, watering and reminders' : 'Cuenta, tema, riego y recordatorios', onClick: () => setShowSettings(true) },
-                      { icon: CalendarIcon, title: t('path'), detail: appLanguage === 'en' ? 'Review activity by day' : 'Revisa actividad por día', onClick: () => setView('calendar') },
+                      { icon: CalendarIcon, title: t('path'), detail: appLanguage === 'en' ? 'Review activity by day' : 'Revisa actividad por día', onClick: openCalendarToday },
                       { icon: Box, title: t('planet'), detail: appLanguage === 'en' ? 'Open the 3D garden when you need it' : 'Abre el jardín 3D cuando lo necesites', onClick: () => setView('3D') },
                       { icon: Archive, title: 'Cosechas', detail: `${profileStats.harvests} idea${profileStats.harvests === 1 ? '' : 's'} terminada${profileStats.harvests === 1 ? '' : 's'}`, onClick: () => setView('harvest') },
                     ].map((item, index) => (
@@ -5986,28 +6092,41 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        <AnimatePresence>
-          {isAdding && (
-            <motion.div
-              className="fixed inset-0 z-[70] flex h-dvh items-center justify-center bg-black/10 px-3 py-[calc(env(safe-area-inset-top)+0.8rem)] text-[var(--text-main)] backdrop-blur-md sm:p-5"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+	        <AnimatePresence>
+	          {isAdding && (
+		            <motion.div
+		              className={`fixed inset-0 z-[70] flex h-dvh justify-center overflow-hidden bg-black/10 px-3 text-[var(--text-main)] backdrop-blur-md sm:p-5 ${
+		                quickEntryKeyboardMode
+		                  ? 'items-stretch pb-2 pt-[max(4.6rem,calc(env(safe-area-inset-top)+1rem))]'
+		                  : 'items-center py-[calc(env(safe-area-inset-top)+0.8rem)]'
+		              }`}
+	              initial={{ opacity: 0 }}
+	              animate={{ opacity: 1 }}
+	              exit={{ opacity: 0 }}
               transition={{ duration: 0.16 }}
               onClick={() => setIsAdding(false)}
-            >
-              <motion.div
-                className="relative flex h-[min(54dvh,28rem)] min-h-[22.5rem] w-full max-w-lg flex-col overflow-hidden rounded-[2.15rem] border border-white/45 bg-[var(--surface-strong)]/96 shadow-[0_26px_90px_rgba(0,0,0,0.18)] backdrop-blur-2xl"
-                initial={{ y: 10, scale: 0.965, opacity: 0 }}
-                animate={{ y: 0, scale: 1, opacity: 1 }}
+	            >
+	              <motion.div
+		                className={`relative flex w-full max-w-lg flex-col overflow-hidden border border-white/45 bg-[var(--surface-strong)]/96 shadow-[0_26px_90px_rgba(0,0,0,0.18)] backdrop-blur-2xl ${
+		                  quickEntryKeyboardMode
+		                    ? 'min-h-0 rounded-[1.85rem]'
+		                    : 'h-[min(54dvh,28rem)] min-h-[22.5rem] rounded-[2.15rem]'
+		                }`}
+		                style={quickEntryKeyboardMode && quickEntryViewport.height
+		                  ? { height: `calc(${Math.max(340, Math.round(quickEntryViewport.height))}px - max(4.6rem, calc(env(safe-area-inset-top) + 1rem)) - 0.75rem)` }
+			                  : undefined}
+	                initial={{ y: 10, scale: 0.965, opacity: 0 }}
+	                animate={{ y: 0, scale: 1, opacity: 1 }}
                 exit={{ y: 8, scale: 0.975, opacity: 0 }}
                 transition={{ type: 'spring', stiffness: 560, damping: 44, mass: 0.68 }}
                 onClick={(event) => event.stopPropagation()}
               >
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[linear-gradient(180deg,var(--bg-app)_0%,transparent_82%)] opacity-55" />
-                <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-white/70" />
-                <div className="relative mx-auto mt-3 h-1 w-10 rounded-full bg-[var(--border)]/75 sm:hidden" />
-                <div className="relative z-10 flex h-[4.85rem] shrink-0 items-center border-b border-[var(--border)]/55 px-4 pt-1 sm:px-5">
+	                <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[linear-gradient(180deg,var(--bg-app)_0%,transparent_82%)] opacity-55" />
+	                <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-white/70" />
+	                <div className={`relative mx-auto h-1 w-10 rounded-full bg-[var(--border)]/75 sm:hidden ${quickEntryKeyboardMode ? 'mt-2' : 'mt-3'}`} />
+	                <div className={`relative z-10 flex shrink-0 items-center border-b border-[var(--border)]/55 px-4 sm:px-5 ${
+	                  quickEntryKeyboardMode ? 'h-14' : 'h-[4.85rem] pt-1'
+	                }`}>
                   <button
                     type="button"
                     onClick={() => setIsAdding(false)}
@@ -6015,13 +6134,13 @@ export default function App() {
                   >
                     {t('cancel')}
                   </button>
-                  <div className="pointer-events-none absolute inset-x-24 top-1/2 min-w-0 -translate-y-1/2 text-center">
-                    <p className="truncate text-[16px] font-semibold leading-5 text-[var(--earth)]">
-                      {appLanguage === 'en' ? 'New seed' : 'Nueva semilla'}
-                    </p>
-                    <p className="mt-1 truncate text-[11px] font-medium text-[var(--text-muted)]">
-                      {appLanguage === 'en' ? 'Capture now. Decide later.' : 'Captura ahora. Decide después.'}
-                    </p>
+	                  <div className="pointer-events-none absolute inset-x-24 top-1/2 min-w-0 -translate-y-1/2 text-center">
+	                    <p className="truncate text-[16px] font-semibold leading-5 text-[var(--earth)]">
+	                      {appLanguage === 'en' ? 'New seed' : 'Nueva semilla'}
+	                    </p>
+	                    <p className={`mt-1 truncate text-[11px] font-medium text-[var(--text-muted)] ${quickEntryKeyboardMode ? 'hidden' : 'block'}`}>
+	                      {appLanguage === 'en' ? 'Capture now. Decide later.' : 'Captura ahora. Decide después.'}
+	                    </p>
                   </div>
                   <button
                     type="button"
@@ -6035,23 +6154,39 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="relative z-10 flex min-h-0 flex-1 flex-col px-5 pt-6 sm:px-6">
+	                <div className={`relative z-10 flex min-h-0 flex-1 flex-col px-5 sm:px-6 ${quickEntryKeyboardMode ? 'pt-4' : 'pt-6'}`}>
                   <textarea
                     autoFocus
                     placeholder={appLanguage === 'en' ? 'Write the idea as it arrives...' : 'Escribe la idea tal como llega...'}
-                    rows={5}
-                    value={newNote.content}
-                    onChange={(event) => setNewNote({ ...newNote, content: event.target.value })}
+	                    rows={5}
+	                    value={newNote.content}
+	                    onFocus={() => setQuickEntryFocused(true)}
+	                    onBlur={() => setQuickEntryFocused(false)}
+	                    onChange={(event) => setNewNote({ ...newNote, content: event.target.value })}
                     enterKeyHint="done"
                     onKeyDown={(event) => {
                       if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
                         addNote();
                       }
                     }}
-                    className="quick-seed-textarea min-h-0 flex-1 resize-none bg-transparent text-[1.32rem] font-medium leading-[1.55] tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/38 sm:text-[1.45rem]"
-                  />
+	                    className="quick-seed-textarea min-h-0 flex-1 resize-none bg-transparent text-[1.32rem] font-medium leading-[1.55] tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/38 sm:text-[1.45rem]"
+	                  />
 
-                  <details className="group shrink-0 pb-3 [&_summary::-webkit-details-marker]:hidden">
+		                  {quickEntryKeyboardMode && (
+		                    <div className="mb-3 flex min-h-11 shrink-0 items-center justify-between gap-3 rounded-full bg-[var(--bg-app)]/70 px-3 text-xs font-semibold text-[var(--text-muted)] shadow-[inset_0_0_0_1px_var(--border)]">
+		                      <span className="flex min-w-0 items-center gap-2 truncate">
+		                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--surface-strong)] text-[var(--sage)]">
+		                          <Leaf size={13} />
+		                        </span>
+		                        <span className="truncate">
+		                          {appLanguage === 'en' ? 'Seedbed' : 'Semillero'} · {SEED_TYPES.find(type => type.id === newNote.seedType)?.label || 'Idea'}
+		                        </span>
+		                      </span>
+		                      <span className="shrink-0 text-[var(--sage)]">{t('plant')}</span>
+		                    </div>
+		                  )}
+
+		                  <details className={`group shrink-0 pb-3 [&_summary::-webkit-details-marker]:hidden ${quickEntryKeyboardMode ? 'hidden' : 'block'}`}>
                     <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-full bg-[var(--bg-app)]/62 px-3 text-xs font-semibold text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-soft)]">
                       <span className="flex min-w-0 items-center gap-2 truncate">
                         <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--surface-strong)] text-[var(--sage)] shadow-[inset_0_0_0_1px_var(--border)]">
