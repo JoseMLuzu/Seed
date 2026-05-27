@@ -31,6 +31,7 @@ export interface SeedNote {
   inbox?: boolean;
   seedType?: 'idea' | 'project' | 'goal' | 'learning';
   reflection?: string;
+  takeaway?: string;
   focusedMinutes?: number;
   harvestedAt?: number;
 }

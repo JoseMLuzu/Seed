@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lazy, Suspense, useRef, useState, useEffect, useMemo } from 'react';
+import { lazy, Suspense, useRef, useState, useEffect, useMemo, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   format, 
@@ -32,6 +32,9 @@ import {
   TrendingUp,
   X,
   Calendar as CalendarIcon,
+  Tag,
+  Flag,
+  ListChecks,
   Skull,
   ChevronLeft,
   ChevronRight,
@@ -57,6 +60,7 @@ import { loadNotesFromDb, migrateLocalNotesToDb, saveNotesToDb } from './storage
 import { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';
 import { deleteNoteFromSupabase, deletePlanetFromSupabase, pushGardenToSupabase, syncGardenWithSupabase } from './supabaseSync';
+import { normalizeNote, normalizeNotes } from './normalize';
 
 const Garden3D = lazy(() => import('./components/Garden3D'));
 
@@ -70,6 +74,11 @@ type AccountProfile = {
 
 type AppView = 'today' | 'inbox' | 'projects' | 'focus' | 'garden' | 'profile' | 'harvest' | 'calendar' | '3D';
 type AppLanguage = 'es' | 'en';
+type CreateMode = 'seed' | 'sprout' | 'journal';
+type TodayWidgetId = 'summary' | 'watering' | 'path' | 'learning';
+
+const DEFAULT_TODAY_WIDGETS: TodayWidgetId[] = ['summary', 'watering', 'learning'];
+const TODAY_WIDGET_IDS = new Set<TodayWidgetId>(['summary', 'watering', 'path', 'learning']);
 
 function detectDeviceLanguage(): AppLanguage {
   const languages = typeof navigator !== 'undefined'
@@ -197,6 +206,46 @@ function formatShortDate(date: number | Date) {
   return format(date, 'd MMM', { locale: appDateLocale });
 }
 
+function dateInputToEndOfDay(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return undefined;
+  return new Date(year, month - 1, day, 23, 59, 59, 999).getTime();
+}
+
+function timestampToDateInput(value: number) {
+  return format(new Date(value), 'yyyy-MM-dd');
+}
+
+function getStoredItem(key: string) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function setStoredItem(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Storage can be unavailable in private contexts; app state should still work in memory.
+  }
+}
+
+function removeStoredItem(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Ignore unavailable storage.
+  }
+}
+
+function getStoredNumber(key: string, fallback: number, min = -Infinity, max = Infinity) {
+  const value = Number(getStoredItem(key));
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
 const THEMES: { id: Theme; label: string; icon: string }[] = [
   { id: 'earth', label: 'Pradera', icon: '🌾' },
   { id: 'forest', label: 'Bosque', icon: '🌲' },
@@ -214,6 +263,25 @@ const DEFAULT_PLANETS: Planet[] = [
   { id: DEFAULT_PLANET_ID, name: 'Personal', description: 'Ideas de vida, habitos y pendientes propios.', theme: 'earth', createdAt: 0 },
 ];
 const LEGACY_DEFAULT_PLANET_IDS = new Set(['work', 'study']);
+const THEME_IDS = new Set(THEMES.map(theme => theme.id));
+
+function normalizePlanets(values: unknown): Planet[] {
+  if (!Array.isArray(values)) return [];
+
+  return values.flatMap(value => {
+    if (!value || typeof value !== 'object') return [];
+    const raw = value as Partial<Planet>;
+    if (typeof raw.id !== 'string' || typeof raw.name !== 'string') return [];
+    return [{
+      id: raw.id,
+      name: raw.name.trim() || 'Personal',
+      description: typeof raw.description === 'string' ? raw.description : '',
+      theme: raw.theme && THEME_IDS.has(raw.theme) ? raw.theme : 'earth',
+      createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),
+      updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : undefined,
+    }];
+  });
+}
 
 function touchNote(note: SeedNote, timestamp = Date.now()): SeedNote {
   return { ...note, updatedAt: timestamp };
@@ -476,30 +544,30 @@ const STAGE_META: Record<SeedNote['growthStage'], { label: string; shortLabel: s
   seed: {
     label: 'Semilla',
     shortLabel: 'Idea nueva',
-    color: 'text-amber-700',
-    bg: 'bg-amber-100',
-    aura: 'from-amber-100 via-orange-50 to-white',
+    color: 'text-[#8a6a3e]',
+    bg: 'bg-[#f5efe4]',
+    aura: 'from-[#f5efe4] via-[#f8f4ec] to-white',
   },
   sprout: {
     label: 'En Brote',
     shortLabel: 'En progreso',
-    color: 'text-emerald-700',
-    bg: 'bg-emerald-100',
-    aura: 'from-emerald-100 via-lime-50 to-white',
+    color: 'text-[#4f715b]',
+    bg: 'bg-[#eaf2ed]',
+    aura: 'from-[#eaf2ed] via-[#f3f7f3] to-white',
   },
   bloom: {
     label: 'Cosechada',
     shortLabel: 'Completada',
-    color: 'text-green-700',
-    bg: 'bg-green-100',
-    aura: 'from-green-100 via-pink-50 to-white',
+    color: 'text-[#5b765f]',
+    bg: 'bg-[#eef4ec]',
+    aura: 'from-[#eef4ec] via-[#f6f4ee] to-white',
   },
   withered: {
     label: 'Marchita',
     shortLabel: 'Vencida',
-    color: 'text-red-700',
-    bg: 'bg-red-100',
-    aura: 'from-stone-200 via-red-50 to-white',
+    color: 'text-[#84675f]',
+    bg: 'bg-[#f0ebe7]',
+    aura: 'from-[#ece6e1] via-[#f5f0ec] to-white',
   },
 };
 
@@ -520,13 +588,14 @@ function getIdeaGuidance(note: SeedNote) {
   }
 
   if (note.growthStage === 'bloom') {
+    const hasLearning = Boolean(note.reflection?.trim() || note.takeaway?.trim());
     return {
       label: 'Cosechada',
-      title: note.reflection ? 'Aprendizaje guardado' : 'Guarda lo aprendido',
-      detail: note.reflection || 'Cierra el ciclo con una reflexión breve.',
-      action: note.reflection ? 'Ver' : 'Reflexionar',
-      tone: 'bg-green-50 text-green-700 border-green-100',
-      actionTone: 'bg-green-600 text-white',
+      title: hasLearning ? 'Aprendizaje guardado' : 'Cierre opcional',
+      detail: note.reflection || note.takeaway || 'Si esta idea te dejó algo, guárdalo en dos líneas.',
+      action: hasLearning ? 'Ver' : 'Aprender',
+      tone: 'bg-[#eef4ec] text-[#5b765f] border-[#dfe8dd]',
+      actionTone: 'bg-[var(--surface-soft)] text-[var(--sage)] border border-[var(--border)]',
       kind: 'open' as const,
     };
   }
@@ -537,8 +606,8 @@ function getIdeaGuidance(note: SeedNote) {
       title: 'Revivir o soltar',
       detail: 'Decide si todavía vale la pena convertirla en acción.',
       action: 'Revivir',
-      tone: 'bg-red-50 text-red-700 border-red-100',
-      actionTone: 'bg-red-500 text-white',
+      tone: 'bg-[#f0ebe7] text-[#84675f] border-[#e3d8d1]',
+      actionTone: 'bg-[#f0ebe7] text-[#84675f] border border-[#e3d8d1]',
       kind: 'grow' as const,
     };
   }
@@ -549,8 +618,8 @@ function getIdeaGuidance(note: SeedNote) {
       title: 'Define el primer paso',
       detail: 'Una idea empieza a crecer cuando tiene una acción pequeña.',
       action: 'Cultivar',
-      tone: 'bg-amber-50 text-amber-800 border-amber-100',
-      actionTone: 'bg-[var(--seed-accent)] text-white',
+      tone: 'bg-[#f5efe4] text-[#8a6a3e] border-[#e7dbc7]',
+      actionTone: 'bg-[var(--surface-soft)] text-[var(--sage)] border border-[var(--border)]',
       kind: 'grow' as const,
     };
   }
@@ -561,7 +630,7 @@ function getIdeaGuidance(note: SeedNote) {
       title: 'Vale un riego',
       detail: `${daysWithoutReview} día${daysWithoutReview === 1 ? '' : 's'} sin mirar. Riégala en 20 segundos para que no se pierda.`,
       action: 'Regar',
-      tone: 'bg-sky-50 text-sky-800 border-sky-100',
+      tone: 'bg-[#edf3f3] text-[#527075] border-[#dce7e7]',
       actionTone: 'bg-[var(--sage)] text-[var(--on-sage)]',
       kind: 'water' as const,
     };
@@ -573,7 +642,7 @@ function getIdeaGuidance(note: SeedNote) {
       title: 'Lista para enfocar',
       detail: openTask.text || 'Describe el siguiente paso antes de enfocarte.',
       action: 'Enfocar',
-      tone: 'bg-emerald-50 text-emerald-800 border-emerald-100',
+      tone: 'bg-[#eaf2ed] text-[#4f715b] border-[#dbe8dd]',
       actionTone: 'bg-[var(--accent)] text-[var(--on-accent)]',
       kind: 'focus' as const,
     };
@@ -612,6 +681,137 @@ function passwordPolicyError(password: string) {
   return '';
 }
 
+function GestureNoteSurface({
+  children,
+  className,
+  onPress,
+  onSwipeRight,
+  onSwipeLeft,
+  onLongPress,
+  rightLabel = 'Regar',
+  leftLabel = 'Pausar',
+  rightIcon: RightIcon = Droplets,
+  leftIcon: LeftIcon = Pause,
+  rightTone = 'bg-sky-500 text-white',
+  leftTone = 'bg-amber-500 text-white',
+}: {
+  children: ReactNode;
+  className: string;
+  onPress?: () => void;
+  onSwipeRight?: () => void;
+  onSwipeLeft?: () => void;
+  onLongPress?: () => void;
+  rightLabel?: string;
+  leftLabel?: string;
+  rightIcon?: typeof Droplets;
+  leftIcon?: typeof Pause;
+  rightTone?: string;
+  leftTone?: string;
+}) {
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressFiredRef = useRef(false);
+  const swipedRef = useRef(false);
+  const [swipeHint, setSwipeHint] = useState<'right' | 'left' | null>(null);
+
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const startLongPress = () => {
+    longPressFiredRef.current = false;
+    swipedRef.current = false;
+    clearLongPressTimer();
+    if (!onLongPress || window.innerWidth >= 768) return;
+
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressFiredRef.current = true;
+      onLongPress();
+    }, 520);
+  };
+
+  return (
+    <div className="relative overflow-hidden bg-[var(--surface-strong)]">
+      <AnimatePresence>
+        {swipeHint && (
+          <motion.div
+            aria-hidden="true"
+            className={`pointer-events-none absolute top-1/2 z-0 flex h-10 -translate-y-1/2 items-center gap-2 rounded-full px-3 text-xs font-semibold shadow-sm ${
+              swipeHint === 'right'
+                ? `left-3 ${rightTone}`
+                : `right-3 ${leftTone}`
+            }`}
+            initial={{ opacity: 0, scale: 0.86, x: swipeHint === 'right' ? -8 : 8 }}
+            animate={{ opacity: 1, scale: 1, x: 0 }}
+            exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.1 } }}
+          >
+            {swipeHint === 'right' ? (
+              <>
+                <RightIcon size={15} />
+                <span>{rightLabel}</span>
+              </>
+            ) : (
+              <>
+                <span>{leftLabel}</span>
+                <LeftIcon size={15} />
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={0.045}
+        onPointerDown={startLongPress}
+        onPointerUp={() => {
+          clearLongPressTimer();
+          setSwipeHint(null);
+        }}
+        onPointerCancel={() => {
+          clearLongPressTimer();
+          setSwipeHint(null);
+        }}
+        onPointerLeave={() => {
+          clearLongPressTimer();
+          setSwipeHint(null);
+        }}
+        onDragStart={() => {
+          clearLongPressTimer();
+        }}
+        onDrag={(_, info) => {
+          const mostlyHorizontal = Math.abs(info.offset.x) > Math.abs(info.offset.y) * 1.4;
+          if (!mostlyHorizontal || Math.abs(info.offset.x) < 28) {
+            setSwipeHint(null);
+            return;
+          }
+          setSwipeHint(info.offset.x > 0 ? 'right' : 'left');
+        }}
+        onDragEnd={(_, info) => {
+          clearLongPressTimer();
+          setSwipeHint(null);
+          const mostlyHorizontal = Math.abs(info.offset.x) > Math.abs(info.offset.y) * 1.25;
+          if (!mostlyHorizontal || Math.abs(info.offset.x) < 74) return;
+
+          swipedRef.current = true;
+          if (info.offset.x > 0) onSwipeRight?.();
+          else onSwipeLeft?.();
+          window.setTimeout(() => { swipedRef.current = false; }, 160);
+        }}
+        onClick={() => {
+          if (longPressFiredRef.current || swipedRef.current) return;
+          onPress?.();
+        }}
+        className={`relative z-10 ${className}`}
+      >
+        {children}
+      </motion.div>
+    </div>
+  );
+}
+
 function CalendarView({ 
   currentMonth, 
   setCurrentMonth, 
@@ -635,10 +835,17 @@ function CalendarView({
     return isSameMonth(now, monthStart) ? now : monthStart;
   });
 
-  useEffect(() => {
-    const now = new Date();
-    setSelectedDay(isSameMonth(now, monthStart) ? now : monthStart);
-  }, [currentMonth]);
+  const goToMonth = (date: Date) => {
+    const nextMonth = startOfMonth(date);
+    setCurrentMonth(nextMonth);
+    setSelectedDay(nextMonth);
+  };
+
+  const goToToday = () => {
+    const today = new Date();
+    setCurrentMonth(today);
+    setSelectedDay(today);
+  };
 
   const activityByDay = useMemo(() => {
     type DayActivity = {
@@ -749,30 +956,27 @@ function CalendarView({
       dragConstraints={{ left: 0, right: 0 }}
       dragElastic={0.08}
       onDragEnd={(_, info) => {
-        if (info.offset.x > 70) setCurrentMonth(subMonths(currentMonth, 1));
-        if (info.offset.x < -70) setCurrentMonth(addMonths(currentMonth, 1));
+        if (info.offset.x > 70) goToMonth(subMonths(currentMonth, 1));
+        if (info.offset.x < -70) goToMonth(addMonths(currentMonth, 1));
       }}
       className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-[var(--bg-app)] text-[var(--text-main)]"
     >
       <header className="relative z-20 shrink-0 border-b border-[var(--border)] bg-[var(--surface-strong)]/88 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-2xl sm:px-6">
-        <div className="mb-3 flex items-center justify-between sm:hidden">
-          <span className="rounded-full bg-[var(--bg-app)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-            Path
-          </span>
+        <div className="mb-3 flex items-center justify-end sm:hidden">
           <button
             onClick={onExit}
-            className="inline-flex h-9 items-center gap-2 rounded-full bg-[var(--earth)] px-3.5 text-sm font-semibold text-[var(--on-earth)] shadow-lg shadow-black/10"
+            className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-app)]/80 px-3.5 text-sm font-semibold text-[var(--sage)] shadow-sm backdrop-blur-xl transition-colors active:bg-[var(--surface-soft)]"
             aria-label="Cerrar calendario"
           >
-            <X size={15} />
-            <span>{appLanguage === 'en' ? 'Close' : 'Cerrar'}</span>
+            <X size={14} />
+            <span>{appLanguage === 'en' ? 'Done' : 'Listo'}</span>
           </button>
         </div>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center justify-between gap-3">
               <button
-                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                onClick={() => goToMonth(subMonths(currentMonth, 1))}
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)] transition-colors hover:bg-[var(--surface-hover)]"
                 aria-label="Mes anterior"
               >
@@ -782,7 +986,7 @@ function CalendarView({
                 {formatMonthYear(currentMonth)}
               </h3>
               <button
-                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                onClick={() => goToMonth(addMonths(currentMonth, 1))}
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)] transition-colors hover:bg-[var(--surface-hover)]"
                 aria-label="Mes siguiente"
               >
@@ -793,7 +997,7 @@ function CalendarView({
               <span>{monthSummary.activeDays} {t('activeDays')}</span>
               <span>·</span>
               <span>{activeStreak} {t('streak')}</span>
-              <button onClick={() => setCurrentMonth(new Date())} className="ml-1 rounded-full bg-[var(--bg-app)] px-2 py-1 text-xs font-semibold text-[var(--sage)]">{t('today')}</button>
+              <button onClick={goToToday} className="ml-1 rounded-full bg-[var(--bg-app)] px-2 py-1 text-xs font-semibold text-[var(--sage)]">{t('today')}</button>
             </div>
           </div>
           <div className="hidden items-center gap-2 overflow-x-auto pb-0.5 app-scrollbar sm:flex xl:flex-wrap xl:overflow-visible">
@@ -812,7 +1016,7 @@ function CalendarView({
             <div className="ml-auto flex shrink-0 items-center gap-1.5 xl:ml-2 xl:gap-2">
               <button
                 onClick={onExit}
-                className="grid h-9 w-9 place-items-center rounded-full bg-[var(--earth)] text-[var(--on-earth)] shadow-lg shadow-black/10 transition-colors hover:bg-[var(--sage)] sm:h-10 sm:w-10"
+                className="grid h-9 w-9 place-items-center rounded-full border border-[var(--border)] bg-[var(--bg-app)]/80 text-[var(--sage)] shadow-sm transition-colors hover:bg-[var(--surface-soft)] sm:h-10 sm:w-10"
                 aria-label="Cerrar mapa"
               >
                 <X size={18} />
@@ -1087,8 +1291,10 @@ function TodayView({
   onToggleTask,
   onFocusNote,
   onEnableNotifications,
+  onStartPlanting,
   onNavigate,
   onShowWateringQueue,
+  todayWidgets,
   wateredToday,
   wateringStreak,
   getProgress,
@@ -1102,12 +1308,15 @@ function TodayView({
   onToggleTask: (noteId: string, taskId: string) => void;
   onFocusNote: (id: string) => void;
   onEnableNotifications: () => void;
+  onStartPlanting: () => void;
   onNavigate: (view: AppView) => void;
   onShowWateringQueue: () => void;
+  todayWidgets: TodayWidgetId[];
   wateredToday: boolean;
   wateringStreak: number;
   getProgress: (note: SeedNote) => number;
 }) {
+  const today = new Date();
   const activeNotes = notes.filter(note => !note.inbox && note.growthStage !== 'bloom' && !note.paused);
   const allThirstyNotes = activeNotes
     .filter(note => wateringDue(note))
@@ -1124,10 +1333,22 @@ function TodayView({
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 1);
   const inboxCount = notes.filter(note => note.inbox).length;
-  const activeCount = activeNotes.length;
+  const sproutCount = notes.filter(note => !note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom').length;
   const completedToday = notes.filter(note => note.harvestedAt && isToday(note.harvestedAt)).length;
+  const plantedToday = notes.filter(note => isToday(note.createdAt)).length;
+  const wateredTodayCount = notes.filter(note => note.lastWateredAt && isToday(note.lastWateredAt)).length;
+  const activeDaysThisMonth = new Set(notes
+    .flatMap(note => [note.createdAt, note.lastWateredAt, note.harvestedAt].filter((date): date is number => Boolean(date)))
+    .filter(date => isSameMonth(date, today))
+    .map(date => format(date, 'yyyy-MM-dd'))).size;
+  const learnedNotes = notes
+    .filter(note => note.growthStage === 'bloom' && (note.reflection?.trim() || note.takeaway?.trim()))
+    .sort((a, b) => (b.harvestedAt || b.updatedAt || b.createdAt) - (a.harvestedAt || a.updatedAt || a.createdAt));
+  const learningMemory = learnedNotes[0];
   const hour = new Date().getHours();
   const greeting = hour < 12 ? t('goodMorning') : hour < 19 ? t('goodAfternoon') : t('goodEvening');
+  const todayWeekday = format(today, 'EEEE', { locale: appDateLocale });
+  const todayDate = formatDayMonth(today);
   const doneTodayText = wateredToday
     ? appLanguage === 'en'
       ? `${wateringStreak}-day streak`
@@ -1142,33 +1363,108 @@ function TodayView({
       : inboxNotes[0]
         ? t('seedWaiting')
         : t('captureIdea');
-  const primaryAction = firstWatering ? t('waterNow') : nextAction ? t('focus') : inboxCount > 0 ? t('viewSeeds') : t('openGarden');
   const PrimaryIcon = firstWatering ? Droplets : nextAction ? Target : inboxCount > 0 ? Sprout : Leaf;
-  const primaryTone =
-    primaryMode === 'water' ? 'from-sky-50 to-white text-sky-700' :
-    primaryMode === 'focus' ? 'from-emerald-50 to-white text-emerald-700' :
-    primaryMode === 'seed' ? 'from-amber-50 to-white text-amber-700' :
-    'from-[var(--surface-strong)] to-[var(--bg-app)] text-[var(--sage)]';
+  const primaryActionLabel = firstWatering
+    ? t('waterNow')
+    : nextAction
+      ? t('focus')
+      : inboxCount > 0
+        ? t('viewSeeds')
+        : appLanguage === 'en' ? 'Plant seed' : 'Plantar semilla';
+  const primaryAccent =
+    primaryMode === 'water' ? 'text-[var(--sage)]' :
+    primaryMode === 'focus' ? 'text-[var(--seed-accent)]' :
+    primaryMode === 'seed' ? 'text-[#8a6a3e]' :
+    'text-[var(--sage)]';
+  const todayPlan = firstWatering
+    ? appLanguage === 'en'
+      ? `Today, water ${allThirstyNotes.length} idea${allThirstyNotes.length === 1 ? '' : 's'} before moving forward.`
+      : `Hoy conviene regar ${allThirstyNotes.length} idea${allThirstyNotes.length === 1 ? '' : 's'} antes de avanzar.`
+    : nextAction
+      ? appLanguage === 'en'
+        ? 'Today, finish one small step and keep the day quiet.'
+        : 'Hoy conviene completar un paso pequeño y cerrar el día sin ruido.'
+      : inboxCount > 0
+        ? appLanguage === 'en'
+          ? `Today, decide one of ${inboxCount} waiting seed${inboxCount === 1 ? '' : 's'}.`
+          : `Hoy conviene decidir ${Math.min(inboxCount, 1)} semilla${inboxCount === 1 ? '' : ' de las que esperan'}.`
+        : learningMemory
+          ? appLanguage === 'en'
+            ? 'Garden is quiet. Review one lesson or plant something new.'
+            : 'Jardín tranquilo. Puedes revisar un aprendizaje o plantar algo nuevo.'
+          : appLanguage === 'en'
+            ? 'Garden is quiet. Capture an idea or rest without guilt.'
+            : 'Jardín tranquilo. Captura una idea o descansa sin culpa.';
   const todayRoutes = [
-    { label: t('seeds'), value: inboxCount, icon: Sprout, onClick: () => onNavigate('inbox'), tone: 'text-amber-600' },
-    { label: t('sprouts'), value: activeCount, icon: Target, onClick: () => onNavigate('projects'), tone: 'text-emerald-600' },
-    { label: t('garden'), value: notes.filter(note => !note.inbox && note.growthStage === 'bloom').length, icon: Leaf, onClick: () => onNavigate('garden'), tone: 'text-green-600' },
-  ];
-  const secondaryActions = [
     {
-      icon: Droplets,
-      title: allThirstyNotes.length > 0 ? `${allThirstyNotes.length} ${t('wateringQueue')}` : t('wateringUpToDate'),
-      detail: allThirstyNotes.length > 0 ? (appLanguage === 'en' ? 'Review what has been still the longest' : 'Revisa lo que lleva más tiempo quieto') : doneTodayText,
-      onClick: () => allThirstyNotes.length > 1 ? onShowWateringQueue() : firstWatering ? onOpenWatering(firstWatering.id) : onNavigate('garden'),
-      tone: 'text-sky-600',
+      label: t('seeds'),
+      value: inboxCount,
+      detail: inboxCount > 0 ? (appLanguage === 'en' ? 'to decide' : 'por decidir') : (appLanguage === 'en' ? 'clear' : 'limpio'),
+      icon: Sprout,
+      onClick: () => onNavigate('inbox'),
+      tone: 'text-[#8a6a3e]',
     },
     {
+      label: t('sprouts'),
+      value: sproutCount,
+      detail: nextAction ? (appLanguage === 'en' ? 'next step' : 'siguiente') : (appLanguage === 'en' ? 'active' : 'activos'),
+      icon: Target,
+      onClick: () => onNavigate('projects'),
+      tone: 'text-[#4f715b]',
+    },
+    {
+      label: appLanguage === 'en' ? 'Harvests' : 'Cosechas',
+      value: notes.filter(note => !note.inbox && note.growthStage === 'bloom').length,
+      detail: completedToday > 0 ? (appLanguage === 'en' ? 'today' : 'hoy') : (appLanguage === 'en' ? 'saved' : 'guardados'),
+      icon: Archive,
+      onClick: () => onNavigate('harvest'),
+      tone: 'text-[#6f765e]',
+    },
+  ];
+  const todayModules = [
+    ...(todayWidgets.includes('watering') ? [{
+      id: 'watering',
+      icon: Droplets,
+      eyebrow: appLanguage === 'en' ? 'Watering' : 'Riego',
+      title: allThirstyNotes.length > 0
+        ? firstWatering?.title || t('waterNow')
+        : t('wateringUpToDate'),
+      detail: allThirstyNotes.length > 0
+        ? `${daysSince(firstWatering?.lastWateredAt || firstWatering?.createdAt)} ${appLanguage === 'en' ? 'days still' : 'días quieta'} · ${allThirstyNotes.length} ${t('wateringQueue')}`
+        : doneTodayText,
+      metric: allThirstyNotes.length > 0 ? `${allThirstyNotes.length}` : 'OK',
+      action: allThirstyNotes.length > 0 ? t('waterNow') : (appLanguage === 'en' ? 'View garden' : 'Ver jardín'),
+      onClick: () => allThirstyNotes.length > 1 ? onShowWateringQueue() : firstWatering ? onOpenWatering(firstWatering.id) : onNavigate('garden'),
+      tone: 'text-[var(--sage)]',
+    }] : []),
+    ...(todayWidgets.includes('learning') && learningMemory ? [{
+      id: 'learning',
+      icon: Archive,
+      eyebrow: appLanguage === 'en' ? 'Learned' : 'Lo aprendido',
+      title: learningMemory.title,
+      detail: learningMemory.reflection?.trim()
+        ? `“${learningMemory.reflection}”`
+        : learningMemory.takeaway?.trim()
+          ? `${appLanguage === 'en' ? 'Left you' : 'Te dejó'}: ${learningMemory.takeaway}`
+          : appLanguage === 'en' ? 'Closure saved' : 'Cierre guardado',
+      metric: `${Math.max(0, daysSince(learningMemory.harvestedAt || learningMemory.updatedAt || learningMemory.createdAt))}d`,
+      action: appLanguage === 'en' ? 'Open' : 'Abrir',
+      onClick: () => onNavigate('harvest'),
+      tone: 'text-[#6f765e]',
+    }] : []),
+    ...(todayWidgets.includes('path') ? [{
+      id: 'path',
       icon: CalendarIcon,
-      title: t('path'),
-      detail: t('monthPath'),
+      eyebrow: t('path'),
+      title: appLanguage === 'en' ? `${activeDaysThisMonth} active days this month` : `${activeDaysThisMonth} días activos este mes`,
+      detail: appLanguage === 'en'
+        ? `${plantedToday} planted · ${wateredTodayCount} watered · ${completedToday} closed today`
+        : `${plantedToday} plantadas · ${wateredTodayCount} riegos · ${completedToday} cierres hoy`,
+      metric: String(activeDaysThisMonth),
+      action: appLanguage === 'en' ? 'Calendar' : 'Calendario',
       onClick: () => onNavigate('calendar'),
       tone: 'text-[var(--sage)]',
-    },
+    }] : []),
   ];
   const primaryClick = () => {
     if (firstWatering) {
@@ -1179,7 +1475,11 @@ function TodayView({
       onFocusNote(nextAction.note.id);
       return;
     }
-    onNavigate(inboxCount > 0 ? 'inbox' : 'garden');
+    if (inboxCount > 0) {
+      onNavigate('inbox');
+      return;
+    }
+    onStartPlanting();
   };
 
   return (
@@ -1190,15 +1490,25 @@ function TodayView({
       exit={{ opacity: 0, y: 12 }}
       className="space-y-4 pb-24"
     >
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-[var(--text-muted)]">{greeting}</p>
-          <h3 className="mt-0.5 text-3xl font-semibold tracking-tight text-[var(--earth)]">{t('today')}</h3>
-          <p className="mt-1 text-sm font-medium text-[var(--text-muted)]">{doneTodayText}</p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium capitalize text-[var(--text-muted)]">{greeting} · {todayWeekday}</p>
+          <h3 className="mt-0.5 truncate text-3xl font-semibold capitalize tracking-tight text-[var(--earth)]">{todayDate}</h3>
+          <p className="mt-1 max-w-[22rem] text-sm font-medium leading-relaxed text-[var(--text-muted)]">{todayPlan}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className="rounded-full bg-[var(--surface-strong)] px-3 py-1 text-[11px] font-semibold text-[var(--sage)] shadow-sm ring-1 ring-[var(--border)]">{doneTodayText}</span>
+            {completedToday > 0 && (
+              <span className="rounded-full bg-[#eef4ec] px-3 py-1 text-[11px] font-semibold text-[#5b765f] ring-1 ring-[#dfe8dd]">
+                {appLanguage === 'en'
+                  ? `${completedToday} closure${completedToday === 1 ? '' : 's'} today`
+                  : `${completedToday} cierre${completedToday === 1 ? '' : 's'} hoy`}
+              </span>
+            )}
+          </div>
         </div>
         <button
           onClick={onEnableNotifications}
-          className="grid h-10 w-10 place-items-center rounded-full text-[var(--sage)] transition-colors hover:bg-[var(--surface-hover)]"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--sage)] shadow-sm transition-colors hover:bg-[var(--surface-hover)]"
           title="Activar recordatorios"
           aria-label="Activar recordatorios"
         >
@@ -1206,13 +1516,13 @@ function TodayView({
         </button>
       </div>
 
-      <section className={`overflow-hidden rounded-[1.85rem] border border-[var(--border)] bg-gradient-to-br ${primaryTone} p-4 shadow-sm`}>
+      <section className="overflow-hidden rounded-[1.85rem] border border-[var(--border)] bg-[linear-gradient(135deg,var(--surface-strong),var(--surface-soft))] p-4 shadow-sm">
         <button type="button" onClick={primaryClick} className="flex w-full items-start gap-4 text-left">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/72 shadow-sm">
+          <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] shadow-sm ring-1 ring-[var(--border)] ${primaryAccent}`}>
             <PrimaryIcon size={22} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">{t('now')}</span>
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">{appLanguage === 'en' ? 'One thing today' : 'Una cosa para hoy'}</span>
             <span className="mt-1 block truncate text-xl font-semibold tracking-tight text-[var(--earth)]">{primaryTitle}</span>
             <span className="mt-1 block line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{primaryDetail}</span>
           </span>
@@ -1222,50 +1532,58 @@ function TodayView({
           onClick={primaryClick}
           className="mt-5 flex h-11 w-full items-center justify-center rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
         >
-          {primaryAction}
+          {primaryActionLabel}
         </button>
       </section>
 
-      <section className="grid grid-cols-3 gap-2">
-        {todayRoutes.map(item => (
-          <button
-            key={item.label}
-            type="button"
-            onClick={item.onClick}
-            className="rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-3 text-left shadow-sm soft-interaction hover:bg-[var(--surface-hover)]"
-          >
-            <item.icon size={17} className={item.tone} />
-            <p className="mt-2 text-xl font-semibold text-[var(--earth)]">{item.value}</p>
-            <p className="mt-0.5 truncate text-[10px] font-medium text-[var(--text-muted)]">{item.label}</p>
-          </button>
-        ))}
-      </section>
+      {todayWidgets.includes('summary') && (
+        <section className="grid grid-cols-3 gap-2 rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-strong)] p-1.5 shadow-sm">
+          {todayRoutes.map(item => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={item.onClick}
+              className="flex min-h-[5.25rem] flex-col items-center justify-center rounded-[1rem] px-2 py-2.5 text-center soft-interaction hover:bg-[var(--surface-hover)]"
+            >
+              <div className="flex items-center justify-center gap-1.5">
+                <item.icon size={14} className={item.tone} />
+                <p className="text-lg font-semibold leading-none text-[var(--earth)]">{item.value}</p>
+              </div>
+              <p className="mt-1 w-full truncate text-[10px] font-medium text-[var(--text-muted)]">{item.label}</p>
+              <p className="mt-0.5 w-full truncate text-[9px] font-semibold text-[var(--text-muted)]/75">{item.detail}</p>
+            </button>
+          ))}
+        </section>
+      )}
 
-      <section className="overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
-        {secondaryActions.map((item, index) => (
-          <button
-            key={item.title}
-            type="button"
-            onClick={item.onClick}
-            className={`flex min-h-15 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-hover)] ${index > 0 ? 'border-t border-[var(--border)]' : ''}`}
-          >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--bg-app)]">
-              <item.icon size={17} className={item.tone} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[15px] font-semibold text-[var(--earth)]">{item.title}</span>
-              <span className="mt-0.5 block truncate text-sm font-medium text-[var(--text-muted)]">{item.detail}</span>
-            </span>
-            <ChevronRight size={16} className="text-[var(--text-muted)]" />
-          </button>
-        ))}
-      </section>
-
-      {completedToday > 0 && (
-        <section className="rounded-[1.5rem] border border-green-100 bg-green-50 px-4 py-3">
-          <p className="text-sm font-semibold text-green-700">
-            {appLanguage === 'en' ? `You closed ${completedToday} idea${completedToday === 1 ? '' : 's'} today.` : `Hoy cerraste ${completedToday} idea${completedToday === 1 ? '' : 's'}.`}
-          </p>
+      {todayModules.length > 0 && (
+        <section className="grid gap-3">
+          {todayModules.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={item.onClick}
+              className="rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 text-left shadow-sm transition-colors hover:bg-[var(--surface-hover)]"
+            >
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)]">
+                  <item.icon size={18} className={item.tone} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">{item.eyebrow}</span>
+                  <span className="mt-1 block truncate text-[15px] font-semibold text-[var(--earth)]">{item.title}</span>
+                  <span className="mt-1 block line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{item.detail}</span>
+                </span>
+                <span className="flex shrink-0 flex-col items-end gap-2">
+                  <span className="rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-[10px] font-black text-[var(--sage)]">{item.metric}</span>
+                  <ChevronRight size={16} className="text-[var(--text-muted)]" />
+                </span>
+              </div>
+              <span className="mt-3 inline-flex h-8 items-center rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)]">
+                {item.action}
+              </span>
+            </button>
+          ))}
         </section>
       )}
     </motion.div>
@@ -1282,6 +1600,7 @@ function InboxView({
   onSaveLater,
   onDelete,
   onSelectNote,
+  onShowActions,
   recentlyCreatedNoteId,
 }: {
   notes: SeedNote[];
@@ -1293,6 +1612,7 @@ function InboxView({
   onSaveLater: (id: string) => void;
   onDelete: (id: string) => void;
   onSelectNote: (id: string) => void;
+  onShowActions: (id: string) => void;
   recentlyCreatedNoteId: string | null;
 }) {
   const inboxNotes = notes.filter(note => note.inbox);
@@ -1324,18 +1644,21 @@ function InboxView({
             : t('readyToDecide');
 
           return (
-            <motion.div
+            <GestureNoteSurface
               key={note.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{
-                opacity: 1,
-                y: 0,
-                backgroundColor: recentlyCreatedNoteId === note.id ? 'rgba(79, 127, 95, 0.10)' : 'rgba(255, 255, 255, 0)',
-              }}
-              transition={{ duration: 0.28 }}
-              className={`group px-4 py-3.5 ${index > 0 ? 'border-t border-[var(--border)]' : ''}`}
+              onPress={() => onSelectNote(note.id)}
+              onSwipeRight={() => onCultivate(note.id)}
+              onSwipeLeft={() => onSaveLater(note.id)}
+              onLongPress={() => onShowActions(note.id)}
+              rightLabel="Brote"
+              rightIcon={Sprout}
+              rightTone="bg-emerald-500 text-white"
+              leftLabel="Luego"
+              leftIcon={Archive}
+              leftTone="bg-amber-500 text-white"
+              className={`group px-4 py-3.5 ${recentlyCreatedNoteId === note.id ? 'bg-[var(--sage)]/10' : 'bg-[var(--surface-strong)]'} ${index > 0 ? 'border-t border-[var(--border)]' : ''}`}
             >
-              <button onClick={() => onSelectNote(note.id)} className="flex w-full items-center gap-3 text-left">
+              <button onClick={(event) => { event.stopPropagation(); onSelectNote(note.id); }} className="flex w-full items-center gap-3 text-left">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)]">
                   <Sprout size={15} />
                 </span>
@@ -1346,20 +1669,20 @@ function InboxView({
                 <ChevronRight size={16} className="shrink-0 text-[var(--text-muted)]" />
               </button>
               <div className="mt-3 grid grid-cols-[1fr_1fr_auto_auto] items-center gap-2 pl-12">
-                <button onClick={() => onComplete(note.id)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold text-[var(--on-sage)] active:translate-y-px soft-interaction">
+                <button onClick={(event) => { event.stopPropagation(); onComplete(note.id); }} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold text-[var(--on-sage)] active:translate-y-px soft-interaction">
                   <CheckCircle2 size={13} /> {t('done')}
                 </button>
-                <button onClick={() => onCultivate(note.id)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)] active:translate-y-px soft-interaction hover:bg-[var(--surface-hover)]">
+                <button onClick={(event) => { event.stopPropagation(); onCultivate(note.id); }} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)] active:translate-y-px soft-interaction hover:bg-[var(--surface-hover)]">
                   <Sprout size={13} /> {t('project')}
                 </button>
-                <button onClick={() => onSaveLater(note.id)} className="grid h-9 w-9 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)] hover:text-[var(--sage)]" aria-label={t('later')}>
+                <button onClick={(event) => { event.stopPropagation(); onSaveLater(note.id); }} className="grid h-9 w-9 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)] hover:text-[var(--sage)]" aria-label={t('later')}>
                   <Archive size={14} />
                 </button>
-                <button onClick={() => onDelete(note.id)} className="grid h-9 w-9 place-items-center rounded-full text-red-400 transition-colors hover:bg-red-50 hover:text-red-600" aria-label={`Soltar ${note.title}`}>
+                <button onClick={(event) => { event.stopPropagation(); onDelete(note.id); }} className="grid h-9 w-9 place-items-center rounded-full text-red-400 transition-colors hover:bg-red-50 hover:text-red-600" aria-label={`Soltar ${note.title}`}>
                   <Trash2 size={14} />
                 </button>
               </div>
-            </motion.div>
+            </GestureNoteSurface>
           );
         })}
       </div>
@@ -1373,6 +1696,8 @@ function ProjectsView({
   onFocusNote,
   onToggleTask,
   onOpenWatering,
+  onTogglePause,
+  onShowActions,
   getProgress,
 }: {
   notes: SeedNote[];
@@ -1380,6 +1705,8 @@ function ProjectsView({
   onFocusNote: (id: string) => void;
   onToggleTask: (noteId: string, taskId: string) => void;
   onOpenWatering: (id: string) => void;
+  onTogglePause: (id: string) => void;
+  onShowActions: (id: string) => void;
   getProgress: (note: SeedNote) => number;
 }) {
   const activeProjects = notes.filter(note => !note.inbox && note.isGrowth && note.growthStage !== 'bloom');
@@ -1452,8 +1779,18 @@ function ProjectsView({
           const needsWater = wateringDue(note) && !note.paused;
 
           return (
-            <article key={note.id} className="overflow-hidden rounded-[1.4rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
-              <button onClick={() => onSelectNote(note.id)} className="flex w-full items-start gap-3 px-4 py-3.5 text-left">
+            <GestureNoteSurface
+              key={note.id}
+              onPress={() => onSelectNote(note.id)}
+              onSwipeRight={() => onOpenWatering(note.id)}
+              onSwipeLeft={() => onTogglePause(note.id)}
+              onLongPress={() => onShowActions(note.id)}
+              rightLabel="Regar"
+              leftLabel={note.paused ? 'Reanudar' : 'Pausar'}
+              leftIcon={Pause}
+              className="overflow-hidden rounded-[1.4rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm"
+            >
+              <button onClick={(event) => { event.stopPropagation(); onSelectNote(note.id); }} className="flex w-full items-start gap-3 px-4 py-3.5 text-left">
                 <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${needsWater ? 'bg-sky-500' : 'bg-[var(--sage)]'}`} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold text-[var(--earth)]">{note.title}</span>
@@ -1465,17 +1802,17 @@ function ProjectsView({
                 <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${progress}%` }} />
               </div>
               <div className="grid grid-cols-3 gap-2 px-4 py-3">
-                <button onClick={() => onFocusNote(note.id)} className="h-9 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold text-[var(--on-sage)] soft-interaction">
+                <button onClick={(event) => { event.stopPropagation(); onFocusNote(note.id); }} className="h-9 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold text-[var(--on-sage)] soft-interaction">
                   Foco
                 </button>
-                <button onClick={() => nextTask ? onToggleTask(note.id, nextTask.id) : onSelectNote(note.id)} className="h-9 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)] soft-interaction">
+                <button onClick={(event) => { event.stopPropagation(); nextTask ? onToggleTask(note.id, nextTask.id) : onSelectNote(note.id); }} className="h-9 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)] soft-interaction">
                   {nextTask ? 'Hecho' : 'Editar'}
                 </button>
-                <button onClick={() => needsWater ? onOpenWatering(note.id) : onSelectNote(note.id)} className={`h-9 rounded-full px-3 text-xs font-semibold soft-interaction ${needsWater ? 'bg-sky-50 text-sky-700' : 'bg-[var(--bg-app)] text-[var(--text-muted)]'}`}>
+                <button onClick={(event) => { event.stopPropagation(); needsWater ? onOpenWatering(note.id) : onSelectNote(note.id); }} className={`h-9 rounded-full px-3 text-xs font-semibold soft-interaction ${needsWater ? 'bg-sky-50 text-sky-700' : 'bg-[var(--bg-app)] text-[var(--text-muted)]'}`}>
                   {needsWater ? 'Regar' : 'Ver'}
                 </button>
               </div>
-            </article>
+            </GestureNoteSurface>
           );
         })}
       </section>
@@ -1484,51 +1821,139 @@ function ProjectsView({
 }
 
 function HarvestView({ notes, onSelectNote }: { notes: SeedNote[]; onSelectNote: (id: string) => void }) {
-  const harvests = notes.filter(note => note.growthStage === 'bloom');
+  const harvests = notes
+    .filter(note => note.growthStage === 'bloom')
+    .sort((a, b) => (b.harvestedAt || b.createdAt) - (a.harvestedAt || a.createdAt));
   const totalMinutes = harvests.reduce((sum, note) => sum + (note.focusedMinutes || 0), 0);
-  const totalSteps = harvests.reduce((sum, note) => sum + note.tasks.length, 0);
+  const learningCount = harvests.filter(note => note.reflection?.trim() || note.takeaway?.trim()).length;
+  const featuredLearning = harvests.find(note => note.reflection?.trim() || note.takeaway?.trim()) || harvests[0];
+  const remainingHarvests = featuredLearning ? harvests.filter(note => note.id !== featuredLearning.id) : harvests;
 
   return (
-    <motion.div key="harvest-view" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="pb-24">
-      <div className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-6 shadow-sm mb-6">
-        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Archivo vivo</p>
-        <h3 className="text-3xl font-serif font-black text-[var(--earth)] mt-1">Cosechas</h3>
-        <p className="text-sm text-[var(--text-muted)] mt-2">Ideas terminadas, aprendizajes y resultados que ya no quieres perder.</p>
-        <div className="grid grid-cols-3 gap-2 mt-5">
+    <motion.div key="harvest-view" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="space-y-5 pb-24">
+      <section className="overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface-strong),var(--surface-soft))] p-5 shadow-sm sm:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Archivo vivo</p>
+            <h3 className="mt-1 text-3xl font-serif font-black text-[var(--earth)]">Lo aprendido</h3>
+            <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-[var(--text-muted)]">
+              Cierres breves de ideas terminadas. No es diario: es memoria útil de lo que ya te dejó avanzar.
+            </p>
+          </div>
+          <span className="hidden h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] shadow-sm sm:grid">
+            <Archive size={20} />
+          </span>
+        </div>
+
+        <div className="mt-5 grid grid-cols-3 gap-2">
           {[
             { label: 'Ideas', value: harvests.length },
-            { label: 'Pasos', value: totalSteps },
+            { label: 'Aprendizajes', value: learningCount },
             { label: 'Min', value: totalMinutes },
           ].map(item => (
-            <div key={item.label} className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] px-3 py-3 text-center">
+            <div key={item.label} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-3 py-3 text-center">
               <p className="text-2xl font-serif font-black text-[var(--earth)]">{item.value}</p>
               <p className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
             </div>
           ))}
         </div>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {harvests.length === 0 ? (
-          <div className="lg:col-span-2 rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)] p-8 text-center">
-            <Archive className="mx-auto text-[var(--sage)] opacity-40 mb-4" size={44} />
-            <p className="font-serif text-2xl text-[var(--earth)]">Todavía no hay cosechas</p>
-            <p className="text-sm text-[var(--text-muted)] mt-2">Completa los pasos de una idea para guardarla aquí.</p>
-          </div>
-        ) : harvests.map(note => (
-          <button key={note.id} onClick={() => onSelectNote(note.id)} className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-5 text-left shadow-sm hover:shadow-md soft-interaction">
-            <p className="text-[10px] font-black uppercase tracking-widest text-green-600 mb-2">Cosechada</p>
-            <h4 className="font-serif text-2xl font-black text-[var(--earth)]">{note.title}</h4>
-            <p className="text-sm text-[var(--text-muted)] mt-2 line-clamp-2">{note.reflection || note.content}</p>
-            <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-              <span className="rounded-xl bg-[var(--bg-app)] px-2 py-2 text-[10px] font-black text-[var(--sage)]">{note.tasks.length} pasos</span>
-              <span className="rounded-xl bg-[var(--bg-app)] px-2 py-2 text-[10px] font-black text-[var(--sage)]">{note.focusedMinutes || 0} min</span>
-              <span className="rounded-xl bg-[var(--bg-app)] px-2 py-2 text-[10px] font-black text-[var(--sage)]">
-                {formatShortDate(note.harvestedAt || note.createdAt)}
-              </span>
-            </div>
-          </button>
-        ))}
-      </div>
+      </section>
+
+      {harvests.length === 0 ? (
+        <section className="rounded-[2rem] border border-[var(--border)] bg-[var(--surface-soft)] p-8 text-center">
+          <Archive className="mx-auto mb-4 text-[var(--sage)] opacity-40" size={44} />
+          <p className="font-serif text-2xl text-[var(--earth)]">Todavía no hay cosechas</p>
+          <p className="mt-2 text-sm text-[var(--text-muted)]">Completa los pasos de una idea para guardar aquí su cierre.</p>
+        </section>
+      ) : (
+        <>
+          {featuredLearning && (
+            <button
+              type="button"
+              onClick={() => onSelectNote(featuredLearning.id)}
+              className="w-full overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] text-left shadow-sm soft-interaction hover:shadow-md"
+            >
+              <div className="grid gap-0 lg:grid-cols-[1fr_14rem]">
+                <div className="p-5 sm:p-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#6f765e]">
+                      {featuredLearning.reflection?.trim() || featuredLearning.takeaway?.trim() ? 'Último aprendizaje' : 'Cosecha reciente'}
+                    </p>
+                    <span className="rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-[10px] font-semibold text-[var(--text-muted)]">
+                      {formatShortDate(featuredLearning.harvestedAt || featuredLearning.createdAt)}
+                    </span>
+                  </div>
+                  <h4 className="mt-3 font-serif text-3xl font-black leading-tight text-[var(--earth)]">{featuredLearning.title}</h4>
+                  {featuredLearning.reflection?.trim() ? (
+                    <p className="mt-4 text-xl font-semibold leading-snug text-[var(--earth)]">
+                      “{featuredLearning.reflection}”
+                    </p>
+                  ) : (
+                    <div className="mt-4 rounded-[1.35rem] border border-dashed border-[var(--border)] bg-[var(--bg-app)]/55 px-4 py-3">
+                      <p className="text-sm font-semibold text-[var(--earth)]">Sin cierre todavía</p>
+                      <p className="mt-1 text-sm font-medium text-[var(--text-muted)]">Puedes añadir lo aprendido cuando esta idea vuelva a importarte.</p>
+                    </div>
+                  )}
+                  {featuredLearning.takeaway?.trim() && (
+                    <p className="mt-3 rounded-[1.35rem] bg-[var(--bg-app)] px-4 py-3 text-sm font-semibold leading-relaxed text-[var(--sage)]">
+                      Me dejó: {featuredLearning.takeaway}
+                    </p>
+                  )}
+                </div>
+                <div className="flex border-t border-[var(--border)] bg-[var(--bg-app)]/60 p-4 lg:border-l lg:border-t-0">
+                  <div className="grid w-full grid-cols-3 gap-2 text-center lg:grid-cols-1">
+                    <span className="rounded-2xl bg-[var(--surface-strong)] px-2 py-3 text-[10px] font-black text-[var(--sage)]">{featuredLearning.tasks.length} pasos</span>
+                    <span className="rounded-2xl bg-[var(--surface-strong)] px-2 py-3 text-[10px] font-black text-[var(--sage)]">{featuredLearning.focusedMinutes || 0} min</span>
+                    <span className="rounded-2xl bg-[var(--surface-strong)] px-2 py-3 text-[10px] font-black text-[var(--sage)]">{STAGE_META[featuredLearning.growthStage].shortLabel}</span>
+                  </div>
+                </div>
+              </div>
+            </button>
+          )}
+
+          <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {remainingHarvests.map(note => {
+              const hasLearning = Boolean(note.reflection?.trim() || note.takeaway?.trim());
+
+              return (
+                <button
+                  key={note.id}
+                  type="button"
+                  onClick={() => onSelectNote(note.id)}
+                  className="rounded-[1.65rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 text-left shadow-sm soft-interaction hover:bg-[var(--surface-soft)]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
+                        {hasLearning ? 'Aprendizaje' : 'Sin cierre'}
+                      </p>
+                      <h4 className="mt-1 truncate text-xl font-serif font-black text-[var(--earth)]">{note.title}</h4>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-[10px] font-semibold text-[var(--text-muted)]">
+                      {formatShortDate(note.harvestedAt || note.createdAt)}
+                    </span>
+                  </div>
+                  {note.reflection?.trim() ? (
+                    <p className="mt-3 line-clamp-3 text-sm font-semibold leading-relaxed text-[var(--earth)]">“{note.reflection}”</p>
+                  ) : (
+                    <p className="mt-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-app)]/55 px-3 py-2 text-sm font-semibold text-[var(--text-muted)]">
+                      Sin cierre todavía
+                    </p>
+                  )}
+                  {note.takeaway?.trim() && (
+                    <p className="mt-2 line-clamp-2 text-xs font-semibold leading-relaxed text-[var(--sage)]">Me dejó: {note.takeaway}</p>
+                  )}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-[10px] font-black text-[var(--sage)]">{note.tasks.length} pasos</span>
+                    <span className="rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-[10px] font-black text-[var(--sage)]">{note.focusedMinutes || 0} min</span>
+                    <span className="rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-[10px] font-black text-[var(--text-muted)]">{note.seedType || 'idea'}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </section>
+        </>
+      )}
     </motion.div>
   );
 }
@@ -2992,18 +3417,18 @@ function AuthEntryPage({
 export default function App() {
   const [notes, setNotes] = useState<SeedNote[]>([]);
   const [notesLoaded, setNotesLoaded] = useState(false);
-  const [showLanding, setShowLanding] = useState(() => localStorage.getItem('seed-welcome-v2-seen') !== 'true');
+  const [showLanding, setShowLanding] = useState(() => getStoredItem('seed-welcome-v2-seen') !== 'true');
   const [landingRoute, setLandingRoute] = useState<'landing' | 'login' | 'register'>('landing');
   const importInputRef = useRef<HTMLInputElement>(null);
   const [planets, setPlanets] = useState<Planet[]>(() => {
     try {
-      const parsed = JSON.parse(localStorage.getItem('seed-planets') || '[]');
+      const parsed = JSON.parse(getStoredItem('seed-planets') || '[]');
       return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_PLANETS;
     } catch {
       return DEFAULT_PLANETS;
     }
   });
-  const [activePlanetId, setActivePlanetId] = useState(() => localStorage.getItem('seed-active-planet') || DEFAULT_PLANET_ID);
+  const [activePlanetId, setActivePlanetId] = useState(() => getStoredItem('seed-active-planet') || DEFAULT_PLANET_ID);
   const [isAddingPlanet, setIsAddingPlanet] = useState(false);
   const [newPlanetName, setNewPlanetName] = useState('');
   const [showPlanetSettings, setShowPlanetSettings] = useState(false);
@@ -3011,7 +3436,7 @@ export default function App() {
   const [onboardingStep, setOnboardingStep] = useState(0);
   
   const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem('seed-theme') as Theme) || 'earth';
+    return (getStoredItem('seed-theme') as Theme) || 'earth';
   });
 
   const [search, setSearch] = useState('');
@@ -3020,7 +3445,10 @@ export default function App() {
   const [showGardenFullscreen, setShowGardenFullscreen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [isAdding, setIsAdding] = useState(false);
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
+  const [createMode, setCreateMode] = useState<CreateMode>('seed');
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [quickActionsNoteId, setQuickActionsNoteId] = useState<string | null>(null);
   const [recentlyCreatedNoteId, setRecentlyCreatedNoteId] = useState<string | null>(null);
   const [newNote, setNewNote] = useState<{ title: string; content: string; dueDate: string; seedType: NonNullable<SeedNote['seedType']> }>({ title: '', content: '', dueDate: '', seedType: 'idea' });
   const [quickNote, setQuickNote] = useState('');
@@ -3032,7 +3460,7 @@ export default function App() {
   const [focusNoteId, setFocusNoteId] = useState<string | null>(null);
   const [celebration, setCelebration] = useState<string | null>(null);
   const [flowerReward, setFlowerReward] = useState<{ id: string; title: string } | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('seed-onboarded') !== 'true');
+  const [showOnboarding, setShowOnboarding] = useState(() => getStoredItem('seed-onboarded') !== 'true');
 	  const [showSettings, setShowSettings] = useState(false);
 	  const [showMobileMenu, setShowMobileMenu] = useState(false);
 	  const [showGardenSwitcher, setShowGardenSwitcher] = useState(false);
@@ -3054,12 +3482,26 @@ export default function App() {
 	  const autoSyncTimerRef = useRef<number | null>(null);
 	  const mobileGardenFullscreenOpenedRef = useRef(false);
 	  const mobileMenuRef = useRef<HTMLElement | null>(null);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('seed-notifications') === 'true');
-  const [defaultWateringInterval, setDefaultWateringInterval] = useState(() => Number(localStorage.getItem('seed-default-watering') || 1));
-  const [reminderHour, setReminderHour] = useState(() => Number(localStorage.getItem('seed-reminder-hour') || 9));
+	  const mobileMenuGestureRef = useRef({ tracking: false, startX: 0, startY: 0, opened: false });
+	  const createMenuTimerRef = useRef<number | null>(null);
+	  const createMenuLongPressRef = useRef(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => getStoredItem('seed-notifications') === 'true');
+  const [defaultWateringInterval, setDefaultWateringInterval] = useState(() => getStoredNumber('seed-default-watering', 1, 1, 30));
+  const [reminderHour, setReminderHour] = useState(() => getStoredNumber('seed-reminder-hour', 9, 0, 23));
+  const [todayWidgets, setTodayWidgets] = useState<TodayWidgetId[]>(() => {
+    try {
+      const parsed = JSON.parse(getStoredItem('seed-today-widgets') || '[]');
+      const valid = Array.isArray(parsed)
+        ? parsed.filter((id): id is TodayWidgetId => typeof id === 'string' && TODAY_WIDGET_IDS.has(id as TodayWidgetId))
+        : [];
+      return valid.length > 0 ? valid : DEFAULT_TODAY_WIDGETS;
+    } catch {
+      return DEFAULT_TODAY_WIDGETS;
+    }
+  });
   const [account, setAccount] = useState<AccountProfile>(() => {
     try {
-      return JSON.parse(localStorage.getItem('seed-account') || '{"name":"Jardinero Digital","email":"jose@garden.com","role":"Cuidador de ideas"}');
+      return JSON.parse(getStoredItem('seed-account') || '{"name":"Jardinero Digital","email":"jose@garden.com","role":"Cuidador de ideas"}');
     } catch {
       return { name: 'Jardinero Digital', email: 'jose@garden.com', role: 'Cuidador de ideas' };
     }
@@ -3068,7 +3510,7 @@ export default function App() {
   const [recentlyWateredId, setRecentlyWateredId] = useState<string | null>(null);
   const [wateringRitual, setWateringRitual] = useState<{ lastDate: string; streak: number }>(() => {
     try {
-      return JSON.parse(localStorage.getItem('seed-watering-ritual') || '{"lastDate":"","streak":0}');
+      return JSON.parse(getStoredItem('seed-watering-ritual') || '{"lastDate":"","streak":0}');
     } catch {
       return { lastDate: '', streak: 0 };
     }
@@ -3078,9 +3520,10 @@ export default function App() {
   const accountInitials = getAccountInitials(account.name, account.email);
   const profileStats = useMemo(() => {
     const totalFocus = notes.reduce((sum, note) => sum + (note.focusedMinutes || 0), 0);
-    const harvests = notes.filter(note => note.growthStage === 'bloom').length;
-    const active = notes.filter(note => note.isGrowth && note.growthStage !== 'bloom' && !note.paused).length;
-    const needsWater = notes.filter(note => wateringDue(note) && note.growthStage !== 'bloom' && !note.paused).length;
+    const seeds = notes.filter(note => note.inbox).length;
+    const harvests = notes.filter(note => !note.inbox && note.growthStage === 'bloom').length;
+    const active = notes.filter(note => !note.inbox && note.isGrowth && note.growthStage !== 'bloom' && !note.paused).length;
+    const needsWater = notes.filter(note => !note.inbox && wateringDue(note) && note.growthStage !== 'bloom' && !note.paused).length;
     const season = harvests >= 5
       ? 'Temporada de cosecha'
       : active >= 4
@@ -3088,7 +3531,7 @@ export default function App() {
         : needsWater > 0
           ? 'Temporada de riego'
           : 'Temporada de siembra';
-    return { totalFocus, harvests, active, needsWater, season };
+    return { totalFocus, seeds, harvests, active, needsWater, season };
   }, [notes]);
   const profileAchievements = useMemo(() => [
     { label: 'Primera semilla', active: notes.length > 0 },
@@ -3191,7 +3634,133 @@ export default function App() {
   }, [showMobileMenu]);
 
   useEffect(() => {
-    localStorage.setItem('seed-planets', JSON.stringify(planets));
+    if (typeof window === 'undefined') return;
+
+    const edgeWidth = 26;
+    const openDistance = 58;
+    const gesturesDisabled =
+      showMobileMenu ||
+      isAdding ||
+      showSettings ||
+      showOnboarding ||
+      showGardenFullscreen ||
+      view === 'focus' ||
+      view === 'calendar';
+
+    const resetGesture = () => {
+      mobileMenuGestureRef.current = { tracking: false, startX: 0, startY: 0, opened: false };
+    };
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (gesturesDisabled || window.innerWidth >= 768) {
+        resetGesture();
+        return;
+      }
+
+      const touch = event.touches[0];
+      if (!touch || touch.clientX > edgeWidth) {
+        resetGesture();
+        return;
+      }
+
+      mobileMenuGestureRef.current = {
+        tracking: true,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        opened: false,
+      };
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const gesture = mobileMenuGestureRef.current;
+      if (!gesture.tracking || gesture.opened) return;
+
+      const touch = event.touches[0];
+      if (!touch) return;
+
+      const deltaX = touch.clientX - gesture.startX;
+      const deltaY = Math.abs(touch.clientY - gesture.startY);
+      const mostlyHorizontal = deltaY < Math.max(34, deltaX * 0.55);
+
+      if (deltaX >= openDistance && mostlyHorizontal) {
+        gesture.opened = true;
+        gesture.tracking = false;
+        setShowMobileMenu(true);
+      }
+
+      if (deltaX < -8 || deltaY > 80) {
+        resetGesture();
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', resetGesture, { passive: true });
+    window.addEventListener('touchcancel', resetGesture, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', resetGesture);
+      window.removeEventListener('touchcancel', resetGesture);
+    };
+  }, [isAdding, showGardenFullscreen, showMobileMenu, showOnboarding, showSettings, view]);
+
+  useEffect(() => {
+    if (!showMobileMenu || typeof window === 'undefined') return;
+
+    let tracking = false;
+    let startX = 0;
+    let startY = 0;
+
+    const handleTouchStart = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      tracking = true;
+      startX = touch.clientX;
+      startY = touch.clientY;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!tracking) return;
+      const touch = event.touches[0];
+      if (!touch) return;
+
+      const deltaX = touch.clientX - startX;
+      const deltaY = Math.abs(touch.clientY - startY);
+      const mostlyHorizontal = Math.abs(deltaX) > deltaY * 1.25;
+
+      if (deltaX <= -58 && mostlyHorizontal) {
+        tracking = false;
+        setShowMobileMenu(false);
+      }
+    };
+
+    const reset = () => {
+      tracking = false;
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', reset, { passive: true });
+    window.addEventListener('touchcancel', reset, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', reset);
+      window.removeEventListener('touchcancel', reset);
+    };
+  }, [showMobileMenu]);
+
+  useEffect(() => {
+    if (showCreateMenu && (isAdding || showMobileMenu || showSettings || showGardenFullscreen || view === 'focus' || view === 'calendar')) {
+      setShowCreateMenu(false);
+    }
+  }, [isAdding, showCreateMenu, showGardenFullscreen, showMobileMenu, showSettings, view]);
+
+  useEffect(() => {
+    setStoredItem('seed-planets', JSON.stringify(planets));
   }, [planets]);
 
   useEffect(() => {
@@ -3214,7 +3783,7 @@ export default function App() {
   }, [activePlanetId, planets]);
 
 	  useEffect(() => {
-	    localStorage.setItem('seed-active-planet', activePlanetId);
+	    setStoredItem('seed-active-planet', activePlanetId);
 	  }, [activePlanetId]);
 
 	  useEffect(() => {
@@ -3234,28 +3803,32 @@ export default function App() {
 	  }, [view]);
 	
 	  useEffect(() => {
-	    localStorage.setItem('seed-theme', theme);
+	    setStoredItem('seed-theme', theme);
 	    document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
   useEffect(() => {
-    localStorage.setItem('seed-default-watering', String(defaultWateringInterval));
+    setStoredItem('seed-default-watering', String(defaultWateringInterval));
   }, [defaultWateringInterval]);
 
   useEffect(() => {
-    localStorage.setItem('seed-notifications', notificationsEnabled ? 'true' : 'false');
+    setStoredItem('seed-notifications', notificationsEnabled ? 'true' : 'false');
   }, [notificationsEnabled]);
 
   useEffect(() => {
-    localStorage.setItem('seed-reminder-hour', String(reminderHour));
+    setStoredItem('seed-reminder-hour', String(reminderHour));
   }, [reminderHour]);
 
   useEffect(() => {
-    localStorage.setItem('seed-account', JSON.stringify(account));
+    setStoredItem('seed-today-widgets', JSON.stringify(todayWidgets));
+  }, [todayWidgets]);
+
+  useEffect(() => {
+    setStoredItem('seed-account', JSON.stringify(account));
   }, [account]);
 
   useEffect(() => {
-    localStorage.setItem('seed-watering-ritual', JSON.stringify(wateringRitual));
+    setStoredItem('seed-watering-ritual', JSON.stringify(wateringRitual));
   }, [wateringRitual]);
 
   useEffect(() => {
@@ -3328,10 +3901,16 @@ export default function App() {
         return;
       }
 
-      const incoming: SeedNote = {
+      const incoming = normalizeNote({
         ...row.data,
-        planetId: row.data.planetId || row.planet_id || DEFAULT_PLANET_ID,
-      };
+        id: row.data?.id || row.id,
+        planetId: row.data?.planetId || row.planet_id || DEFAULT_PLANET_ID,
+      });
+
+      if (!incoming) {
+        markRemoteApplyDone();
+        return;
+      }
 
       setNotes(current => {
         const existing = current.find(note => note.id === incoming.id);
@@ -3418,11 +3997,11 @@ export default function App() {
     if (dueNotes.length === 0) return;
 
     const todayKey = format(Date.now(), 'yyyy-MM-dd');
-    if (localStorage.getItem('seed-last-notification-day') === todayKey) return;
+    if (getStoredItem('seed-last-notification-day') === todayKey) return;
 
     const delay = Math.max(5000, new Date().getHours() >= reminderHour ? 5000 : (reminderHour - new Date().getHours()) * 60 * 60 * 1000);
     const timeout = window.setTimeout(() => {
-      localStorage.setItem('seed-last-notification-day', todayKey);
+      setStoredItem('seed-last-notification-day', todayKey);
       showSeedNotification(
         dueNotes.length === 1
           ? `"${dueNotes[0].title}" vale un riego rápido.`
@@ -3462,31 +4041,38 @@ export default function App() {
 	      .split('\n')
 	      .map(line => line.trim())
 	      .find(Boolean) || fallbackContent;
+	    const isSprout = createMode === 'sprout';
+	    const isJournal = createMode === 'journal';
+	    const firstStep = title || content || (appLanguage === 'en' ? 'Take the first five-minute step' : 'Dar el primer paso de 5 minutos');
+	    const now = Date.now();
 	    
 	    const note: SeedNote = {
 	      id: crypto.randomUUID(),
-	      title: title || (inferredTitle.length > 42 ? `${inferredTitle.slice(0, 42)}...` : inferredTitle) || 'Nueva Semilla',
+	      title: title || (inferredTitle.length > 42 ? `${inferredTitle.slice(0, 42)}...` : inferredTitle) || (isSprout ? 'Nuevo brote' : isJournal ? 'Nueva reflexión' : 'Nueva Semilla'),
 	      content: fallbackContent,
-	      createdAt: Date.now(),
+	      createdAt: now,
 	      tags: [],
-	      isGrowth: false,
-      tasks: [],
-      growthStage: 'seed',
-	      dueDate: newNote.dueDate ? new Date(newNote.dueDate).getTime() : undefined,
-	      lastWateredAt: Date.now(),
+	      isGrowth: isSprout,
+      tasks: isSprout ? [{ id: crypto.randomUUID(), text: firstStep, completed: false }] : [],
+      growthStage: isJournal ? 'bloom' : isSprout ? 'sprout' : 'seed',
+	      dueDate: newNote.dueDate ? dateInputToEndOfDay(newNote.dueDate) : undefined,
+	      lastWateredAt: now,
 	      wateringIntervalDays: defaultWateringInterval,
-	      inbox: true,
-	      seedType: newNote.seedType,
+	      inbox: !isSprout && !isJournal,
+	      seedType: isJournal ? 'learning' : isSprout ? 'project' : newNote.seedType,
+	      reflection: isJournal ? fallbackContent : undefined,
+	      harvestedAt: isJournal ? now : undefined,
 	      planetId: activePlanetId,
 	    };
     
 	    setNotes([touchNote(note), ...notes]);
 	    setNewNote({ title: '', content: '', dueDate: '', seedType: 'idea' });
+	    setCreateMode('seed');
 	    setIsAdding(false);
 	    setSelectedNoteId(null);
 	    setRecentlyCreatedNoteId(note.id);
 	    window.setTimeout(() => setRecentlyCreatedNoteId(current => current === note.id ? null : current), 1800);
-	    setView('inbox');
+	    setView(isJournal ? 'harvest' : isSprout ? 'projects' : 'inbox');
 	  };
 
   const addQuickNote = () => {
@@ -3605,7 +4191,6 @@ export default function App() {
       growthStage: 'bloom',
       harvestedAt: n.harvestedAt || Date.now(),
       lastWateredAt: Date.now(),
-      reflection: n.reflection || wateringNote.trim() || 'Cosechada desde riego.',
     }) : n));
     recordWateringRitual();
     markRecentlyWatered(id);
@@ -3633,7 +4218,6 @@ export default function App() {
       growthStage: 'bloom',
       harvestedAt: n.harvestedAt || Date.now(),
       lastWateredAt: Date.now(),
-      reflection: n.reflection || 'Nota rápida completada.',
     }) : n));
     setSelectedNoteId(null);
     if (completedNote) {
@@ -3807,18 +4391,22 @@ export default function App() {
 
   const gardenStats = useMemo(() => {
     return planetNotes.reduce((stats, note) => {
-      if (note.inbox) return stats;
+      if (note.inbox) {
+        stats.seeds += 1;
+        return stats;
+      }
       stats.total += 1;
       if (note.growthStage === 'bloom') {
         stats.completed += 1;
         if (note.isGrowth) stats.trees += 1;
         else stats.flowers += 1;
       }
-      if (note.growthStage === 'sprout') stats.active += 1;
-      if (note.growthStage === 'seed') stats.seeds += 1;
+      if (note.isGrowth && !note.paused && note.growthStage !== 'bloom') stats.active += 1;
+      if (note.growthStage === 'seed') stats.plantedSeeds += 1;
+      if (note.growthStage === 'sprout') stats.visualSprouts += 1;
       if (!note.paused && note.growthStage !== 'bloom' && wateringDue(note)) stats.watering += 1;
       return stats;
-    }, { total: 0, completed: 0, active: 0, seeds: 0, watering: 0, flowers: 0, trees: 0 });
+    }, { total: 0, completed: 0, active: 0, seeds: 0, plantedSeeds: 0, visualSprouts: 0, watering: 0, flowers: 0, trees: 0 });
   }, [planetNotes]);
 
   const planetNoteCounts = useMemo(() => {
@@ -3847,7 +4435,8 @@ export default function App() {
       const status = note.inbox ? 'Semillero' : note.paused ? 'Pausada' : STAGE_META[note.growthStage].label;
       const tasks = note.tasks.length ? `\n\n${note.tasks.map(task => `- [${task.completed ? 'x' : ' '}] ${task.text}`).join('\n')}` : '';
       const reflection = note.reflection ? `\n\nReflexión: ${note.reflection}` : '';
-      return `# ${note.title}\n\nEstado: ${status}\nTipo: ${note.seedType || 'idea'}\n\n${note.content}${tasks}${reflection}`;
+      const takeaway = note.takeaway ? `\n\nMe dejó: ${note.takeaway}` : '';
+      return `# ${note.title}\n\nEstado: ${status}\nTipo: ${note.seedType || 'idea'}\n\n${note.content}${tasks}${reflection}${takeaway}`;
     }).join('\n\n---\n\n');
     const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -3859,7 +4448,7 @@ export default function App() {
   };
 
   const exportBackup = () => {
-    const blob = new Blob([JSON.stringify({ version: 1, exportedAt: Date.now(), notes }, null, 2)], { type: 'application/json;charset=utf-8' });
+    const blob = new Blob([JSON.stringify({ version: 2, exportedAt: Date.now(), activePlanetId, planets, notes }, null, 2)], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -3869,15 +4458,36 @@ export default function App() {
   };
 
   const importBackup = async (file: File) => {
-    const text = await file.text();
-    const parsed = JSON.parse(text);
-    const importedNotes = Array.isArray(parsed) ? parsed : parsed.notes;
-    if (!Array.isArray(importedNotes)) {
+    let parsed: unknown;
+    try {
+      const text = await file.text();
+      parsed = JSON.parse(text);
+    } catch {
+      window.alert('No se pudo leer este backup. Revisa que sea un archivo JSON valido.');
+      return;
+    }
+    const parsedRecord = parsed && typeof parsed === 'object' ? parsed as { notes?: unknown; planets?: unknown; activePlanetId?: unknown } : null;
+    const rawNotes = Array.isArray(parsed) ? parsed : parsedRecord?.notes;
+    if (!Array.isArray(rawNotes)) {
       window.alert('El archivo no parece ser un backup de Seed.');
       return;
     }
+    const importedNotes = normalizeNotes(rawNotes);
+    if (rawNotes.length > 0 && importedNotes.length === 0) {
+      window.alert('No se encontraron ideas validas en este backup.');
+      return;
+    }
     if (!window.confirm(`Importar ${importedNotes.length} ideas? Esto reemplazará tu jardín actual.`)) return;
-    setNotes(importedNotes);
+    const importedPlanets = normalizePlanets(parsedRecord?.planets);
+    const nextPlanets = importedPlanets.length > 0 ? importedPlanets : planets;
+    const nextActivePlanetId = typeof parsedRecord?.activePlanetId === 'string' && nextPlanets.some(planet => planet.id === parsedRecord.activePlanetId)
+      ? parsedRecord.activePlanetId
+      : nextPlanets[0]?.id || activePlanetId;
+    const importedPlanetIds = new Set(nextPlanets.map(planet => planet.id));
+
+    setPlanets(nextPlanets);
+    setActivePlanetId(nextActivePlanetId);
+    setNotes(importedNotes.map(note => importedPlanetIds.has(note.planetId || DEFAULT_PLANET_ID) ? note : { ...note, planetId: nextActivePlanetId }));
     setSelectedNoteId(null);
     setShowSettings(false);
   };
@@ -3888,30 +4498,33 @@ export default function App() {
     setNotes([]);
     setSelectedNoteId(null);
     setWateringRitual({ lastDate: '', streak: 0 });
-    localStorage.removeItem('seed-last-notification-day');
+    removeStoredItem('seed-last-notification-day');
     setShowSettings(false);
   };
 
   const finishOnboarding = () => {
-    localStorage.setItem('seed-onboarded', 'true');
+    setStoredItem('seed-onboarded', 'true');
     setShowOnboarding(false);
     setOnboardingStep(0);
   };
 
 	  const startPlanting = () => {
+	    setShowCreateMenu(false);
+	    setCreateMode('seed');
 	    setSelectedNoteId(null);
 	    setFilterStage('all');
 	    setSearch('');
+	    setNewNote({ title: '', content: '', dueDate: '', seedType: 'idea' });
 	    setIsAdding(true);
 	  };
 
 	  useEffect(() => {
 	    const openSeedFromWidget = () => {
-	      localStorage.removeItem('seed-pending-action');
+	      removeStoredItem('seed-pending-action');
 	      startPlanting();
 	    };
 
-	    if (localStorage.getItem('seed-pending-action') === 'new-seed') {
+	    if (getStoredItem('seed-pending-action') === 'new-seed') {
 	      window.requestAnimationFrame(openSeedFromWidget);
 	    }
 
@@ -4080,8 +4693,8 @@ export default function App() {
   };
 
   const enterApp = () => {
-    localStorage.setItem('seed-landing-seen', 'true');
-    localStorage.setItem('seed-welcome-v2-seen', 'true');
+    setStoredItem('seed-landing-seen', 'true');
+    setStoredItem('seed-welcome-v2-seen', 'true');
     setShowLanding(false);
     setLandingRoute('landing');
   };
@@ -4123,9 +4736,121 @@ export default function App() {
       return;
     }
     setView(nextView);
-  };
+	  };
 
 	  const quickEntryKeyboardMode = quickEntryViewport.keyboardOpen || quickEntryFocused;
+  const startCreateMenuPress = () => {
+    if (showCreateMenu) return;
+    createMenuLongPressRef.current = false;
+    if (createMenuTimerRef.current) window.clearTimeout(createMenuTimerRef.current);
+    createMenuTimerRef.current = window.setTimeout(() => {
+      createMenuLongPressRef.current = true;
+      setShowCreateMenu(true);
+    }, 420);
+  };
+  const clearCreateMenuPress = () => {
+    if (createMenuTimerRef.current) {
+      window.clearTimeout(createMenuTimerRef.current);
+      createMenuTimerRef.current = null;
+    }
+  };
+  const openCreateOption = (option: 'seed' | 'sprout' | 'journal' | 'garden') => {
+    setShowCreateMenu(false);
+    if (option === 'garden') {
+      setShowMobileMenu(true);
+      setShowGardenSwitcher(true);
+      setShowPlanetSettings(false);
+      setIsAddingPlanet(true);
+      return;
+    }
+
+    setSelectedNoteId(null);
+    setFilterStage('all');
+    setSearch('');
+    setCreateMode(option);
+    setNewNote({
+      title: '',
+      content: '',
+      dueDate: '',
+      seedType: option === 'sprout' ? 'project' : option === 'journal' ? 'learning' : 'idea',
+    });
+    setIsAdding(true);
+  };
+  const quickActionsNote = quickActionsNoteId ? notes.find(note => note.id === quickActionsNoteId) : null;
+  const runQuickAction = (action: 'water' | 'sprout' | 'focus' | 'pause' | 'harvest' | 'delete' | 'later') => {
+    if (!quickActionsNote) return;
+    const noteId = quickActionsNote.id;
+    setQuickActionsNoteId(null);
+
+    if (action === 'water') {
+      openWatering(noteId);
+      return;
+    }
+    if (action === 'sprout') {
+      openSproutPrompt(noteId);
+      return;
+    }
+    if (action === 'focus') {
+      setFocusNoteId(noteId);
+      setSelectedNoteId(null);
+      setView('focus');
+      return;
+    }
+    if (action === 'pause') {
+      togglePauseNote(noteId);
+      return;
+    }
+    if (action === 'harvest') {
+      completeQuickSeed(noteId);
+      return;
+    }
+    if (action === 'later') {
+      saveInboxForLater(noteId);
+      return;
+    }
+    deleteNote(noteId);
+  };
+
+  const toggleTodayWidget = (widgetId: TodayWidgetId, enabled: boolean) => {
+    setTodayWidgets(current => {
+      if (enabled) {
+        return current.includes(widgetId) ? current : [...current, widgetId];
+      }
+      return current.filter(id => id !== widgetId);
+    });
+  };
+
+  const quickEntryCopy = createMode === 'sprout'
+    ? {
+        title: appLanguage === 'en' ? 'New sprout' : 'Nuevo brote',
+        subtitle: appLanguage === 'en' ? 'One clear next step.' : 'Un siguiente paso claro.',
+        placeholder: appLanguage === 'en' ? 'What is the first five-minute step?' : '¿Cuál es el primer paso de 5 minutos?',
+        action: appLanguage === 'en' ? 'Create' : 'Crear',
+        compactLabel: appLanguage === 'en' ? 'Sprout · First step' : 'Brote · Primer paso',
+        details: appLanguage === 'en' ? 'Details' : 'Detalles',
+        titlePlaceholder: appLanguage === 'en' ? 'New To-Do' : 'Nuevo paso',
+      }
+    : createMode === 'journal'
+      ? {
+          title: appLanguage === 'en' ? 'Reflection' : 'Reflexión',
+          subtitle: appLanguage === 'en' ? 'Keep what you learned.' : 'Guarda lo que aprendiste.',
+          placeholder: appLanguage === 'en' ? 'Write the thought you want to keep...' : 'Escribe la idea que quieres conservar...',
+          action: appLanguage === 'en' ? 'Save' : 'Guardar',
+          compactLabel: appLanguage === 'en' ? 'Reflection · Learning' : 'Reflexión · Aprendizaje',
+          details: appLanguage === 'en' ? 'Details' : 'Detalles',
+          titlePlaceholder: appLanguage === 'en' ? 'Reflection title' : 'Título de la reflexión',
+        }
+      : {
+          title: appLanguage === 'en' ? 'New seed' : 'Nueva semilla',
+          subtitle: appLanguage === 'en' ? 'Capture now. Decide later.' : 'Captura ahora. Decide después.',
+          placeholder: appLanguage === 'en' ? 'Write the idea as it arrives...' : 'Escribe la idea tal como llega...',
+          action: t('plant'),
+          compactLabel: `${appLanguage === 'en' ? 'Seedbed' : 'Semillero'} · ${SEED_TYPES.find(type => type.id === newNote.seedType)?.label || 'Idea'}`,
+          details: appLanguage === 'en' ? 'Details' : 'Detalles',
+          titlePlaceholder: appLanguage === 'en' ? 'New seed' : 'Nueva semilla',
+        };
+  const quickEntryTypeLabel = SEED_TYPES.find(type => type.id === newNote.seedType)?.label || 'Idea';
+  const quickEntryToday = format(new Date(), 'yyyy-MM-dd');
 
   if (showLanding) {
     if (landingRoute !== 'landing') {
@@ -4517,7 +5242,7 @@ export default function App() {
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         <section className={`flex-1 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${view === 'calendar' ? 'px-3 pb-3 pt-[var(--safe-top-space)] sm:px-5 sm:pb-5 md:p-6' : 'px-4 pb-[var(--safe-bottom-space)] pt-[var(--safe-top-space)] sm:px-6 md:p-10'} ${selectedNoteId ? 'md:mr-[400px]' : ''}`}>
           <div className={`${view === 'calendar' ? 'mx-auto max-w-[100rem]' : 'max-w-4xl mx-auto'}`}>
-            <header className="mb-6 flex flex-col md:mb-10 md:flex-row justify-between items-start gap-4 md:gap-6">
+            <header className={`mb-6 flex-col md:mb-10 md:flex-row justify-between items-start gap-4 md:gap-6 ${view === 'today' ? 'hidden md:flex' : 'flex'}`}>
               <div className="w-full">
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -4536,40 +5261,43 @@ export default function App() {
                 </motion.div>
                 <div className="mt-5 grid grid-cols-3 gap-2 sm:mt-6 sm:gap-3">
                   {[
-            { id: 'seed', label: t('seeds'), value: gardenStats.seeds, tone: 'bg-amber-100 text-amber-700' },
-            { id: 'sprout', label: t('sprouts'), value: gardenStats.active, tone: 'bg-emerald-100 text-emerald-700' },
-                    { id: 'bloom', label: 'Cosechas', value: gardenStats.completed, tone: 'bg-green-100 text-green-700' },
-                  ].map((stat) => (
-                    <motion.button
-                      key={stat.label}
-                      type="button"
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      onClick={() => {
-                        setFilterStage(filterStage === stat.id ? 'all' : stat.id as SeedNote['growthStage']);
-                        setSelectedNoteId(null);
-                        setView('garden');
-                      }}
-                      className={`rounded-2xl border px-3 py-3 shadow-sm text-left soft-interaction sm:px-4 ${filterStage === stat.id ? 'bg-[var(--surface-strong)] border-[var(--sage)] ring-1 ring-[var(--sage)]/30' : 'bg-[var(--surface-soft)] border-[var(--border)] hover:bg-[var(--surface-strong)]'}`}
-                    >
-                      <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{stat.label}</p>
-                      <div className="mt-2 flex items-center justify-between">
-                        <span className="text-xl font-serif font-black text-[var(--earth)] sm:text-2xl">{stat.value}</span>
-                        <span className={`flex h-6 w-6 items-center justify-center rounded-full sm:h-7 sm:w-7 ${stat.tone}`}>
-                          <Circle size={10} fill="currentColor" />
-                        </span>
-                      </div>
-                    </motion.button>
-                  ))}
+                    { id: 'inbox', label: t('seeds'), value: gardenStats.seeds, tone: 'bg-[#f5efe4] text-[#8a6a3e]' },
+                    { id: 'projects', label: t('sprouts'), value: gardenStats.active, tone: 'bg-[#eaf2ed] text-[#4f715b]' },
+                    { id: 'harvest', label: appLanguage === 'en' ? 'Harvests' : 'Cosechas', value: gardenStats.completed, tone: 'bg-[#eef4ec] text-[#5b765f]' },
+                  ].map((stat) => {
+                    const isActiveStat = view === stat.id;
+                    return (
+                      <motion.button
+                        key={stat.label}
+                        type="button"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        onClick={() => {
+                          setFilterStage('all');
+                          setSelectedNoteId(null);
+                          setView(stat.id as AppView);
+                        }}
+                        className={`rounded-2xl border px-3 py-3 shadow-sm text-left soft-interaction sm:px-4 ${isActiveStat ? 'bg-[var(--surface-strong)] border-[var(--sage)] ring-1 ring-[var(--sage)]/30' : 'bg-[var(--surface-soft)] border-[var(--border)] hover:bg-[var(--surface-strong)]'}`}
+                      >
+                        <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{stat.label}</p>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="text-xl font-serif font-black text-[var(--earth)] sm:text-2xl">{stat.value}</span>
+                          <span className={`flex h-6 w-6 items-center justify-center rounded-full sm:h-7 sm:w-7 ${stat.tone}`}>
+                            <Circle size={10} fill="currentColor" />
+                          </span>
+                        </div>
+                      </motion.button>
+                    );
+                  })}
                 </div>
                 {growingNotes.length > 7 && (
                   <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="mt-4 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 flex items-start gap-3"
+                    className="mt-4 rounded-2xl border border-[#e7dbc7] bg-[#f5efe4] px-4 py-3 flex items-start gap-3"
                   >
-                    <Pause size={18} className="text-amber-700 mt-0.5 shrink-0" />
-                    <p className="text-sm text-amber-800">
+                    <Pause size={18} className="mt-0.5 shrink-0 text-[#8a6a3e]" />
+                    <p className="text-sm text-[#765b35]">
                       Tienes {growingNotes.length} brotes activos. Para avanzar mejor, pausa algunos o usa Enfoque.
                     </p>
                   </motion.div>
@@ -4602,8 +5330,10 @@ export default function App() {
                     setView('focus');
                   }}
                   onEnableNotifications={enableNotifications}
+                  onStartPlanting={startPlanting}
                   onNavigate={navigateToView}
                   onShowWateringQueue={showWateringQueue}
+                  todayWidgets={todayWidgets}
                   wateredToday={wateredToday}
                   wateringStreak={wateringRitual.streak}
                   getProgress={getProgress}
@@ -4619,6 +5349,7 @@ export default function App() {
 	                  onSaveLater={saveInboxForLater}
 	                  onDelete={deleteNote}
 	                  onSelectNote={setSelectedNoteId}
+	                  onShowActions={setQuickActionsNoteId}
 	                  recentlyCreatedNoteId={recentlyCreatedNoteId}
 	                />
               ) : view === 'projects' ? (
@@ -4631,6 +5362,8 @@ export default function App() {
                   }}
                   onToggleTask={toggleTask}
                   onOpenWatering={openWatering}
+                  onTogglePause={togglePauseNote}
+                  onShowActions={setQuickActionsNoteId}
                   getProgress={getProgress}
                 />
               ) : view === 'focus' ? (
@@ -4668,9 +5401,9 @@ export default function App() {
                     </div>
                     <div className="grid grid-cols-4 border-t border-[var(--border)]">
                       {[
-                        { label: t('seeds'), value: gardenStats.seeds },
+                        { label: t('seeds'), value: profileStats.seeds },
                         { label: t('sprouts'), value: profileStats.active },
-                        { label: 'Cosechas', value: profileStats.harvests },
+                        { label: appLanguage === 'en' ? 'Harvests' : 'Cosechas', value: profileStats.harvests },
                         { label: 'Racha', value: wateringRitual.streak },
                       ].map(item => (
                         <div key={item.label} className="border-r border-[var(--border)] px-2 py-3 text-center last:border-r-0">
@@ -4686,7 +5419,7 @@ export default function App() {
                       { icon: Settings, title: t('settings'), detail: appLanguage === 'en' ? 'Account, theme, watering and reminders' : 'Cuenta, tema, riego y recordatorios', onClick: () => setShowSettings(true) },
                       { icon: CalendarIcon, title: t('path'), detail: appLanguage === 'en' ? 'Review activity by day' : 'Revisa actividad por día', onClick: openCalendarToday },
                       { icon: Box, title: t('planet'), detail: appLanguage === 'en' ? 'Open the 3D garden when you need it' : 'Abre el jardín 3D cuando lo necesites', onClick: () => setView('3D') },
-                      { icon: Archive, title: 'Cosechas', detail: `${profileStats.harvests} idea${profileStats.harvests === 1 ? '' : 's'} terminada${profileStats.harvests === 1 ? '' : 's'}`, onClick: () => setView('harvest') },
+                      { icon: Archive, title: 'Lo aprendido', detail: `${profileStats.harvests} cierre${profileStats.harvests === 1 ? '' : 's'} de idea${profileStats.harvests === 1 ? '' : 's'}`, onClick: () => setView('harvest') },
                     ].map((item, index) => (
                       <button
                         key={item.title}
@@ -4754,9 +5487,9 @@ export default function App() {
                     {[
                       { id: 'all', label: 'Todo el jardín', count: gardenStats.total },
                       { id: 'water', label: 'Por regar', count: gardenStats.watering },
-                      { id: 'seed', label: t('seeds'), count: gardenStats.seeds },
-                      { id: 'sprout', label: t('sprouts'), count: gardenStats.active },
-                      { id: 'bloom', label: 'Cosechas', count: gardenStats.completed },
+                      { id: 'seed', label: appLanguage === 'en' ? 'Seed stage' : 'Etapa semilla', count: gardenStats.plantedSeeds },
+                      { id: 'sprout', label: appLanguage === 'en' ? 'Sprout stage' : 'Etapa brote', count: gardenStats.visualSprouts },
+                      { id: 'bloom', label: appLanguage === 'en' ? 'Harvests' : 'Cosechas', count: gardenStats.completed },
                     ].map(item => {
                       const isActive =
                         item.id === 'all' ? !search.trim() && filterStage === 'all' :
@@ -4804,24 +5537,25 @@ export default function App() {
 	                        note.growthStage === 'sprout' ? Sprout :
 	                        Leaf;
 	                      const stageTone =
-	                        note.growthStage === 'bloom' ? 'bg-green-50 text-green-600 ring-green-100' :
-	                        note.growthStage === 'withered' ? 'bg-red-50 text-red-500 ring-red-100' :
-	                        note.growthStage === 'sprout' ? 'bg-emerald-50 text-emerald-600 ring-emerald-100' :
-	                        'bg-amber-50 text-amber-600 ring-amber-100';
+	                        note.growthStage === 'bloom' ? 'bg-[#eef4ec] text-[#5b765f] ring-[#dfe8dd]' :
+	                        note.growthStage === 'withered' ? 'bg-[#f0ebe7] text-[#84675f] ring-[#e3d8d1]' :
+	                        note.growthStage === 'sprout' ? 'bg-[#eaf2ed] text-[#4f715b] ring-[#dbe8dd]' :
+	                        'bg-[#f5efe4] text-[#8a6a3e] ring-[#e7dbc7]';
 
 	                      return (
-	                      <motion.div
+	                      <GestureNoteSurface
                         key={note.id}
-                        initial={{ opacity: 0, y: 14 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        whileTap={{ scale: 0.995 }}
-                        transition={{ type: 'tween', duration: 0.18 }}
-                        onClick={() => setSelectedNoteId(note.id)}
+                        onPress={() => setSelectedNoteId(note.id)}
+                        onSwipeRight={() => openWatering(note.id)}
+                        onSwipeLeft={() => togglePauseNote(note.id)}
+                        onLongPress={() => setQuickActionsNoteId(note.id)}
+                        rightLabel="Regar"
+                        leftLabel={note.paused ? 'Reanudar' : 'Pausar'}
+                        leftIcon={Pause}
 	                        className={`group relative cursor-pointer border-b border-[var(--border)] px-4 py-3.5 transition-colors last:border-b-0 hover:bg-[var(--surface-hover)] ${
 	                          selectedNoteId === note.id 
 	                            ? 'bg-[var(--bg-app)]' 
-	                            : ''
+	                            : 'bg-[var(--surface-strong)]'
 	                        }`}
 	                      >
 	                        <div className="flex items-start gap-3">
@@ -4846,7 +5580,7 @@ export default function App() {
 	                              {note.isGrowth && <span>{progress}%</span>}
 	                              <span>{note.focusedMinutes || 0} min</span>
                               {note.dueDate && (
-                                <span className={note.growthStage === 'withered' ? 'text-red-500' : 'text-[var(--sage)]'}>
+                                <span className={note.growthStage === 'withered' ? 'text-[#84675f]' : 'text-[var(--sage)]'}>
                                   {formatShortDate(note.dueDate)}
                                 </span>
                               )}
@@ -4858,7 +5592,7 @@ export default function App() {
                                   initial={{ width: 0 }}
                                   animate={{ width: `${progress}%` }}
                                   transition={{ type: 'spring', stiffness: 80, damping: 18 }}
-                                  className={`h-full rounded-full ${note.growthStage === 'bloom' ? 'bg-green-500' : 'bg-[var(--sage)]'}`}
+                                  className={`h-full rounded-full ${note.growthStage === 'bloom' ? 'bg-[#7f9a83]' : 'bg-[var(--sage)]'}`}
                                 />
                               </div>
                             )}
@@ -4890,7 +5624,7 @@ export default function App() {
                             <ChevronRight size={16} className="hidden text-[var(--text-muted)] sm:block" />
                           </div>
                         </div>
-                      </motion.div>
+                      </GestureNoteSurface>
                       );
                     })}
                   </div>
@@ -5224,14 +5958,35 @@ export default function App() {
 	                )}
 	
 	                {selectedNote.growthStage === 'bloom' && (
-	                  <section className="mt-4 rounded-[1.5rem] border border-green-200 bg-green-50 p-4">
-	                    <p className="text-sm font-semibold text-green-800">Cosecha completada</p>
+	                  <section className="mt-4 rounded-[1.5rem] border border-[#dfe8dd] bg-[#eef4ec] p-4">
+	                    <div className="flex items-start justify-between gap-3">
+	                      <div>
+	                        <p className="text-sm font-semibold text-[#4f715b]">Lo aprendido</p>
+	                        <p className="mt-1 text-xs font-medium leading-relaxed text-[#5b765f]/80">
+	                          Opcional: guarda el cierre de esta idea sin convertirlo en diario.
+	                        </p>
+	                      </div>
+	                      <button
+	                        type="button"
+	                        onClick={() => setHarvestNoteId(selectedNote.id)}
+	                        className="shrink-0 rounded-full bg-[var(--surface-strong)] px-3 py-1.5 text-xs font-semibold text-[var(--sage)] shadow-sm"
+	                      >
+	                        Editar
+	                      </button>
+	                    </div>
 	                    <textarea
 	                      value={selectedNote.reflection || ''}
 	                      onChange={(e) => updateNote(selectedNote.id, { reflection: e.target.value })}
 	                      rows={3}
-	                      className="mt-3 w-full resize-none rounded-2xl bg-white/80 p-3 text-sm font-medium text-green-950 outline-none placeholder:text-green-700/55"
-	                      placeholder="Qué aprendiste de esta cosecha?"
+	                      className="mt-3 w-full resize-none rounded-2xl border border-[#dfe8dd] bg-[var(--surface-strong)]/85 p-3 text-sm font-medium text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/65 focus:ring-1 focus:ring-[var(--sage)]"
+	                      placeholder="Qué aprendiste de esta idea?"
+	                    />
+	                    <textarea
+	                      value={selectedNote.takeaway || ''}
+	                      onChange={(e) => updateNote(selectedNote.id, { takeaway: e.target.value })}
+	                      rows={2}
+	                      className="mt-2 w-full resize-none rounded-2xl border border-[#dfe8dd] bg-[var(--surface-strong)]/85 p-3 text-sm font-medium text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/65 focus:ring-1 focus:ring-[var(--sage)]"
+	                      placeholder="Qué te dejó este proyecto?"
 	                    />
 	                  </section>
 	                )}
@@ -5253,8 +6008,8 @@ export default function App() {
 	                      <span className="text-sm font-medium text-[var(--text-muted)]">Fecha objetivo</span>
 	                      <input
 	                        type="date"
-	                        value={selectedNote.dueDate ? new Date(selectedNote.dueDate).toISOString().split('T')[0] : ''}
-	                        onChange={(e) => updateNote(selectedNote.id, { dueDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
+	                        value={selectedNote.dueDate ? timestampToDateInput(selectedNote.dueDate) : ''}
+	                        onChange={(e) => updateNote(selectedNote.id, { dueDate: e.target.value ? dateInputToEndOfDay(e.target.value) : undefined })}
 	                        className="min-w-0 bg-transparent text-right text-sm font-semibold text-[var(--earth)] outline-none"
 	                      />
 	                    </label>
@@ -5290,14 +6045,14 @@ export default function App() {
                      <>
                        <button
                          onClick={() => {
-                           setFilterStage('bloom');
+                           setFilterStage('all');
                            setSearch('');
-                           setView('garden');
+                           setView('harvest');
                            setSelectedNoteId(null);
                          }}
                          className="flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] soft-interaction"
                        >
-                         <Leaf size={15} /> {t('garden')}
+                         <Archive size={15} /> {appLanguage === 'en' ? 'Harvests' : 'Cosechas'}
                        </button>
                        <button onClick={() => setView('3D')} className="flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--sage)]">
                          <Box size={15} /> {t('planet')}
@@ -5350,6 +6105,83 @@ export default function App() {
                  </div>
               </div>
             </motion.aside>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {quickActionsNote && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[64] flex items-end justify-center bg-black/25 p-3 backdrop-blur-sm sm:items-center sm:p-4"
+              onClick={() => setQuickActionsNoteId(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 24, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 14, scale: 0.98 }}
+                transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+                className="w-full max-w-md overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-2xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-[var(--border)] sm:hidden" />
+                <div className="flex items-start justify-between gap-4 px-5 pb-4 pt-4">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--seed-accent)]">Acciones rápidas</p>
+                    <h3 className="mt-1 truncate text-2xl font-semibold tracking-tight text-[var(--earth)]">{quickActionsNote.title}</h3>
+                    <p className="mt-1 line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{quickActionsNote.content}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setQuickActionsNoteId(null)}
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--text-muted)]"
+                    aria-label="Cerrar acciones rápidas"
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+
+                <div className="grid gap-2 border-t border-[var(--border)] p-3">
+                  {!quickActionsNote.inbox && quickActionsNote.growthStage !== 'bloom' && (
+                    <button onClick={() => runQuickAction('water')} className="flex min-h-12 items-center gap-3 rounded-2xl bg-sky-50 px-4 text-left text-sm font-semibold text-sky-700">
+                      <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/70"><Droplets size={16} /></span>
+                      Regar
+                    </button>
+                  )}
+                  {quickActionsNote.inbox || !quickActionsNote.isGrowth ? (
+                    <button onClick={() => runQuickAction('sprout')} className="flex min-h-12 items-center gap-3 rounded-2xl bg-emerald-50 px-4 text-left text-sm font-semibold text-emerald-700">
+                      <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/70"><Sprout size={16} /></span>
+                      Convertir en brote
+                    </button>
+                  ) : (
+                    <button onClick={() => runQuickAction('focus')} className="flex min-h-12 items-center gap-3 rounded-2xl bg-[var(--bg-app)] px-4 text-left text-sm font-semibold text-[var(--sage)]">
+                      <span className="grid h-8 w-8 place-items-center rounded-xl bg-[var(--surface-strong)]"><Target size={16} /></span>
+                      Enfocar
+                    </button>
+                  )}
+                  {quickActionsNote.inbox ? (
+                    <button onClick={() => runQuickAction('later')} className="flex min-h-12 items-center gap-3 rounded-2xl bg-amber-50 px-4 text-left text-sm font-semibold text-amber-700">
+                      <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/70"><Archive size={16} /></span>
+                      Guardar para luego
+                    </button>
+                  ) : (
+                    <button onClick={() => runQuickAction('pause')} className="flex min-h-12 items-center gap-3 rounded-2xl bg-amber-50 px-4 text-left text-sm font-semibold text-amber-700">
+                      <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/70"><Pause size={16} /></span>
+                      {quickActionsNote.paused ? 'Reanudar' : 'Pausar'}
+                    </button>
+                  )}
+                  <button onClick={() => runQuickAction('harvest')} className="flex min-h-12 items-center gap-3 rounded-2xl bg-green-50 px-4 text-left text-sm font-semibold text-green-700">
+                    <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/70"><CheckCircle2 size={16} /></span>
+                    Cosechar
+                  </button>
+                  <button onClick={() => runQuickAction('delete')} className="flex min-h-12 items-center gap-3 rounded-2xl bg-red-50 px-4 text-left text-sm font-semibold text-red-600">
+                    <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/70"><Trash2 size={16} /></span>
+                    Eliminar
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
           )}
         </AnimatePresence>
 
@@ -5531,8 +6363,8 @@ export default function App() {
                 className="w-full max-w-sm overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-2xl"
                 onClick={(event) => event.stopPropagation()}
               >
-                <div className="relative grid h-48 place-items-center bg-[linear-gradient(180deg,#f7fbef,#e7f3df)]">
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,rgba(255,255,255,0.95),transparent_26%),radial-gradient(circle_at_20%_76%,rgba(122,169,92,0.18),transparent_28%),radial-gradient(circle_at_82%_70%,rgba(227,182,75,0.16),transparent_26%)]" />
+                <div className="relative grid h-48 place-items-center bg-[linear-gradient(180deg,#f5f1e8,#edf3ec)]">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,rgba(255,255,255,0.92),transparent_26%),radial-gradient(circle_at_20%_76%,rgba(122,138,105,0.15),transparent_28%),radial-gradient(circle_at_82%_70%,rgba(176,148,98,0.13),transparent_26%)]" />
                   <motion.div
                     initial={{ scale: 0.55, y: 18, opacity: 0 }}
                     animate={{ scale: 1, y: 0, opacity: 1 }}
@@ -5545,22 +6377,32 @@ export default function App() {
                   <Sparkles className="absolute bottom-12 left-12 text-[var(--sage)]" size={18} />
                 </div>
                 <div className="p-5 text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Flor plantada</p>
-                  <h3 className="mt-2 font-serif text-3xl font-black leading-tight text-[var(--earth)]">Nota completada</h3>
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Idea cosechada</p>
+                  <h3 className="mt-2 font-serif text-3xl font-black leading-tight text-[var(--earth)]">Ciclo cerrado</h3>
                   <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-                    “{flowerReward.title}” ya vive como una flor en tu jardín.
+                    “{flowerReward.title}” ya queda guardada. Puedes añadir un cierre ahora o seguir.
                   </p>
-                  <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <button
                       onClick={() => {
+                        const id = flowerReward.id;
                         setFlowerReward(null);
-                        setFilterStage('bloom');
-                        setSearch('');
-                        setView('garden');
+                        window.setTimeout(() => setHarvestNoteId(id), 120);
                       }}
                       className="rounded-2xl bg-[var(--sage)] px-4 py-3 text-sm font-black text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
                     >
-                      Ver jardín
+                      Lo aprendido
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFlowerReward(null);
+                        setFilterStage('all');
+                        setSearch('');
+                        setView('harvest');
+                      }}
+                      className="rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-4 py-3 text-sm font-black text-[var(--sage)] hover:bg-[var(--surface-soft)]"
+                    >
+                      Ver cosechas
                     </button>
                     <button
                       onClick={() => {
@@ -5569,7 +6411,7 @@ export default function App() {
                       }}
                       className="rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-4 py-3 text-sm font-black text-[var(--sage)] hover:bg-[var(--surface-soft)]"
                     >
-                      Seguir
+                      Ahora no
                     </button>
                   </div>
                 </div>
@@ -5598,30 +6440,37 @@ export default function App() {
                   className="w-full max-w-lg rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] shadow-2xl p-6"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="h-36 rounded-[2rem] bg-gradient-to-b from-green-100 via-pink-50 to-white border border-green-100 flex items-center justify-center relative overflow-hidden mb-5">
+                  <div className="relative mb-5 flex h-36 items-center justify-center overflow-hidden rounded-[2rem] border border-[#dfe8dd] bg-[linear-gradient(180deg,#eef4ec,#f8f6ef)]">
                     <div className="seed-card-sheen" />
                     <motion.div animate={{ y: [0, -4, 0] }} transition={{ duration: 2.8, repeat: Infinity }}>
                       <PlantIllustration stage="bloom" progress={100} isGrowth />
                     </motion.div>
                   </div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-green-600">Cosecha lista</p>
-                  <h3 className="mt-2 text-3xl font-serif font-black text-[var(--earth)] leading-tight">{note.title}</h3>
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#5b765f]">Cierre opcional</p>
+                  <h3 className="mt-2 text-3xl font-serif font-black leading-tight text-[var(--earth)]">{note.title}</h3>
                   <p className="mt-3 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-                    Cierra el ciclo con una nota corta. Esto convierte la tarea terminada en aprendizaje reutilizable.
+                    Si algo te dejó esta idea, guárdalo en dos líneas. Si no, puedes seguir sin perder la cosecha.
                   </p>
                   <textarea
                     value={note.reflection || ''}
                     onChange={(event) => updateNote(note.id, { reflection: event.target.value })}
-                    rows={4}
+                    rows={3}
                     className="mt-5 w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 text-sm outline-none resize-none focus:bg-[var(--surface-strong)] focus:ring-1 focus:ring-[var(--sage)] transition-all"
-                    placeholder="Qué aprendiste? Qué harías distinto? Qué sigue?"
+                    placeholder="Lo aprendido..."
+                  />
+                  <textarea
+                    value={note.takeaway || ''}
+                    onChange={(event) => updateNote(note.id, { takeaway: event.target.value })}
+                    rows={2}
+                    className="mt-3 w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 text-sm outline-none resize-none focus:bg-[var(--surface-strong)] focus:ring-1 focus:ring-[var(--sage)] transition-all"
+                    placeholder="Qué te dejó este proyecto?"
                   />
                   <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       onClick={() => setHarvestNoteId(null)}
                       className="rounded-2xl bg-[var(--sage)] text-[var(--on-sage)] py-4 font-black shadow-lg shadow-[var(--sage)]/20"
                     >
-                      Guardar cosecha
+                      Guardar cierre
                     </button>
                     <button
                       onClick={() => {
@@ -5630,7 +6479,13 @@ export default function App() {
                       }}
                       className="rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] py-4 font-black border border-[var(--border)]"
                     >
-                      Ver cosechas
+                      Ver lo aprendido
+                    </button>
+                    <button
+                      onClick={() => setHarvestNoteId(null)}
+                      className="rounded-2xl border border-transparent py-2 text-sm font-black text-[var(--text-muted)] sm:col-span-2"
+                    >
+                      Ahora no
                     </button>
                   </div>
                 </motion.div>
@@ -5783,6 +6638,35 @@ export default function App() {
                             ariaLabel={notificationsEnabled ? 'Desactivar recordatorios' : 'Activar recordatorios'}
                           />
                         </div>
+                        <div className="rounded-[1.25rem] border border-[var(--border)] bg-[var(--bg-app)]/45 p-3">
+                          <div className="mb-2">
+                            <p className="text-sm font-semibold text-[var(--earth)]">Módulos de Hoy</p>
+                            <p className="text-xs font-medium text-[var(--text-muted)]">Elige qué aparece debajo de la prioridad diaria.</p>
+                          </div>
+                          <div className="divide-y divide-[var(--border)]">
+                            {[
+                              { id: 'summary' as const, icon: LayoutGrid, title: 'Resumen', detail: 'Semillas, brotes y cierres' },
+                              { id: 'watering' as const, icon: Droplets, title: 'Riego', detail: 'Ideas que conviene revisar' },
+                              { id: 'learning' as const, icon: Archive, title: 'Lo aprendido', detail: 'Último cierre guardado' },
+                              { id: 'path' as const, icon: CalendarIcon, title: t('path'), detail: 'Acceso al calendario' },
+                            ].map(item => (
+                              <div key={item.id} className="flex min-h-12 items-center gap-3 py-2">
+                                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--surface-strong)] text-[var(--sage)]">
+                                  <item.icon size={15} />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-semibold text-[var(--earth)]">{item.title}</p>
+                                  <p className="truncate text-xs font-medium text-[var(--text-muted)]">{item.detail}</p>
+                                </div>
+                                <AppSwitch
+                                  checked={todayWidgets.includes(item.id)}
+                                  onChange={(checked) => toggleTodayWidget(item.id, checked)}
+                                  ariaLabel={`${todayWidgets.includes(item.id) ? 'Ocultar' : 'Mostrar'} ${item.title} en Hoy`}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -5812,7 +6696,10 @@ export default function App() {
                           <input
                             type="time"
                             value={`${String(reminderHour).padStart(2, '0')}:00`}
-                            onChange={(event) => setReminderHour(Number(event.target.value.split(':')[0] || reminderHour))}
+                            onChange={(event) => {
+                              const hour = Number(event.target.value.split(':')[0]);
+                              setReminderHour(Number.isFinite(hour) ? Math.min(23, Math.max(0, hour)) : reminderHour);
+                            }}
                             className="bg-transparent text-right text-sm font-semibold text-[var(--earth)] outline-none"
                           />
                         </label>
@@ -6119,6 +7006,15 @@ export default function App() {
 	                animate={{ y: 0, scale: 1, opacity: 1 }}
                 exit={{ y: 8, scale: 0.975, opacity: 0 }}
                 transition={{ type: 'spring', stiffness: 560, damping: 44, mass: 0.68 }}
+                drag={quickEntryKeyboardMode ? false : 'y'}
+                dragConstraints={{ top: 0, bottom: 0 }}
+                dragElastic={0.14}
+                dragDirectionLock
+                onDragEnd={(_, info) => {
+                  if (!quickEntryKeyboardMode && info.offset.y > 78) {
+                    setIsAdding(false);
+                  }
+                }}
                 onClick={(event) => event.stopPropagation()}
               >
 	                <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[linear-gradient(180deg,var(--bg-app)_0%,transparent_82%)] opacity-55" />
@@ -6136,10 +7032,10 @@ export default function App() {
                   </button>
 	                  <div className="pointer-events-none absolute inset-x-24 top-1/2 min-w-0 -translate-y-1/2 text-center">
 	                    <p className="truncate text-[16px] font-semibold leading-5 text-[var(--earth)]">
-	                      {appLanguage === 'en' ? 'New seed' : 'Nueva semilla'}
+	                      {quickEntryCopy.title}
 	                    </p>
 	                    <p className={`mt-1 truncate text-[11px] font-medium text-[var(--text-muted)] ${quickEntryKeyboardMode ? 'hidden' : 'block'}`}>
-	                      {appLanguage === 'en' ? 'Capture now. Decide later.' : 'Captura ahora. Decide después.'}
+	                      {quickEntryCopy.subtitle}
 	                    </p>
                   </div>
                   <button
@@ -6150,14 +7046,32 @@ export default function App() {
                       newNote.title.trim() || newNote.content.trim() ? 'text-[var(--sage)]' : 'text-[var(--text-muted)]'
                     }`}
                   >
-                    {t('plant')}
+                    {quickEntryCopy.action}
                   </button>
                 </div>
 
-	                <div className={`relative z-10 flex min-h-0 flex-1 flex-col px-5 sm:px-6 ${quickEntryKeyboardMode ? 'pt-4' : 'pt-6'}`}>
+	                <div className={`relative z-10 flex min-h-0 flex-1 flex-col px-5 sm:px-6 ${quickEntryKeyboardMode ? 'pt-4' : 'pt-5'}`}>
+	                  <div className={`flex shrink-0 items-center gap-3 ${quickEntryKeyboardMode ? 'mb-3' : 'mb-4'}`}>
+	                    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl border ${
+	                      createMode === 'sprout'
+	                        ? 'border-[var(--text-muted)]/35 text-[var(--text-muted)]'
+	                        : 'border-transparent bg-[var(--bg-app)] text-[var(--sage)]'
+	                    }`}>
+	                      {createMode === 'sprout' ? <Circle size={21} /> : createMode === 'journal' ? <Sparkles size={16} /> : <Leaf size={16} />}
+	                    </span>
+	                    <input
+	                      type="text"
+	                      autoFocus={createMode === 'sprout'}
+	                      placeholder={quickEntryCopy.titlePlaceholder}
+	                      value={newNote.title}
+	                      onChange={(event) => setNewNote({ ...newNote, title: event.target.value })}
+	                      className="min-w-0 flex-1 bg-transparent text-[1.55rem] font-medium leading-none tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/44 sm:text-[1.75rem]"
+	                    />
+	                  </div>
+
                   <textarea
-                    autoFocus
-                    placeholder={appLanguage === 'en' ? 'Write the idea as it arrives...' : 'Escribe la idea tal como llega...'}
+                    autoFocus={createMode !== 'sprout'}
+                    placeholder={createMode === 'sprout' || newNote.title ? (appLanguage === 'en' ? 'Notes' : 'Notas') : quickEntryCopy.placeholder}
 	                    rows={5}
 	                    value={newNote.content}
 	                    onFocus={() => setQuickEntryFocused(true)}
@@ -6169,75 +7083,70 @@ export default function App() {
                         addNote();
                       }
                     }}
-	                    className="quick-seed-textarea min-h-0 flex-1 resize-none bg-transparent text-[1.32rem] font-medium leading-[1.55] tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/38 sm:text-[1.45rem]"
+	                    className="quick-seed-textarea min-h-0 flex-1 resize-none bg-transparent text-[1.12rem] font-medium leading-[1.5] tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/42 sm:text-[1.22rem]"
 	                  />
 
-		                  {quickEntryKeyboardMode && (
-		                    <div className="mb-3 flex min-h-11 shrink-0 items-center justify-between gap-3 rounded-full bg-[var(--bg-app)]/70 px-3 text-xs font-semibold text-[var(--text-muted)] shadow-[inset_0_0_0_1px_var(--border)]">
-		                      <span className="flex min-w-0 items-center gap-2 truncate">
-		                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--surface-strong)] text-[var(--sage)]">
-		                          <Leaf size={13} />
-		                        </span>
-		                        <span className="truncate">
-		                          {appLanguage === 'en' ? 'Seedbed' : 'Semillero'} · {SEED_TYPES.find(type => type.id === newNote.seedType)?.label || 'Idea'}
-		                        </span>
-		                      </span>
-		                      <span className="shrink-0 text-[var(--sage)]">{t('plant')}</span>
-		                    </div>
-		                  )}
+		                  <div className={`relative mb-3 flex min-h-12 shrink-0 items-center gap-2 rounded-[1.35rem] bg-[var(--bg-app)]/62 px-2.5 shadow-[inset_0_0_0_1px_var(--border)] ${quickEntryKeyboardMode ? 'mt-2' : 'mt-4'}`}>
+		                    <label className={`relative grid h-9 w-9 shrink-0 place-items-center rounded-full transition-colors ${
+		                      newNote.dueDate ? 'bg-[var(--sage)] text-[var(--on-sage)]' : 'text-[var(--text-muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--sage)]'
+		                    }`} aria-label={t('date')}>
+		                      <CalendarIcon size={17} />
+		                      <input
+		                        type="date"
+		                        value={newNote.dueDate}
+		                        onChange={(event) => setNewNote({ ...newNote, dueDate: event.target.value })}
+		                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+		                      />
+		                    </label>
 
-		                  <details className={`group shrink-0 pb-3 [&_summary::-webkit-details-marker]:hidden ${quickEntryKeyboardMode ? 'hidden' : 'block'}`}>
-                    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-full bg-[var(--bg-app)]/62 px-3 text-xs font-semibold text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-soft)]">
-                      <span className="flex min-w-0 items-center gap-2 truncate">
-                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--surface-strong)] text-[var(--sage)] shadow-[inset_0_0_0_1px_var(--border)]">
-                          <Leaf size={13} />
-                        </span>
-                        <span className="truncate">
-                          {appLanguage === 'en' ? 'Seedbed' : 'Semillero'} · {SEED_TYPES.find(type => type.id === newNote.seedType)?.label || 'Idea'}
-                          {newNote.dueDate ? ` · ${formatShortDate(new Date(newNote.dueDate).getTime())}` : ''}
-                        </span>
-                      </span>
-                      <span className="inline-flex shrink-0 items-center gap-1.5">
-                        {appLanguage === 'en' ? 'Details' : 'Detalles'}
-                        <ChevronDown size={13} className="transition-transform group-open:rotate-180" />
-                      </span>
-                    </summary>
-                    <div className="mt-2 space-y-3 rounded-[1.45rem] border border-[var(--border)]/80 bg-[var(--bg-app)]/72 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
-                      <input
-                        type="text"
-                        placeholder={appLanguage === 'en' ? 'Optional title' : 'Título opcional'}
-                        value={newNote.title}
-                        onChange={(event) => setNewNote({ ...newNote, title: event.target.value })}
-                        className="h-10 w-full rounded-xl bg-[var(--surface-strong)] px-3 text-base font-semibold text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/55"
-                      />
-                      <div className="flex gap-1.5 overflow-x-auto app-scrollbar">
-                        {SEED_TYPES.map(type => (
-                          <button
-                            key={type.id}
-                            type="button"
-                            onClick={() => setNewNote({ ...newNote, seedType: type.id })}
-                            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                              newNote.seedType === type.id
-                                ? 'bg-[var(--sage)] text-[var(--on-sage)] shadow-[0_8px_18px_rgba(47,62,51,0.16)]'
-                                : 'bg-[var(--surface-strong)] text-[var(--text-muted)] hover:text-[var(--earth)]'
-                            }`}
-                          >
-                            {type.label}
-                          </button>
-                        ))}
-                      </div>
-                      <label className="flex h-10 items-center gap-2 rounded-xl bg-[var(--surface-strong)] px-3 text-xs font-semibold text-[var(--text-muted)]">
-                        <CalendarIcon size={14} className="shrink-0 text-[var(--sage)]" />
-                        <span className="shrink-0">{t('date')}</span>
-                        <input
-                          type="date"
-                          value={newNote.dueDate}
-                          onChange={(event) => setNewNote({ ...newNote, dueDate: event.target.value })}
-                          className="min-w-0 flex-1 bg-transparent text-right text-base font-semibold text-[var(--earth)] outline-none"
-                        />
-                      </label>
-                    </div>
-                  </details>
+		                    {createMode === 'seed' ? (
+		                      <details className="group relative [&_summary::-webkit-details-marker]:hidden">
+		                        <summary className="grid h-9 w-9 cursor-pointer list-none place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-strong)] hover:text-[var(--sage)] group-open:bg-[var(--sage)] group-open:text-[var(--on-sage)]" aria-label={appLanguage === 'en' ? 'Seed type' : 'Tipo de semilla'}>
+		                          <Tag size={17} />
+		                        </summary>
+		                        <div className="absolute bottom-12 left-0 z-20 w-56 rounded-[1.25rem] border border-[var(--border)] bg-[var(--surface-strong)]/98 p-2 shadow-[0_18px_45px_rgba(0,0,0,0.14)] backdrop-blur-xl">
+		                          {SEED_TYPES.map(type => (
+		                            <button
+		                              key={type.id}
+		                              type="button"
+		                              onClick={() => setNewNote({ ...newNote, seedType: type.id })}
+		                              className={`flex h-10 w-full items-center justify-between rounded-xl px-3 text-sm font-semibold transition-colors ${
+		                                newNote.seedType === type.id
+		                                  ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+		                                  : 'text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-[var(--earth)]'
+		                              }`}
+		                            >
+		                              {type.label}
+		                              {newNote.seedType === type.id && <CheckCircle2 size={15} />}
+		                            </button>
+		                          ))}
+		                        </div>
+		                      </details>
+		                    ) : (
+		                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--text-muted)]">
+		                        {createMode === 'sprout' ? <ListChecks size={17} /> : <Sparkles size={17} />}
+		                      </span>
+		                    )}
+
+		                    <button
+		                      type="button"
+		                      onClick={() => setNewNote({ ...newNote, dueDate: newNote.dueDate === quickEntryToday ? '' : quickEntryToday })}
+		                      className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-colors ${
+		                        newNote.dueDate === quickEntryToday ? 'bg-[var(--sage)] text-[var(--on-sage)]' : 'text-[var(--text-muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--sage)]'
+		                      }`}
+		                      aria-label={appLanguage === 'en' ? 'Mark for today' : 'Marcar para hoy'}
+		                    >
+		                      <Flag size={17} />
+		                    </button>
+
+		                    <span className="min-w-0 flex-1 truncate px-1 text-xs font-semibold text-[var(--text-muted)]">
+		                      {newNote.dueDate ? formatShortDate(dateInputToEndOfDay(newNote.dueDate) || new Date().getTime()) : createMode === 'seed' ? quickEntryTypeLabel : quickEntryCopy.compactLabel}
+		                    </span>
+		                    <span className="hidden shrink-0 items-center gap-1.5 rounded-full bg-[var(--surface-strong)] px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)] sm:inline-flex">
+		                      {createMode === 'sprout' ? <Sprout size={13} /> : createMode === 'journal' ? <Sparkles size={13} /> : <Inbox size={13} />}
+		                      {createMode === 'sprout' ? (appLanguage === 'en' ? 'Sprout' : 'Brote') : createMode === 'journal' ? (appLanguage === 'en' ? 'Reflection' : 'Reflexión') : (appLanguage === 'en' ? 'Seedbed' : 'Semillero')}
+		                    </span>
+		                  </div>
                 </div>
 
                 <div className="h-[env(safe-area-inset-bottom)] shrink-0" />
@@ -6248,17 +7157,94 @@ export default function App() {
 
         {/* Floating Action Button */}
         {!isAdding && view !== 'focus' && !showGardenFullscreen && (
-          <motion.button
-            whileTap={{ y: 1 }}
-	            initial={{ scale: 0 }}
-	            animate={{ scale: 1 }}
-	            onClick={startPlanting}
-	            title={t('newSeed')}
-	            className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.1rem)] right-5 z-50 grid h-13 w-13 place-items-center rounded-full border border-white/40 bg-[var(--sage)] text-[var(--on-sage)] shadow-[0_14px_38px_rgba(47,62,51,0.24)] backdrop-blur-xl soft-interaction hover:scale-[1.03] hover:shadow-[0_18px_45px_rgba(47,62,51,0.28)] md:bottom-8 md:right-8"
-            aria-label={t('newSeed')}
-          >
-            <Plus size={25} strokeWidth={2.4} />
-          </motion.button>
+          <>
+            <AnimatePresence>
+              {showCreateMenu && (
+                <>
+                  <motion.button
+                    type="button"
+                    aria-label="Cerrar opciones de creación"
+                    className="fixed inset-0 z-40 bg-black/[0.03] backdrop-blur-[2px]"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                    onClick={() => setShowCreateMenu(false)}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: 24, scale: 0.78, rotate: -2 }}
+                    animate={{ opacity: 1, y: 0, scale: [0.78, 1.045, 0.985, 1], rotate: [ -2, 1.5, -0.5, 0 ] }}
+                    exit={{ opacity: 0, y: 12, scale: 0.92, rotate: -1 }}
+                    transition={{ duration: 0.38, ease: [0.18, 1.28, 0.32, 1] }}
+                    style={{ transformOrigin: '85% 100%' }}
+                    className="fixed bottom-[calc(env(safe-area-inset-bottom)+5rem)] right-4 z-50 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)]/95 p-2 shadow-[0_24px_70px_rgba(0,0,0,0.16)] backdrop-blur-2xl md:bottom-24 md:right-8"
+                  >
+                    <div className="px-3 pb-2 pt-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">Crear</p>
+                    </div>
+                    {[
+                      { id: 'seed' as const, icon: Leaf, title: 'Semilla rápida', detail: 'Captura ahora, decide después' },
+                      { id: 'sprout' as const, icon: Sprout, title: 'Brote', detail: 'Idea con primer paso' },
+                      { id: 'journal' as const, icon: Sparkles, title: 'Reflexión', detail: 'Guardar aprendizaje o cierre' },
+                      { id: 'garden' as const, icon: LayoutGrid, title: 'Jardín', detail: 'Crear un nuevo espacio' },
+                    ].map((item, index) => (
+                      <motion.button
+                        key={item.id}
+                        type="button"
+                        initial={{ opacity: 0, y: 14, scale: 0.9, rotate: -1 }}
+                        animate={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
+                        exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                        transition={{ type: 'spring', stiffness: 520, damping: 24, mass: 0.72, delay: 0.05 + index * 0.045 }}
+                        onClick={() => openCreateOption(item.id)}
+                        className="flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 text-left transition-colors hover:bg-[var(--bg-app)] active:bg-[var(--bg-app)]"
+                      >
+                        <motion.span
+                          initial={{ scale: 0.75 }}
+                          animate={{ scale: [0.75, 1.14, 1] }}
+                          transition={{ duration: 0.32, delay: 0.08 + index * 0.055 }}
+                          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--bg-app)] text-[var(--sage)]"
+                        >
+                          <item.icon size={17} />
+                        </motion.span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold text-[var(--earth)]">{item.title}</span>
+                          <span className="mt-0.5 block truncate text-xs font-medium text-[var(--text-muted)]">{item.detail}</span>
+                        </span>
+                        <ChevronRight size={15} className="text-[var(--text-muted)]" />
+                      </motion.button>
+                    ))}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+            <motion.button
+              whileTap={{ y: 1 }}
+	              initial={{ scale: 0 }}
+	              animate={{ scale: 1, rotate: showCreateMenu ? 45 : 0 }}
+	              onPointerDown={startCreateMenuPress}
+	              onPointerUp={clearCreateMenuPress}
+	              onPointerCancel={clearCreateMenuPress}
+	              onPointerLeave={clearCreateMenuPress}
+	              onClick={() => {
+	                clearCreateMenuPress();
+	                if (showCreateMenu) {
+	                  setShowCreateMenu(false);
+	                  createMenuLongPressRef.current = false;
+	                  return;
+	                }
+	                if (createMenuLongPressRef.current) {
+	                  createMenuLongPressRef.current = false;
+	                  return;
+	                }
+	                startPlanting();
+	              }}
+	              title={t('newSeed')}
+	              className="no-touch-callout fixed bottom-[calc(env(safe-area-inset-bottom)+1.1rem)] right-5 z-50 grid h-13 w-13 touch-none select-none place-items-center rounded-full border border-white/40 bg-[var(--sage)] text-[var(--on-sage)] shadow-[0_14px_38px_rgba(47,62,51,0.24)] backdrop-blur-xl soft-interaction hover:scale-[1.03] hover:shadow-[0_18px_45px_rgba(47,62,51,0.28)] md:bottom-8 md:right-8"
+              aria-label={showCreateMenu ? 'Cerrar opciones de creación' : t('newSeed')}
+              aria-expanded={showCreateMenu}
+            >
+              <Plus size={25} strokeWidth={2.4} />
+            </motion.button>
+          </>
         )}
       </main>
     </div>

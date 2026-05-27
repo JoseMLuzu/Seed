@@ -85,6 +85,12 @@
     transform 160ms ease;
 }
 
+.no-touch-callout {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .safe-app-shell {
   --safe-top-space: calc(env(safe-area-inset-top, 0px) + 5rem);
   --safe-top-control: calc(env(safe-area-inset-top, 0px) + 1rem);
