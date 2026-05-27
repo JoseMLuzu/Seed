@@ -79,6 +79,11 @@ type TodayWidgetId = 'summary' | 'watering' | 'path' | 'learning';
 
 const DEFAULT_TODAY_WIDGETS: TodayWidgetId[] = ['summary', 'watering', 'learning'];
 const TODAY_WIDGET_IDS = new Set<TodayWidgetId>(['summary', 'watering', 'path', 'learning']);
+const IDEA_CARD_RADIUS = 'rounded-[1.45rem]';
+const IDEA_CARD_WRAPPER = `${IDEA_CARD_RADIUS} bg-[var(--surface-strong)]`;
+const IDEA_CARD_SURFACE = `group relative overflow-hidden ${IDEA_CARD_RADIUS} border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm transition-colors hover:bg-[var(--surface-hover)]`;
+const IDEA_CARD_ROW = 'flex min-h-[4.75rem] w-full items-start gap-3 px-4 py-3.5 text-left';
+const IDEA_ICON_TILE = 'relative grid h-11 w-11 shrink-0 place-items-center rounded-[1.1rem] ring-1';
 
 function detectDeviceLanguage(): AppLanguage {
   const languages = typeof navigator !== 'undefined'
@@ -684,6 +689,7 @@ function passwordPolicyError(password: string) {
 function GestureNoteSurface({
   children,
   className,
+  wrapperClassName = '',
   onPress,
   onSwipeRight,
   onSwipeLeft,
@@ -697,6 +703,7 @@ function GestureNoteSurface({
 }: {
   children: ReactNode;
   className: string;
+  wrapperClassName?: string;
   onPress?: () => void;
   onSwipeRight?: () => void;
   onSwipeLeft?: () => void;
@@ -733,7 +740,7 @@ function GestureNoteSurface({
   };
 
   return (
-    <div className="relative overflow-hidden bg-[var(--surface-strong)]">
+    <div className={`relative overflow-hidden bg-[var(--surface-strong)] ${wrapperClassName}`}>
       <AnimatePresence>
         {swipeHint && (
           <motion.div
@@ -1630,14 +1637,14 @@ function InboxView({
         <p className="mt-1 text-sm font-medium text-[var(--text-muted)]">{inboxNotes.length} {t('pendingSeeds')}</p>
       </div>
 
-      <div className="overflow-hidden rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
+      <div className={inboxNotes.length === 0 ? `${IDEA_CARD_SURFACE}` : 'space-y-3'}>
         {inboxNotes.length === 0 ? (
           <div className="px-6 py-10 text-center">
             <Inbox className="mx-auto mb-4 text-[var(--sage)] opacity-45" size={32} />
             <p className="text-lg font-semibold text-[var(--earth)]">{t('noPendingSeeds')}</p>
             <p className="mt-1 text-sm text-[var(--text-muted)]">{t('plusReady')}</p>
           </div>
-        ) : inboxNotes.map((note, index) => {
+        ) : inboxNotes.map((note) => {
           const hasUsefulDescription = note.content.trim().toLowerCase() !== note.title.trim().toLowerCase();
           const cardDescription = hasUsefulDescription
             ? note.content
@@ -1656,19 +1663,23 @@ function InboxView({
               leftLabel="Luego"
               leftIcon={Archive}
               leftTone="bg-amber-500 text-white"
-              className={`group px-4 py-3.5 ${recentlyCreatedNoteId === note.id ? 'bg-[var(--sage)]/10' : 'bg-[var(--surface-strong)]'} ${index > 0 ? 'border-t border-[var(--border)]' : ''}`}
+              wrapperClassName={IDEA_CARD_WRAPPER}
+              className={`${IDEA_CARD_SURFACE} ${recentlyCreatedNoteId === note.id ? 'bg-[var(--sage)]/10' : ''}`}
             >
-              <button onClick={(event) => { event.stopPropagation(); onSelectNote(note.id); }} className="flex w-full items-center gap-3 text-left">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)]">
+              <button onClick={(event) => { event.stopPropagation(); onSelectNote(note.id); }} className={IDEA_CARD_ROW}>
+                <span className={`${IDEA_ICON_TILE} bg-[#f5efe4] text-[#8a6a3e] ring-[#e7dbc7]`}>
                   <Sprout size={15} />
                 </span>
-                <span className="min-w-0 flex-1">
+                  <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold text-[var(--earth)]">{note.title}</span>
                   <span className="mt-0.5 block line-clamp-2 text-sm leading-relaxed text-[var(--text-muted)]">{cardDescription}</span>
+                  <span className="mt-1 block text-[11px] font-medium text-[var(--text-muted)]">
+                    {appLanguage === 'en' ? 'Created' : 'Creada'} {formatShortDate(note.createdAt)}
+                  </span>
                 </span>
                 <ChevronRight size={16} className="shrink-0 text-[var(--text-muted)]" />
               </button>
-              <div className="mt-3 grid grid-cols-[1fr_1fr_auto_auto] items-center gap-2 pl-12">
+              <div className="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-2 px-4 pb-3 pl-[4.25rem]">
                 <button onClick={(event) => { event.stopPropagation(); onComplete(note.id); }} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold text-[var(--on-sage)] active:translate-y-px soft-interaction">
                   <CheckCircle2 size={13} /> {t('done')}
                 </button>
@@ -1788,13 +1799,19 @@ function ProjectsView({
               rightLabel="Regar"
               leftLabel={note.paused ? 'Reanudar' : 'Pausar'}
               leftIcon={Pause}
-              className="overflow-hidden rounded-[1.4rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm"
+              wrapperClassName={IDEA_CARD_WRAPPER}
+              className={IDEA_CARD_SURFACE}
             >
-              <button onClick={(event) => { event.stopPropagation(); onSelectNote(note.id); }} className="flex w-full items-start gap-3 px-4 py-3.5 text-left">
-                <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${needsWater ? 'bg-sky-500' : 'bg-[var(--sage)]'}`} />
+              <button onClick={(event) => { event.stopPropagation(); onSelectNote(note.id); }} className={IDEA_CARD_ROW}>
+                <span className={`${IDEA_ICON_TILE} ${needsWater ? 'bg-[#edf3f3] text-[#527075] ring-[#dce7e7]' : 'bg-[#eaf2ed] text-[#4f715b] ring-[#dbe8dd]'}`}>
+                  {needsWater ? <Droplets size={17} /> : <Sprout size={17} />}
+                </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold text-[var(--earth)]">{note.title}</span>
                   <span className="mt-0.5 block line-clamp-1 text-sm font-medium text-[var(--text-muted)]">{nextTask?.text || 'Sin pasos pendientes'}</span>
+                  <span className="mt-1 block text-[11px] font-medium text-[var(--text-muted)]">
+                    {appLanguage === 'en' ? 'Created' : 'Creada'} {formatShortDate(note.createdAt)}
+                  </span>
                 </span>
                 <span className="shrink-0 rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-xs font-semibold text-[var(--sage)]">{progress}%</span>
               </button>
@@ -1967,6 +1984,7 @@ function FocusView({
   onSelectNote,
   onToggleTask,
   onUpdateTask,
+  onDeleteTask,
   onLogFocus,
   onPickFocus,
   onExit,
@@ -1979,6 +1997,7 @@ function FocusView({
   onSelectNote: (id: string) => void;
   onToggleTask: (noteId: string, taskId: string) => void;
   onUpdateTask: (noteId: string, taskId: string, text: string) => void;
+  onDeleteTask: (noteId: string, taskId: string) => void;
   onLogFocus: (id: string, minutes: number) => void;
   onPickFocus: (id: string) => void;
   onExit: () => void;
@@ -2270,6 +2289,14 @@ function FocusView({
                             className={`flex-1 bg-transparent text-sm outline-none ${task.completed ? 'line-through' : ''}`}
                             placeholder="Describe este paso"
                           />
+                          <button
+                            type="button"
+                            onClick={() => onDeleteTask(focusNote.id, task.id)}
+                            className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-red-50 hover:text-red-500"
+                            aria-label="Eliminar paso"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -4246,9 +4273,7 @@ export default function App() {
     }));
     recordWateringRitual();
     markRecentlyWatered(id);
-    setFocusNoteId(id);
-    setSelectedNoteId(null);
-    setView('focus');
+    openFocusMode(id);
     setWateringNoteId(null);
     setWateringNote('');
   };
@@ -4309,6 +4334,30 @@ export default function App() {
         });
       }
       return n;
+    }));
+  };
+
+  const deleteTask = (noteId: string, taskId: string) => {
+    setNotes(notes.map(n => {
+      if (n.id !== noteId) return n;
+
+      const tasks = n.tasks.filter(task => task.id !== taskId);
+      const hasOpenTasks = tasks.some(task => !task.completed);
+      const shouldReopenHarvest = n.growthStage === 'bloom' && hasOpenTasks;
+      const growthStage = shouldReopenHarvest
+        ? 'sprout'
+        : n.growthStage === 'bloom' || n.growthStage === 'withered'
+          ? n.growthStage
+          : n.isGrowth
+            ? 'sprout'
+            : 'seed';
+
+      return touchNote({
+        ...n,
+        tasks,
+        growthStage,
+        harvestedAt: growthStage === 'bloom' ? n.harvestedAt : undefined,
+      });
     }));
   };
 
@@ -4699,6 +4748,13 @@ export default function App() {
     setLandingRoute('landing');
   };
 
+  const openFocusMode = (id: string) => {
+    setSelectedNoteId(null);
+    setShowGardenFullscreen(false);
+    setFocusNoteId(id);
+    setView('focus');
+  };
+
 	  const runCardAction = (note: SeedNote, action: ReturnType<typeof getIdeaGuidance>['kind']) => {
     if (action === 'grow') {
       growNote(note.id);
@@ -4711,8 +4767,7 @@ export default function App() {
     }
 
     if (action === 'focus') {
-      setFocusNoteId(note.id);
-      setView('focus');
+      openFocusMode(note.id);
       return;
     }
 
@@ -4791,9 +4846,7 @@ export default function App() {
       return;
     }
     if (action === 'focus') {
-      setFocusNoteId(noteId);
-      setSelectedNoteId(null);
-      setView('focus');
+      openFocusMode(noteId);
       return;
     }
     if (action === 'pause') {
@@ -5325,10 +5378,7 @@ export default function App() {
                   onOpenWatering={openWatering}
                   onSelectNote={setSelectedNoteId}
                   onToggleTask={toggleTask}
-                  onFocusNote={(id) => {
-                    setFocusNoteId(id);
-                    setView('focus');
-                  }}
+                  onFocusNote={openFocusMode}
                   onEnableNotifications={enableNotifications}
                   onStartPlanting={startPlanting}
                   onNavigate={navigateToView}
@@ -5356,10 +5406,7 @@ export default function App() {
                 <ProjectsView
                   notes={planetNotes}
                   onSelectNote={setSelectedNoteId}
-                  onFocusNote={(id) => {
-                    setFocusNoteId(id);
-                    setView('focus');
-                  }}
+                  onFocusNote={openFocusMode}
                   onToggleTask={toggleTask}
                   onOpenWatering={openWatering}
                   onTogglePause={togglePauseNote}
@@ -5376,6 +5423,7 @@ export default function App() {
                   onSelectNote={setSelectedNoteId}
                   onToggleTask={toggleTask}
                   onUpdateTask={updateTask}
+                  onDeleteTask={deleteTask}
                   onLogFocus={logFocusMinutes}
                   onPickFocus={setFocusNoteId}
                   onExit={() => setView('today')}
@@ -5525,7 +5573,7 @@ export default function App() {
                     })}
                   </div>
 
-                  <div className="overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] pb-28 shadow-sm md:pb-20">
+                  <div className="mb-28 space-y-3 md:mb-20">
                     {visibleGardenNotes.map((note) => {
                       const progress = getProgress(note);
 	                      const stageMeta = STAGE_META[note.growthStage];
@@ -5552,14 +5600,15 @@ export default function App() {
                         rightLabel="Regar"
                         leftLabel={note.paused ? 'Reanudar' : 'Pausar'}
                         leftIcon={Pause}
-	                        className={`group relative cursor-pointer border-b border-[var(--border)] px-4 py-3.5 transition-colors last:border-b-0 hover:bg-[var(--surface-hover)] ${
+                        wrapperClassName={IDEA_CARD_WRAPPER}
+	                        className={`${IDEA_CARD_SURFACE} cursor-pointer px-4 py-3.5 ${
 	                          selectedNoteId === note.id 
 	                            ? 'bg-[var(--bg-app)]' 
-	                            : 'bg-[var(--surface-strong)]'
+	                            : ''
 	                        }`}
 	                      >
 	                        <div className="flex items-start gap-3">
-	                          <div className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-[1.1rem] ring-1 ${stageTone}`}>
+	                          <div className={`${IDEA_ICON_TILE} ${stageTone}`}>
 	                            <StageIcon size={18} strokeWidth={2.2} />
 	                            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-current opacity-35" />
 	                          </div>
@@ -5576,6 +5625,7 @@ export default function App() {
                             </p>
 
 	                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-[var(--text-muted)]">
+	                              <span>{appLanguage === 'en' ? 'Created' : 'Creada'} {formatShortDate(note.createdAt)}</span>
 	                              <span>{note.tasks.length} pasos</span>
 	                              {note.isGrowth && <span>{progress}%</span>}
 	                              <span>{note.focusedMinutes || 0} min</span>
@@ -5671,10 +5721,7 @@ export default function App() {
                       planetName={activePlanet.name}
                       onSelectNote={setSelectedNoteId} 
                       onReviewNote={openWatering}
-                      onFocusNote={(id) => {
-                        setFocusNoteId(id);
-                        setView('focus');
-                      }}
+                      onFocusNote={openFocusMode}
                       recentlyWateredId={recentlyWateredId}
                     />
                   </Suspense>
@@ -5722,11 +5769,7 @@ export default function App() {
                         setShowGardenFullscreen(false);
                         openWatering(id);
                       }}
-                      onFocusNote={(id) => {
-                        setShowGardenFullscreen(false);
-                        setFocusNoteId(id);
-                        setView('focus');
-                      }}
+                      onFocusNote={openFocusMode}
                       recentlyWateredId={recentlyWateredId}
                     />
                   </Suspense>
@@ -5807,7 +5850,7 @@ export default function App() {
 	                        type="text"
 	                        value={selectedNote.title}
 	                        onChange={(e) => updateNote(selectedNote.id, { title: e.target.value })}
-	                        className="w-full bg-transparent text-[2rem] font-semibold leading-none tracking-tight text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/38"
+	                        className="seed-title-input w-full bg-transparent text-[2rem] font-semibold leading-none tracking-tight text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/38"
 	                        placeholder="Sin título"
 	                      />
 	
@@ -5818,6 +5861,9 @@ export default function App() {
 	                        className="mt-4 w-full resize-none bg-transparent text-[15px] font-medium leading-relaxed text-[var(--text-main)] outline-none placeholder:text-[var(--text-muted)]/50"
 	                        placeholder="Qué quieres recordar de esta semilla?"
 	                      />
+	                      <p className="mt-3 text-xs font-medium text-[var(--text-muted)]">
+	                        {appLanguage === 'en' ? 'Created' : 'Creada'} {formatShortDate(selectedNote.createdAt)}
+	                      </p>
 	                    </div>
 	                  </div>
 	                </section>
@@ -5842,8 +5888,7 @@ export default function App() {
 	                        if (selectedGuidance.kind === 'grow') openSproutPrompt(selectedNote.id);
 	                        else if (selectedGuidance.kind === 'water') openWatering(selectedNote.id);
 	                        else if (selectedGuidance.kind === 'focus') {
-	                          setFocusNoteId(selectedNote.id);
-	                          setView('focus');
+	                          openFocusMode(selectedNote.id);
 	                        } else {
 	                          addTask(selectedNote.id);
 	                        }
@@ -5858,35 +5903,6 @@ export default function App() {
 	                    </button>
 	                  )}
 	                </section>
-	
-	                <section className="mt-4 grid grid-cols-3 gap-2">
-	                  {[
-	                    { label: 'Revisión', value: selectedNote.growthStage === 'bloom' ? 'Lista' : `${selectedReviewDays}d` },
-	                    { label: 'Pasos', value: selectedNote.isGrowth ? `${selectedCompletedSteps}/${selectedNote.tasks.length}` : 'Libre' },
-	                    { label: 'Foco', value: `${selectedNote.focusedMinutes || 0}m` },
-	                  ].map(item => (
-	                    <div key={item.label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-3 text-center shadow-sm">
-	                      <p className="text-lg font-semibold text-[var(--earth)]">{item.value}</p>
-	                      <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
-	                    </div>
-	                  ))}
-	                </section>
-	
-	                <div className="mt-4 flex gap-2 overflow-x-auto pb-1 app-scrollbar">
-	                  {SEED_TYPES.map(type => (
-	                    <button
-	                      key={type.id}
-                      onClick={() => updateNote(selectedNote.id, { seedType: type.id })}
-                      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        (selectedNote.seedType || 'idea') === type.id
-                          ? 'bg-[var(--sage)] text-[var(--on-sage)]'
-                          : 'bg-[var(--bg-app)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--earth)]'
-                      }`}
-                    >
-	                      {type.label}
-	                    </button>
-	                  ))}
-	                </div>
 	
 	                {selectedNote.isGrowth ? (
 	                  <section className="mt-4 overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
@@ -5931,6 +5947,14 @@ export default function App() {
 	                              className={`min-w-0 flex-1 bg-transparent text-sm font-medium text-[var(--earth)] outline-none transition-all placeholder:text-[var(--text-muted)]/55 ${task.completed ? 'line-through opacity-45' : ''}`}
 	                              placeholder="Describe el paso..."
 	                            />
+	                            <button
+	                              type="button"
+	                              onClick={() => deleteTask(selectedNote.id, task.id)}
+	                              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-red-50 hover:text-red-500"
+	                              aria-label="Eliminar paso"
+	                            >
+	                              <Trash2 size={14} />
+	                            </button>
 	                          </motion.div>
 	                        ))}
 	                      </AnimatePresence>
@@ -5941,6 +5965,13 @@ export default function App() {
 	                        <Plus size={14} /> Añadir paso mínimo
 	                      </button>
 	                    </div>
+	                  </section>
+	                ) : selectedIsDone ? (
+	                  <section className="mt-4 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-sm">
+	                    <p className="text-sm font-semibold text-[var(--earth)]">Cierre guardado</p>
+	                    <p className="mt-1 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
+	                      Esta idea ya está cosechada. Si dejó algo importante, guárdalo en Lo aprendido.
+	                    </p>
 	                  </section>
 	                ) : (
 	                  <section className="mt-4 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-sm">
@@ -5956,6 +5987,20 @@ export default function App() {
 	                    </button>
 	                  </section>
 	                )}
+
+	                <section className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+	                  {[
+	                    { label: 'Creada', value: formatShortDate(selectedNote.createdAt) },
+	                    { label: 'Revisión', value: selectedNote.growthStage === 'bloom' ? 'Lista' : `${selectedReviewDays}d` },
+	                    { label: 'Pasos', value: selectedNote.isGrowth ? `${selectedCompletedSteps}/${selectedNote.tasks.length}` : 'Libre' },
+	                    { label: 'Foco', value: `${selectedNote.focusedMinutes || 0}m` },
+	                  ].map(item => (
+	                    <div key={item.label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-3 text-center shadow-sm">
+	                      <p className="text-lg font-semibold text-[var(--earth)]">{item.value}</p>
+	                      <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
+	                    </div>
+	                  ))}
+	                </section>
 	
 	                {selectedNote.growthStage === 'bloom' && (
 	                  <section className="mt-4 rounded-[1.5rem] border border-[#dfe8dd] bg-[#eef4ec] p-4">
@@ -6000,10 +6045,28 @@ export default function App() {
 	
 	                <details className="mt-4 overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] [&_summary::-webkit-details-marker]:hidden">
 	                  <summary className="flex min-h-13 cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-[var(--earth)]">
-	                    Cuidado
+	                    Organización
 	                    <ChevronRight size={16} className="text-[var(--text-muted)]" />
 	                  </summary>
 	                  <div className="border-t border-[var(--border)]">
+	                    <div className="border-b border-[var(--border)] px-4 py-3">
+	                      <p className="mb-2 text-sm font-medium text-[var(--text-muted)]">Tipo</p>
+	                      <div className="flex gap-2 overflow-x-auto pb-1 app-scrollbar">
+	                        {SEED_TYPES.map(type => (
+	                          <button
+	                            key={type.id}
+	                            onClick={() => updateNote(selectedNote.id, { seedType: type.id })}
+	                            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+	                              (selectedNote.seedType || 'idea') === type.id
+	                                ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+	                                : 'bg-[var(--bg-app)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--earth)]'
+	                            }`}
+	                          >
+	                            {type.label}
+	                          </button>
+	                        ))}
+	                      </div>
+	                    </div>
 	                    <label className="flex min-h-12 items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-2">
 	                      <span className="text-sm font-medium text-[var(--text-muted)]">Fecha objetivo</span>
 	                      <input
@@ -6070,10 +6133,7 @@ export default function App() {
                    ) : (
                      <>
                        <button
-                         onClick={() => {
-                           setFocusNoteId(selectedNote.id);
-                           setView('focus');
-                         }}
+                         onClick={() => openFocusMode(selectedNote.id)}
                          className="flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] soft-interaction"
                        >
                          <Target size={15} /> Enfocar
@@ -7065,7 +7125,7 @@ export default function App() {
 	                      placeholder={quickEntryCopy.titlePlaceholder}
 	                      value={newNote.title}
 	                      onChange={(event) => setNewNote({ ...newNote, title: event.target.value })}
-	                      className="min-w-0 flex-1 bg-transparent text-[1.55rem] font-medium leading-none tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/44 sm:text-[1.75rem]"
+	                      className="quick-entry-title-input min-w-0 flex-1 bg-transparent text-[1.55rem] font-medium leading-none tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/44 sm:text-[1.75rem]"
 	                    />
 	                  </div>
 
