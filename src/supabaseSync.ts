@@ -1,6 +1,7 @@
 import { User } from '@supabase/supabase-js';
 import { Planet, SeedNote, SyncSnapshot } from './types';
 import { supabase } from './supabase';
+import { normalizeNote } from './normalize';
 
 type PlanetRow = {
   id: string;
@@ -22,11 +23,12 @@ function noteUpdatedAt(note: SeedNote) {
   return note.updatedAt || note.createdAt || 0;
 }
 
-function normalizeRemoteNote(row: NoteRow): SeedNote {
-  return {
+function normalizeRemoteNote(row: NoteRow): SeedNote | null {
+  return normalizeNote({
     ...row.data,
-    planetId: row.data.planetId || row.planet_id || 'personal',
-  };
+    id: row.data?.id || row.id,
+    planetId: row.data?.planetId || row.planet_id || 'personal',
+  });
 }
 
 function normalizeRemotePlanet(row: PlanetRow): Planet {
@@ -66,7 +68,10 @@ export async function fetchGardenFromSupabase(): Promise<SyncSnapshot> {
 
   return {
     planets: (remotePlanets || []).map(row => normalizeRemotePlanet(row as PlanetRow)),
-    notes: dedupeNotes((remoteNotes || []).map(row => normalizeRemoteNote(row as NoteRow))),
+    notes: dedupeNotes((remoteNotes || []).flatMap(row => {
+      const note = normalizeRemoteNote(row as NoteRow);
+      return note ? [note] : [];
+    })),
   };
 }
 

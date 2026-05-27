@@ -1,4 +1,5 @@
 import { SeedNote } from './types';
+import { normalizeNotes } from './normalize';
 
 const DB_NAME = 'seed-db';
 const DB_VERSION = 1;
@@ -8,7 +9,7 @@ function loadLocalNotesFallback(): SeedNote[] {
   try {
     const saved = localStorage.getItem('seed-notes');
     const parsed = saved ? JSON.parse(saved) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    return normalizeNotes(parsed);
   } catch {
     return [];
   }
@@ -40,7 +41,7 @@ export async function loadNotesFromDb(): Promise<SeedNote[]> {
     return await new Promise((resolve, reject) => {
       const transaction = db.transaction(NOTES_STORE, 'readonly');
       const request = transaction.objectStore(NOTES_STORE).getAll();
-      request.onsuccess = () => resolve(request.result as SeedNote[]);
+      request.onsuccess = () => resolve(normalizeNotes(request.result));
       request.onerror = () => reject(request.error);
     });
   } catch {
@@ -49,8 +50,13 @@ export async function loadNotesFromDb(): Promise<SeedNote[]> {
 }
 
 export async function saveNotesToDb(notes: SeedNote[]) {
-  if (!('indexedDB' in window)) {
+  try {
     localStorage.setItem('seed-notes', JSON.stringify(notes));
+  } catch {
+    // IndexedDB remains the primary store when localStorage is unavailable or full.
+  }
+
+  if (!('indexedDB' in window)) {
     return;
   }
 

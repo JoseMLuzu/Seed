@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { addFocusMinutes, cultivateInboxNote, toggleTaskForNote, waterNote, wateringDue } from './seedLogic';
+import { normalizeNote, normalizeNotes } from './normalize';
 import { SeedNote } from './types';
 
 const now = 1_700_000_000_000;
@@ -43,5 +44,17 @@ const harvested = toggleTaskForNote(note({
 assert.equal(harvested.growthStage, 'bloom');
 assert.equal(harvested.tasks[0].completed, true);
 assert.equal(harvested.harvestedAt, now);
+
+const normalized = normalizeNote({
+  id: 'legacy-note',
+  title: 'Legacy',
+  createdAt: now,
+  tasks: [{ id: 'task-legacy', completed: 1 }],
+});
+assert.equal(normalized?.tags.length, 0);
+assert.equal(normalized?.tasks[0].text, '');
+assert.equal(normalized?.growthStage, 'sprout');
+assert.equal(normalized?.wateringIntervalDays, 1);
+assert.equal(normalizeNotes([{ id: 'ok', title: 'Ok', createdAt: now }, null]).length, 1);
 
 console.log('seed logic tests passed');
