@@ -75,6 +75,26 @@
   box-shadow: none;
 }
 
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
+  .seed-title-input {
+    font-size: 2rem !important;
+  }
+
+  .quick-entry-title-input {
+    font-size: 1.55rem !important;
+  }
+
+  .quick-seed-textarea {
+    font-size: 1.12rem !important;
+  }
+}
+
 .soft-interaction {
   transition:
     background-color 160ms ease,
