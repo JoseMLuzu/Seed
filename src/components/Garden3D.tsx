@@ -1407,15 +1407,15 @@ function Butterfly({
       verticalDrift: 0.62 + lane * 0.28,
       speed: 0.045 + lane * 0.018 + ((seed % 7) / 7) * 0.018,
       phase: seed * 0.37,
-      size: compact ? 0.36 + lane * 0.04 : 0.44 + lane * 0.06 + (seed % 3) * 0.025,
+      size: compact ? 0.22 + lane * 0.03 : 0.28 + lane * 0.04 + (seed % 3) * 0.015,
     };
   }, [compact, count, index, seed]);
   const wingColor = mood === 'blooming'
-    ? palette.fruit[seed % palette.fruit.length]
+    ? '#f3d7b2'
     : mood === 'thirsty'
-      ? palette.water
-      : palette.leafAlt;
-  const wingAccent = mood === 'blooming' ? palette.sparkles : palette.fruit[(seed + 1) % palette.fruit.length];
+      ? '#c7ddeb'
+      : '#e7dcc5';
+  const wingAccent = mood === 'blooming' ? '#fff4cf' : '#c6b89d';
 
   useFrame((state) => {
     if (!groupRef.current) return;
@@ -1442,21 +1442,21 @@ function Butterfly({
       <group ref={leftWingRef} position={[-0.08, 0.12, 0]} rotation={[0.2, -0.75, 0.16]}>
         <mesh position={[-0.28, 0.12, 0]} scale={[0.48, 0.34, 0.04]}>
           <sphereGeometry args={[1, 18, 10]} />
-          <meshStandardMaterial color={wingColor} emissive={wingColor} emissiveIntensity={0.18} roughness={0.48} transparent opacity={0.82} />
+          <meshStandardMaterial color={wingColor} emissive={wingColor} emissiveIntensity={0.08} roughness={0.62} transparent opacity={0.54} />
         </mesh>
         <mesh position={[-0.18, -0.18, 0]} scale={[0.32, 0.24, 0.035]}>
           <sphereGeometry args={[1, 14, 8]} />
-          <meshStandardMaterial color={wingAccent} emissive={wingAccent} emissiveIntensity={0.12} roughness={0.5} transparent opacity={0.68} />
+          <meshStandardMaterial color={wingAccent} emissive={wingAccent} emissiveIntensity={0.06} roughness={0.6} transparent opacity={0.38} />
         </mesh>
       </group>
       <group ref={rightWingRef} position={[0.08, 0.12, 0]} rotation={[0.2, 0.75, -0.16]}>
         <mesh position={[0.28, 0.12, 0]} scale={[0.48, 0.34, 0.04]}>
           <sphereGeometry args={[1, 18, 10]} />
-          <meshStandardMaterial color={wingColor} emissive={wingColor} emissiveIntensity={0.18} roughness={0.48} transparent opacity={0.82} />
+          <meshStandardMaterial color={wingColor} emissive={wingColor} emissiveIntensity={0.08} roughness={0.62} transparent opacity={0.54} />
         </mesh>
         <mesh position={[0.18, -0.18, 0]} scale={[0.32, 0.24, 0.035]}>
           <sphereGeometry args={[1, 14, 8]} />
-          <meshStandardMaterial color={wingAccent} emissive={wingAccent} emissiveIntensity={0.12} roughness={0.5} transparent opacity={0.68} />
+          <meshStandardMaterial color={wingAccent} emissive={wingAccent} emissiveIntensity={0.06} roughness={0.6} transparent opacity={0.38} />
         </mesh>
       </group>
     </group>
@@ -1478,8 +1478,8 @@ function ButterflyField({
 }) {
   const count = useMemo(() => {
     if (performanceMode) return 0;
-    const base = mood === 'blooming' ? 7 : mood === 'alive' ? 4 : mood === 'thirsty' ? 3 : 2;
-    return Math.min(compact ? 5 : 10, base + freshHarvestCount);
+    const base = mood === 'blooming' ? 3 : mood === 'alive' ? 2 : mood === 'thirsty' ? 1 : 0;
+    return Math.min(compact ? 2 : 4, base + Math.min(freshHarvestCount, 1));
   }, [compact, freshHarvestCount, mood, performanceMode]);
 
   if (count === 0) return null;
@@ -1504,22 +1504,22 @@ function ButterflyField({
 function BirdFlock({ palette }: { palette: GardenPalette }) {
   const flockRef = useRef<THREE.Group>(null);
   const birds = useMemo(() => [
-    { x: -15, y: 3.2, z: 0, scale: 0.9, delay: 0 },
-    { x: -9, y: 5.1, z: -2, scale: 0.72, delay: 0.8 },
-    { x: -3, y: 3.8, z: 1.5, scale: 0.66, delay: 1.2 },
-    { x: 6, y: 5.8, z: -1, scale: 0.78, delay: 1.8 },
-    { x: 13, y: 4.2, z: 2.2, scale: 0.58, delay: 2.4 },
+    { x: -12, y: 2.6, z: 0, scale: 1.35, delay: 0 },
+    { x: -7, y: 4.3, z: -1.2, scale: 1.08, delay: 0.8 },
+    { x: -1.5, y: 3.2, z: 1.2, scale: 0.96, delay: 1.2 },
+    { x: 5.5, y: 5.1, z: -0.8, scale: 1.16, delay: 1.8 },
+    { x: 12, y: 3.7, z: 1.8, scale: 0.88, delay: 2.4 },
   ], []);
 
   useFrame((state) => {
     if (!flockRef.current) return;
     const t = state.clock.elapsedTime;
-    flockRef.current.position.x = ((t * 2.7) % 95) - 50;
+    flockRef.current.position.x = ((t * 2.25) % 74) - 37;
     flockRef.current.position.y = Math.sin(t * 0.35) * 0.55;
   });
 
   return (
-    <group ref={flockRef} position={[-48, 23, -56]}>
+    <group ref={flockRef} position={[-36, 17.5, -31]}>
       {birds.map((bird, index) => (
         <group key={index} position={[bird.x, bird.y, bird.z]} scale={[bird.scale, bird.scale, bird.scale]}>
           <Line
@@ -1529,9 +1529,9 @@ function BirdFlock({ palette }: { palette: GardenPalette }) {
               [0.8, 0, 0],
             ]}
             color={palette.skyNight}
-            opacity={0.34}
+            opacity={0.58}
             transparent
-            lineWidth={1.4}
+            lineWidth={2}
           />
         </group>
       ))}
@@ -1542,11 +1542,13 @@ function BirdFlock({ palette }: { palette: GardenPalette }) {
 function HotAirBalloon({
   palette,
   position,
+  colors,
   scale = 1,
   phase = 0,
 }: {
   palette: GardenPalette;
   position: [number, number, number];
+  colors: { body: string; stripe: string; accent: string };
   scale?: number;
   phase?: number;
 }) {
@@ -1562,13 +1564,25 @@ function HotAirBalloon({
 
   return (
     <group ref={balloonRef} position={position} scale={[scale, scale, scale]}>
-      <mesh castShadow>
-        <sphereGeometry args={[1.15, 24, 18]} />
-        <meshStandardMaterial color={palette.leafAlt} emissive={palette.leafAlt} emissiveIntensity={0.08} roughness={0.72} />
+      <mesh position={[0, 0.2, 0]} scale={[1.02, 1.28, 0.9]} castShadow>
+        <sphereGeometry args={[1.15, 32, 22]} />
+        <meshStandardMaterial color={colors.body} roughness={0.76} metalness={0.02} />
       </mesh>
-      <mesh position={[0, -0.08, 0.02]} scale={[0.78, 1.05, 0.78]}>
+      <mesh position={[0, 0.18, 0.55]} scale={[0.34, 1.08, 0.06]}>
         <sphereGeometry args={[1, 20, 14]} />
-        <meshStandardMaterial color={palette.fruit[0]} roughness={0.68} transparent opacity={0.72} />
+        <meshStandardMaterial color={colors.stripe} roughness={0.7} />
+      </mesh>
+      <mesh position={[-0.46, 0.1, 0.48]} scale={[0.18, 0.92, 0.045]}>
+        <sphereGeometry args={[1, 16, 12]} />
+        <meshStandardMaterial color={colors.accent} roughness={0.7} transparent opacity={0.86} />
+      </mesh>
+      <mesh position={[0.46, 0.1, 0.48]} scale={[0.18, 0.92, 0.045]}>
+        <sphereGeometry args={[1, 16, 12]} />
+        <meshStandardMaterial color={colors.accent} roughness={0.7} transparent opacity={0.86} />
+      </mesh>
+      <mesh position={[0, -1.18, 0]} scale={[0.62, 0.12, 0.5]}>
+        <cylinderGeometry args={[1, 1, 1, 24]} />
+        <meshStandardMaterial color={colors.accent} roughness={0.82} />
       </mesh>
       <mesh position={[0, -1.55, 0]} scale={[0.36, 0.28, 0.36]}>
         <boxGeometry args={[1, 1, 1]} />
@@ -1599,14 +1613,14 @@ function BannerPlane({ palette, text }: { palette: GardenPalette; text: string }
   useFrame((state) => {
     if (!planeRef.current) return;
     const t = state.clock.elapsedTime;
-    planeRef.current.position.x = ((t * 3.6) % 118) - 59;
-    planeRef.current.position.y = 26 + Math.sin(t * 0.4) * 0.65;
+    planeRef.current.position.x = ((t * 2.45) % 76) - 38;
+    planeRef.current.position.y = 20.5 + Math.sin(t * 0.4) * 0.5;
     planeRef.current.rotation.z = Math.sin(t * 0.5) * 0.035;
     if (textRef.current) textRef.current.lookAt(camera.position);
   });
 
   return (
-    <group ref={planeRef} position={[-58, 26, -48]} scale={[0.9, 0.9, 0.9]}>
+    <group ref={planeRef} position={[-38, 20.5, -27]} scale={[1.28, 1.28, 1.28]}>
       <group>
         <mesh rotation={[0, 0, Math.PI / 2]} scale={[0.22, 1.2, 0.22]}>
           <capsuleGeometry args={[1, 1.1, 6, 12]} />
@@ -1621,20 +1635,22 @@ function BannerPlane({ palette, text }: { palette: GardenPalette; text: string }
           <meshStandardMaterial color={palette.fruit[0]} roughness={0.58} />
         </mesh>
       </group>
-      <Line points={[[-1.35, 0, 0], [-4.3, 0, 0]]} color="#ffffff" opacity={0.52} transparent lineWidth={1.2} />
-      <group ref={textRef} position={[-6.8, 0, 0]}>
-        <mesh scale={[2.25, 0.55, 0.03]}>
+      <Line points={[[-1.35, 0, 0], [-4.7, 0, 0]]} color="#ffffff" opacity={0.7} transparent lineWidth={1.6} />
+      <group ref={textRef} position={[-7.4, 0, 0]}>
+        <mesh scale={[3.4, 0.78, 0.035]}>
           <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color="#fffdf7" roughness={0.8} transparent opacity={0.86} />
+          <meshStandardMaterial color="#fffaf1" roughness={0.72} transparent opacity={0.95} />
         </mesh>
         <Text
           position={[0, -0.03, 0.04]}
-          fontSize={0.22}
-          maxWidth={3.7}
+          fontSize={0.34}
+          maxWidth={5.9}
           textAlign="center"
           anchorX="center"
           anchorY="middle"
           color="#263224"
+          outlineWidth={0.012}
+          outlineColor="#fffaf1"
         >
           {text}
         </Text>
@@ -1661,9 +1677,27 @@ function SkyLife({
   return (
     <group>
       <BirdFlock palette={palette} />
-      <HotAirBalloon palette={palette} position={[-34, 20, -52]} scale={1.05} phase={0.3} />
-      <HotAirBalloon palette={palette} position={[32, 25, -60]} scale={0.74} phase={2.1} />
-      <HotAirBalloon palette={palette} position={[10, 31, -68]} scale={0.56} phase={4.5} />
+      <HotAirBalloon
+        palette={palette}
+        position={[-25, 16.8, -32]}
+        colors={{ body: '#f7d39b', stripe: '#d96b53', accent: '#fff1cb' }}
+        scale={1.22}
+        phase={0.3}
+      />
+      <HotAirBalloon
+        palette={palette}
+        position={[26, 21.2, -38]}
+        colors={{ body: '#a8c7e8', stripe: '#446f8f', accent: '#f5eee0' }}
+        scale={0.96}
+        phase={2.1}
+      />
+      <HotAirBalloon
+        palette={palette}
+        position={[7, 24.5, -43]}
+        colors={{ body: '#e9b7c3', stripe: '#8d5f7a', accent: '#ffe6a8' }}
+        scale={0.78}
+        phase={4.5}
+      />
       <BannerPlane palette={palette} text={bannerText} />
     </group>
   );
@@ -2313,9 +2347,9 @@ export default function Garden3D({
       : 'Noche tranquila: enfoca sin ruido';
   const planetMoodCopy = lifeSignals.copy || weatherCopy;
   const skyBannerText = useMemo(() => {
-    const date = new Date().toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' }).replace('.', '');
-    if (stats.water > 0) return `${date} · ${stats.water} por regar`;
-    if (stats.harvest > 0) return `${date} · ${stats.harvest} cosechas`;
+    const date = new Date().toLocaleDateString('es', { day: 'numeric', month: 'short' }).replace('.', '');
+    if (stats.water > 0) return `${date} · regar ${stats.water}`;
+    if (stats.harvest > 0) return `${date} · ${stats.harvest} cierres`;
     return `${date} · ${planetName || palette.label}`;
   }, [palette.label, planetName, stats.harvest, stats.water]);
 
