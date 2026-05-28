@@ -1,6 +1,6 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
-const config: CapacitorConfig = {
+const config = {
   appId: 'seedapp.com.ec',
   appName: 'Seed',
   webDir: 'dist',
@@ -10,6 +10,6 @@ const config: CapacitorConfig = {
     contentInset: 'never',
     scrollEnabled: true
   }
-};
+} as CapacitorConfig;
 
 export default config;

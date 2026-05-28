@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import ActivityKit
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -82,4 +83,118 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
     }
 
+}
+
+class SeedBridgeViewController: CAPBridgeViewController {
+    override open func capacitorDidLoad() {
+        super.capacitorDidLoad()
+
+        configureSeedWebView()
+        if #available(iOS 16.1, *) {
+            bridge?.registerPluginInstance(SeedLiveActivityPlugin())
+        }
+    }
+
+    private func configureSeedWebView() {
+        let appBackground = UIColor(red: 0.9608, green: 0.9608, blue: 0.9686, alpha: 1)
+        webView?.scrollView.bounces = false
+        webView?.scrollView.alwaysBounceVertical = false
+        webView?.scrollView.contentInsetAdjustmentBehavior = .never
+        webView?.backgroundColor = appBackground
+        webView?.scrollView.backgroundColor = appBackground
+    }
+}
+
+@available(iOS 16.1, *)
+struct SeedFocusActivityAttributes: ActivityAttributes {
+    public struct ContentState: Codable, Hashable {
+        var title: String
+        var subtitle: String
+        var endDate: Date
+        var progress: Double
+    }
+
+    var noteId: String
+    var title: String
+}
+
+@available(iOS 16.1, *)
+@objc(SeedLiveActivityPlugin)
+public class SeedLiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "SeedLiveActivityPlugin"
+    public let jsName = "SeedLiveActivity"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "start", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "update", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise)
+    ]
+
+    @objc func start(_ call: CAPPluginCall) {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            call.resolve()
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                await endAllActivities()
+                let activity = try Activity.request(
+                    attributes: attributes(from: call),
+                    contentState: state(from: call),
+                    pushType: nil
+                )
+                call.resolve([
+                    "activityId": activity.id
+                ])
+            } catch {
+                call.reject("No se pudo iniciar la actividad en vivo.", nil, error)
+            }
+        }
+    }
+
+    @objc func update(_ call: CAPPluginCall) {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            call.resolve()
+            return
+        }
+
+        let state = state(from: call)
+        Task { @MainActor in
+            for activity in Activity<SeedFocusActivityAttributes>.activities {
+                await activity.update(using: state)
+            }
+            call.resolve()
+        }
+    }
+
+    @objc func stop(_ call: CAPPluginCall) {
+        Task { @MainActor in
+            await endAllActivities()
+            call.resolve()
+        }
+    }
+
+    private func attributes(from call: CAPPluginCall) -> SeedFocusActivityAttributes {
+        SeedFocusActivityAttributes(
+            noteId: call.getString("noteId") ?? "",
+            title: call.getString("title") ?? "Focus"
+        )
+    }
+
+    private func state(from call: CAPPluginCall) -> SeedFocusActivityAttributes.ContentState {
+        let endTimestamp = call.getDouble("endTimestamp") ?? Date().timeIntervalSince1970 * 1000
+        let endDate = Date(timeIntervalSince1970: endTimestamp / 1000)
+        return SeedFocusActivityAttributes.ContentState(
+            title: call.getString("title") ?? "Focus",
+            subtitle: call.getString("subtitle") ?? "Mantén una sola acción.",
+            endDate: endDate,
+            progress: call.getDouble("progress") ?? 0
+        )
+    }
+
+    private func endAllActivities() async {
+        for activity in Activity<SeedFocusActivityAttributes>.activities {
+            await activity.end(using: activity.contentState, dismissalPolicy: .immediate)
+        }
+    }
 }

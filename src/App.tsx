@@ -18,6 +18,7 @@ import {
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { enUS } from 'date-fns/locale';
+import { startFocusLiveActivity, stopFocusLiveActivity, updateFocusLiveActivity } from './native/liveActivity';
 import { 
   Plus, 
   Search, 
@@ -2015,25 +2016,23 @@ function FocusView({
   const [remaining, setRemaining] = useState(10 * 60);
   const [active, setActive] = useState(false);
   const [finished, setFinished] = useState(false);
-  const [customDuration, setCustomDuration] = useState(15);
-  const [customHours, setCustomHours] = useState(0);
-  const [customMinutes, setCustomMinutes] = useState(15);
   const [sessionStartCompleted, setSessionStartCompleted] = useState(0);
   const [sessionSummary, setSessionSummary] = useState<{ minutes: number; steps: number; growth: number } | null>(null);
+  const [liveActivityEndTimestamp, setLiveActivityEndTimestamp] = useState<number | null>(null);
+  const [confirmExit, setConfirmExit] = useState<'exit' | 'edit' | null>(null);
   const nextTask = focusNote?.tasks.find(task => !task.completed);
   const completedSteps = focusNote?.tasks.filter(task => task.completed).length || 0;
   const progress = focusNote?.tasks.length ? Math.round((completedSteps / focusNote.tasks.length) * 100) : 0;
   const isDay = new Date().getHours() >= 6 && new Date().getHours() < 19;
+  const visibleTasks = focusNote?.tasks.slice(0, 5) || [];
+  const hiddenTaskCount = Math.max(0, (focusNote?.tasks.length || 0) - visibleTasks.length);
+  const sessionCompletedSteps = Math.max(0, completedSteps - sessionStartCompleted);
+  const focusGrowthProgress = Math.min(100, Math.max(progress, progress + sessionCompletedSteps * 6));
   const focusOptions = useMemo(() => focusCandidates.map(note => ({
     value: note.id,
     label: note.title,
     description: note.tasks.find(task => !task.completed)?.text || 'Lista para enfocar',
   })), [focusCandidates]);
-  const focusTips = useMemo(() => [
-    nextTask ? `Solo cultiva este paso: ${nextTask.text || 'un paso pequeño'}` : 'Define un paso tan pequeño que puedas empezarlo en menos de dos minutos.',
-    active ? 'Si te distraes, vuelve al siguiente paso. No necesitas reiniciar la sesión.' : 'Antes de empezar, deja claro qué significa avanzar un poco.',
-    progress >= 70 ? 'Ya estás cerca de cosechar. Cierra lo importante antes de pulir.' : 'Descansa cuando termine el bloque; una pausa corta también protege la idea.',
-  ], [active, nextTask, progress]);
 
   useEffect(() => {
     if (!active || !focusNote) return;
@@ -2044,6 +2043,8 @@ function FocusView({
           window.clearInterval(timer);
           setActive(false);
           setFinished(true);
+          void stopFocusLiveActivity();
+          setLiveActivityEndTimestamp(null);
           onLogFocus(focusNote.id, duration);
           setSessionSummary({
             minutes: duration,
@@ -2064,7 +2065,20 @@ function FocusView({
     setFinished(false);
     setSessionSummary(null);
     setRemaining(duration * 60);
+    void stopFocusLiveActivity();
+    setLiveActivityEndTimestamp(null);
   }, [focusNote?.id, duration]);
+
+  useEffect(() => {
+    if (!active || !focusNote || liveActivityEndTimestamp == null) return;
+    void updateFocusLiveActivity({
+      noteId: focusNote.id,
+      title: focusNote.title,
+      subtitle: nextTask?.text || 'Mantén una sola acción.',
+      endTimestamp: liveActivityEndTimestamp,
+      progress,
+    });
+  }, [active, focusNote, liveActivityEndTimestamp, nextTask?.text, progress]);
 
   const startFocus = (minutes: number) => {
     setDuration(minutes);
@@ -2073,6 +2087,15 @@ function FocusView({
     setSessionSummary(null);
     setSessionStartCompleted(completedSteps);
     setActive(true);
+    const endTimestamp = Date.now() + minutes * 60 * 1000;
+    setLiveActivityEndTimestamp(endTimestamp);
+    void startFocusLiveActivity({
+      noteId: focusNote.id,
+      title: focusNote.title,
+      subtitle: nextTask?.text || 'Mantén una sola acción.',
+      endTimestamp,
+      progress,
+    });
   };
 
   const stopFocus = () => {
@@ -2087,6 +2110,30 @@ function FocusView({
       setFinished(true);
     }
     setActive(false);
+    void stopFocusLiveActivity();
+    setLiveActivityEndTimestamp(null);
+  };
+
+  const requestExit = (intent: 'exit' | 'edit') => {
+    if (active) {
+      setConfirmExit(intent);
+      return;
+    }
+
+    if (intent === 'edit') {
+      onSelectNote(focusNote.id);
+    }
+    onExit();
+  };
+
+  const confirmFocusExit = () => {
+    const intent = confirmExit || 'exit';
+    setConfirmExit(null);
+    stopFocus();
+    if (intent === 'edit') {
+      onSelectNote(focusNote.id);
+    }
+    onExit();
   };
 
   const completeCurrentTask = () => {
@@ -2094,19 +2141,16 @@ function FocusView({
     onToggleTask(focusNote.id, nextTask.id);
   };
 
+  const addFocusStep = () => {
+    if (!focusNote || !step.trim()) return;
+    onAddTinyStep(focusNote.id, step);
+    setStep('');
+  };
+
   const formattedTime = `${Math.floor(remaining / 60).toString().padStart(2, '0')}:${(remaining % 60).toString().padStart(2, '0')}`;
   const setFocusDuration = (minutes: number) => {
     setDuration(minutes);
     setRemaining(minutes * 60);
-  };
-  const setCustomFocusDuration = (hours: number, minutes: number) => {
-    const safeHours = Math.max(0, Math.min(8, hours));
-    const safeMinutes = Math.max(0, Math.min(55, minutes));
-    const totalMinutes = Math.max(5, safeHours * 60 + safeMinutes);
-    setCustomHours(safeHours);
-    setCustomMinutes(safeMinutes);
-    setCustomDuration(totalMinutes);
-    setFocusDuration(totalMinutes);
   };
 
   if (!focusNote) {
@@ -2127,253 +2171,270 @@ function FocusView({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className={`fixed inset-0 z-40 overflow-y-auto app-scrollbar ${isDay ? 'bg-[#eef7ef]' : 'bg-[#07110d]'} text-[var(--text-main)]`}
+      className={`fixed inset-0 z-40 overflow-y-auto app-scrollbar ${isDay ? 'bg-[#f4f7f2]' : 'bg-[#07110d]'} text-[var(--text-main)]`}
     >
-      <div className="relative min-h-screen overflow-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:p-5">
-        <div className={`absolute inset-0 ${isDay ? 'bg-[linear-gradient(180deg,#eef7ef_0%,#f8faf3_56%,#f4f6f1_100%)]' : 'bg-[linear-gradient(180deg,#07110d_0%,#0d1d17_55%,#14251b_100%)]'}`} />
-        {!isDay && (
-          <div className="absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_20%_20%,white_0_1px,transparent_1px),radial-gradient(circle_at_62%_34%,white_0_1px,transparent_1px)] bg-[length:120px_120px,180px_180px]" />
-        )}
+      <div className="relative min-h-screen overflow-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-[calc(env(safe-area-inset-top)+0.85rem)] sm:px-6">
+        <div className={`absolute inset-0 ${isDay ? 'bg-[linear-gradient(180deg,#f7faf5_0%,#edf4ed_100%)]' : 'bg-[linear-gradient(180deg,#07110d_0%,#122019_100%)]'}`} />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(circle_at_50%_0%,rgba(126,158,116,0.18),transparent_62%)]" />
 
-        <div className="relative z-10 mx-auto max-w-5xl">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <button onClick={() => { stopFocus(); onExit(); }} className="grid h-10 w-10 place-items-center rounded-full bg-[var(--surface-strong)]/86 text-[var(--sage)] shadow-sm backdrop-blur-xl soft-interaction" aria-label="Salir de enfoque">
+        <div className="relative z-10 mx-auto flex min-h-[calc(100vh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2.35rem)] w-full max-w-[31rem] flex-col">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={() => requestExit('exit')}
+              className="grid h-10 w-10 place-items-center rounded-full bg-[var(--surface-strong)]/80 text-[var(--sage)] shadow-sm ring-1 ring-black/5 backdrop-blur-xl soft-interaction"
+              aria-label="Salir de enfoque"
+            >
               <ChevronLeft size={20} />
             </button>
-            <div className="flex min-w-0 items-center gap-2 rounded-full bg-[var(--surface-strong)]/86 px-3 py-2 shadow-sm backdrop-blur-xl">
-              <Target size={15} className="text-[var(--sage)]" />
-              <span className="truncate text-xs font-semibold text-[var(--text-muted)]">{active ? 'Enfoque activo' : 'Modo enfoque'}</span>
+            <div className="min-w-0 text-center">
+              <p className="truncate text-sm font-semibold text-[var(--earth)]">{active ? 'Enfoque activo' : 'Enfoque'}</p>
+              <p className="text-xs font-medium text-[var(--text-muted)]">{completedSteps}/{focusNote.tasks.length} pasos</p>
             </div>
-            <button onClick={() => { stopFocus(); onSelectNote(focusNote.id); onExit(); }} className="grid h-10 w-10 place-items-center rounded-full bg-[var(--surface-strong)]/86 text-[var(--text-muted)] shadow-sm backdrop-blur-xl soft-interaction" aria-label="Editar idea">
+            <button
+              onClick={() => requestExit('edit')}
+              className="grid h-10 w-10 place-items-center rounded-full bg-[var(--surface-strong)]/80 text-[var(--text-muted)] shadow-sm ring-1 ring-black/5 backdrop-blur-xl soft-interaction"
+              aria-label="Editar idea"
+            >
               <Settings size={17} />
             </button>
           </div>
 
-          <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
-            <div className="min-w-0">
-              <section className="relative overflow-hidden rounded-[2rem] border border-white/60 bg-[var(--surface-strong)]/78 p-5 text-center shadow-[0_24px_80px_rgba(47,62,51,0.14)] backdrop-blur-2xl sm:p-7">
-                <div className="mx-auto max-w-xl">
-                  <p className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">{focusNote.title}</p>
-                  <p className="mt-3 font-mono text-6xl font-semibold leading-none tracking-tight text-[var(--earth)] tabular-nums sm:text-7xl">{formattedTime}</p>
-                  <p className="mt-2 text-sm font-medium text-[var(--text-muted)]">{active ? 'Protegiendo tu atención' : finished ? 'Sesión terminada' : `Bloque de ${duration} min`}</p>
+          <main className="flex flex-1 flex-col justify-center py-5">
+            <section className="overflow-hidden rounded-[2rem] border border-white/55 bg-[var(--surface-strong)]/82 shadow-[0_28px_90px_rgba(39,53,43,0.16)] ring-1 ring-black/[0.03] backdrop-blur-2xl">
+              <div className="px-5 pb-5 pt-6 text-center">
+                <div className="mx-auto flex w-fit items-center gap-2 rounded-full bg-[var(--bg-app)]/82 px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)]">
+                  <Target size={13} className="text-[var(--sage)]" />
+                  <span>{active ? 'Respira y sigue' : `Bloque de ${duration} min`}</span>
                 </div>
+                <p className="mt-5 font-mono text-[4.4rem] font-semibold leading-none tracking-tight text-[var(--earth)] tabular-nums sm:text-7xl">{formattedTime}</p>
+                <h2 className="mx-auto mt-5 max-w-sm text-balance text-2xl font-semibold leading-tight tracking-tight text-[var(--earth)]">
+                  {nextTask?.text || 'Elige un primer paso pequeño'}
+                </h2>
+                <p className="mx-auto mt-2 max-w-sm line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
+                  {focusNote.title}
+                </p>
 
-                <div className={`relative mx-auto mt-5 flex h-56 max-w-sm items-end justify-center overflow-hidden rounded-[1.75rem] ${isDay ? 'bg-gradient-to-b from-sky-100 via-emerald-50 to-white' : 'bg-gradient-to-b from-[#14251b] via-[#1d3425] to-[#edf7ea]'}`}>
+                <div className={`relative mx-auto mt-5 flex h-40 max-w-xs items-end justify-center overflow-hidden rounded-[1.75rem] ${isDay ? 'bg-gradient-to-b from-[#edf8ef] via-[#f7fbf4] to-white' : 'bg-gradient-to-b from-[#122018] via-[#183021] to-[#edf7ea]'}`}>
                   <div className="absolute bottom-8 h-5 w-40 rounded-full bg-green-900/10 blur-md" />
                   <motion.div
-                    animate={{ scale: 1 + progress / 220, y: active ? [0, -4, 0] : 0 }}
-                    transition={{ duration: 3.5, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
+                    key={`${focusNote.id}-${completedSteps}`}
+                    initial={{ scale: 0.9, y: 6, opacity: 0.85 }}
+                    animate={{
+                      scale: active ? [1, 1.04, 1] : 1,
+                      y: active ? [0, -3, 0] : 0,
+                      opacity: 1,
+                    }}
+                    transition={{ duration: 2.8, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
+                    className="relative z-10 origin-bottom"
                   >
-                    <PlantIllustration stage={focusNote.growthStage} progress={progress} isGrowth={focusNote.isGrowth} theme={theme} />
+                    <PlantIllustration
+                      stage={focusNote.growthStage}
+                      progress={focusGrowthProgress}
+                      isGrowth={focusNote.isGrowth || active}
+                      theme={theme}
+                    />
                   </motion.div>
+                  <AnimatePresence>
+                    {active && sessionCompletedSteps > 0 && (
+                      <motion.div
+                        key={sessionCompletedSteps}
+                        initial={{ opacity: 0, y: 8, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.94 }}
+                        className="absolute right-4 top-4 rounded-full bg-white/82 px-3 py-1.5 text-xs font-semibold text-[var(--sage)] shadow-sm backdrop-blur-xl"
+                      >
+                        +{sessionCompletedSteps} cultivo
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
-                <div className="mt-5 flex items-center gap-2 overflow-x-auto app-scrollbar">
-                  {[5, 10, 30].map(minutes => (
+                <div className="mx-auto mt-4 h-1.5 max-w-xs overflow-hidden rounded-full bg-[var(--bg-app)]">
+                  <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${progress}%` }} />
+                </div>
+              </div>
+
+              <div className="border-y border-[var(--border)]/80 px-5 py-3">
+                <div className="grid grid-cols-3 gap-2 rounded-full bg-[var(--bg-app)] p-1">
+                  {[5, 10, 25].map(minutes => (
                     <button
                       key={minutes}
                       type="button"
                       disabled={active}
                       onClick={() => setFocusDuration(minutes)}
-                      className={`h-9 shrink-0 rounded-full px-4 text-sm font-semibold transition-colors disabled:opacity-45 ${
-                        duration === minutes ? 'bg-[var(--sage)] text-[var(--on-sage)]' : 'bg-[var(--bg-app)] text-[var(--sage)]'
+                      className={`h-9 rounded-full text-sm font-semibold transition-all disabled:opacity-50 ${
+                        duration === minutes ? 'bg-[var(--surface-strong)] text-[var(--earth)] shadow-sm' : 'text-[var(--text-muted)]'
                       }`}
                     >
-                      {minutes} min
+                      {minutes}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              <div className="px-5 py-5">
+                <button
+                  onClick={active ? stopFocus : () => startFocus(duration)}
+                  className="h-14 w-full rounded-full bg-[var(--sage)] text-base font-semibold text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
+                >
+                  {active ? 'Guardar sesión' : 'Empezar'}
+                </button>
+                <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
-                    type="button"
-                    disabled={active}
-                    onClick={() => setFocusDuration(customDuration)}
-                    className={`h-9 shrink-0 rounded-full px-4 text-sm font-semibold transition-colors disabled:opacity-45 ${
-                      ![5, 10, 30].includes(duration) ? 'bg-[var(--sage)] text-[var(--on-sage)]' : 'bg-[var(--bg-app)] text-[var(--sage)]'
-                    }`}
+                    onClick={completeCurrentTask}
+                    disabled={!nextTask}
+                    className="h-11 rounded-full bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--sage)] disabled:opacity-40 soft-interaction"
                   >
-                    {customDuration < 60 ? `${customDuration} min` : `${Math.floor(customDuration / 60)}h ${customDuration % 60}m`}
-                  </button>
-                </div>
-              </section>
-
-              <section className="mt-4 rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Paso actual</p>
-                    <h3 className="mt-1 text-xl font-semibold tracking-tight text-[var(--earth)]">{nextTask?.text || 'Define una acción pequeña'}</h3>
-                    <p className="mt-2 line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{focusNote.content || 'Mantén el foco en una sola acción.'}</p>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-xs font-semibold text-[var(--sage)]">{progress}%</span>
-                </div>
-
-                <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--bg-app)]">
-                  <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${progress}%` }} />
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
-                  <button onClick={active ? stopFocus : () => startFocus(duration)} className="h-12 rounded-full bg-[var(--sage)] px-5 text-sm font-semibold text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction">
-                    {active ? 'Guardar sesión' : `Empezar ${duration} min`}
-                  </button>
-                  <button onClick={completeCurrentTask} disabled={!nextTask} className="h-12 rounded-full bg-[var(--bg-app)] px-5 text-sm font-semibold text-[var(--sage)] disabled:opacity-40 soft-interaction">
                     Hecho
                   </button>
-                  <button onClick={() => onOpenWatering(focusNote.id)} className="h-12 rounded-full bg-[var(--bg-app)] px-5 text-sm font-semibold text-[var(--text-muted)] soft-interaction">
-                    Bloqueo
+                  <button
+                    onClick={() => onOpenWatering(focusNote.id)}
+                    disabled={active}
+                    className="h-11 rounded-full bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--text-muted)] disabled:opacity-45 soft-interaction"
+                  >
+                    Regar
                   </button>
                 </div>
-              </section>
-
-              <section className="mt-4 overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
-                <details>
-                  <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-[var(--earth)]">
-                    Pasos y ajustes
-                    <ChevronRight size={16} className="text-[var(--text-muted)]" />
-                  </summary>
-                  <div className="border-t border-[var(--border)] px-4 py-3">
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-semibold text-[var(--text-muted)]">Idea</span>
-                      <AppSelect
-                        value={focusNote.id}
-                        disabled={active}
-                        onChange={onPickFocus}
-                        ariaLabel="Elegir idea para enfoque"
-                        options={focusOptions}
-                      />
-                    </label>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <label className="block">
-                        <span className="text-xs font-semibold text-[var(--text-muted)]">Horas</span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={8}
-                          step={1}
-                          value={customHours}
-                          disabled={active}
-                          onChange={(event) => setCustomFocusDuration(Number(event.target.value) || 0, customMinutes)}
-                          className="mt-1 h-10 w-full rounded-xl bg-[var(--bg-app)] px-3 text-sm font-semibold text-[var(--earth)] outline-none disabled:opacity-60"
-                          aria-label="Horas personalizadas"
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="text-xs font-semibold text-[var(--text-muted)]">Min</span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={55}
-                          step={5}
-                          value={customMinutes}
-                          disabled={active}
-                          onChange={(event) => setCustomFocusDuration(customHours, Number(event.target.value) || 0)}
-                          className="mt-1 h-10 w-full rounded-xl bg-[var(--bg-app)] px-3 text-sm font-semibold text-[var(--earth)] outline-none disabled:opacity-60"
-                          aria-label="Minutos personalizados"
-                        />
-                      </label>
-                    </div>
-
-                    <div className="mt-4 space-y-2">
-                      <p className="text-xs font-semibold text-[var(--text-muted)]">Lista</p>
-                      {focusNote.tasks.length === 0 ? (
-                        <p className="text-sm text-[var(--text-muted)]">Agrega un primer paso pequeño para empezar.</p>
-                      ) : focusNote.tasks.map(task => (
-                        <div key={task.id} className={`flex items-start gap-3 border-b border-[var(--border)] py-2.5 last:border-b-0 ${task.completed ? 'opacity-55' : ''}`}>
-                          <button
-                            onClick={() => onToggleTask(focusNote.id, task.id)}
-                            className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${task.completed ? 'border-[var(--sage)] bg-[var(--sage)] text-[var(--on-sage)]' : 'border-[var(--border)] text-transparent'}`}
-                            aria-label={task.completed ? 'Marcar paso pendiente' : 'Completar paso'}
-                          >
-                            <CheckCircle2 size={14} />
-                      </button>
-                          <input
-                            value={task.text}
-                            onChange={(event) => onUpdateTask(focusNote.id, task.id, event.target.value)}
-                            className={`flex-1 bg-transparent text-sm outline-none ${task.completed ? 'line-through' : ''}`}
-                            placeholder="Describe este paso"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => onDeleteTask(focusNote.id, task.id)}
-                            className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-red-50 hover:text-red-500"
-                            aria-label="Eliminar paso"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-3 flex gap-2">
-                      <input
-                        value={step}
-                        onChange={(event) => setStep(event.target.value)}
-                        placeholder="Nuevo paso pequeño"
-                        className="h-10 min-w-0 flex-1 rounded-xl bg-[var(--bg-app)] px-3 text-sm outline-none"
-                      />
-                      <button
-                        onClick={() => { onAddTinyStep(focusNote.id, step); setStep(''); }}
-                        className="h-10 rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)]"
-                      >
-                        Añadir
-                      </button>
-                    </div>
-                  </div>
-                </details>
-              </section>
-            </div>
-
-            <aside className="rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-sm lg:sticky lg:top-5">
-              <div className="grid grid-cols-2 gap-2 text-center">
-                <div className="rounded-2xl bg-[var(--bg-app)] p-3">
-                  <p className="text-xs font-medium text-[var(--text-muted)]">Pasos</p>
-                  <p className="mt-1 text-xl font-semibold text-[var(--earth)]">{completedSteps}/{focusNote.tasks.length}</p>
-                </div>
-                <div className="rounded-2xl bg-[var(--bg-app)] p-3">
-                  <p className="text-xs font-medium text-[var(--text-muted)]">Enfoque</p>
-                  <p className="mt-1 text-xl font-semibold text-[var(--earth)]">{focusNote.focusedMinutes || 0}m</p>
-                </div>
               </div>
+            </section>
 
-              <div className="mt-4 space-y-2">
-                {focusTips.slice(0, 2).map(tip => (
-                  <p key={tip} className="rounded-2xl bg-[var(--bg-app)] px-3 py-2 text-xs font-medium leading-relaxed text-[var(--text-muted)]">
-                    {tip}
-                  </p>
+            <section className="mt-4 overflow-hidden rounded-[1.65rem] border border-[var(--border)] bg-[var(--surface-strong)]/78 shadow-sm backdrop-blur-xl">
+              <div className="px-4 py-3">
+                {focusNote.tasks.length === 0 ? (
+                  <p className="py-2 text-sm font-medium text-[var(--text-muted)]">Agrega un paso para que enfoque tenga dirección.</p>
+                ) : visibleTasks.map(task => (
+                  <div key={task.id} className={`flex items-center gap-3 border-b border-[var(--border)] py-2.5 last:border-b-0 ${task.completed ? 'opacity-50' : ''}`}>
+                    <button
+                      onClick={() => onToggleTask(focusNote.id, task.id)}
+                      className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border transition-transform active:scale-90 ${task.completed ? 'border-[var(--sage)] bg-[var(--sage)] text-[var(--on-sage)]' : 'border-[var(--border)] text-transparent'}`}
+                      aria-label={task.completed ? 'Marcar paso pendiente' : 'Completar paso'}
+                    >
+                      <CheckCircle2 size={15} />
+                    </button>
+                    <input
+                      value={task.text}
+                      onChange={(event) => onUpdateTask(focusNote.id, task.id, event.target.value)}
+                      readOnly={active}
+                      className={`min-w-0 flex-1 bg-transparent text-[15px] font-medium text-[var(--earth)] outline-none read-only:cursor-default ${task.completed ? 'line-through' : ''}`}
+                      placeholder="Describe este paso"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onDeleteTask(focusNote.id, task.id)}
+                      disabled={active}
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-red-50 hover:text-red-500 disabled:pointer-events-none disabled:opacity-0"
+                      aria-label="Eliminar paso"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 ))}
-              </div>
-            </aside>
-          </section>
-
-          <AnimatePresence>
-            {finished && sessionSummary && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
-                className="mt-6 rounded-[2rem] bg-[var(--surface-strong)] border border-green-100 p-5 max-w-5xl shadow-xl"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-green-600">Resumen de enfoque</p>
-                    <h4 className="mt-1 font-serif text-2xl font-black text-[var(--earth)]">Sesión terminada</h4>
-                    <p className="mt-2 text-sm font-semibold text-[var(--text-muted)]">Si te bloqueaste, convierte el paso en algo más pequeño.</p>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    {[
-                      { label: 'Min', value: sessionSummary.minutes },
-                      { label: 'Pasos', value: sessionSummary.steps },
-                      { label: 'Creció', value: `${sessionSummary.growth}%` },
-                    ].map(item => (
-                      <div key={item.label} className="rounded-2xl bg-green-50 px-4 py-3">
-                        <p className="text-xl font-black text-green-700">{item.value}</p>
-                        <p className="text-[8px] font-black uppercase tracking-widest text-green-700/60">{item.label}</p>
-                      </div>
-                    ))}
-                  </div>
+                {hiddenTaskCount > 0 && (
+                  <p className="pt-2 text-center text-xs font-semibold text-[var(--text-muted)]">+{hiddenTaskCount} pasos más</p>
+                )}
+                <div className="mt-3 flex gap-2">
+                  <input
+                    value={step}
+                    onChange={(event) => setStep(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        addFocusStep();
+                      }
+                    }}
+                    placeholder="Nuevo paso"
+                    className="h-11 min-w-0 flex-1 rounded-full bg-[var(--bg-app)] px-4 text-sm font-medium text-[var(--earth)] outline-none"
+                  />
+                  <button
+                    onClick={addFocusStep}
+                    disabled={!step.trim()}
+                    className="h-11 rounded-full bg-[var(--earth)] px-4 text-sm font-semibold text-white disabled:opacity-45"
+                  >
+                    Añadir
+                  </button>
                 </div>
-              </motion.div>
+              </div>
+            </section>
+
+            {!active && (
+              <details className="mt-3 overflow-hidden rounded-[1.45rem] border border-[var(--border)] bg-[var(--surface-strong)]/60 backdrop-blur-xl">
+                <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-[var(--text-muted)]">
+                  Cambiar idea
+                  <ChevronDown size={16} />
+                </summary>
+                <div className="border-t border-[var(--border)] px-4 py-3">
+                  <AppSelect
+                    value={focusNote.id}
+                    onChange={onPickFocus}
+                    ariaLabel="Elegir idea para enfoque"
+                    options={focusOptions}
+                  />
+                </div>
+              </details>
             )}
-          </AnimatePresence>
+
+            <AnimatePresence>
+              {finished && sessionSummary && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  className="mt-3 rounded-[1.45rem] border border-[var(--border)] bg-[var(--surface-strong)]/78 p-4 shadow-sm backdrop-blur-xl"
+                >
+                  <p className="text-sm font-semibold text-[var(--earth)]">Sesión guardada</p>
+                  <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">{sessionSummary.minutes} min · {sessionSummary.steps} pasos · {sessionSummary.growth}% de avance</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </main>
         </div>
       </div>
+
+      <AnimatePresence>
+        {confirmExit && (
+          <motion.div
+            className="fixed inset-0 z-50 grid place-items-center bg-black/18 px-5 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Cerrar enfoque"
+              className="w-full max-w-[21rem] rounded-[1.75rem] border border-white/60 bg-[var(--surface-strong)] p-5 text-center shadow-[0_24px_80px_rgba(20,30,24,0.24)]"
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+            >
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)]">
+                <Target size={20} />
+              </div>
+              <h3 className="mt-4 text-xl font-semibold tracking-tight text-[var(--earth)]">Cerrar enfoque</h3>
+              <p className="mt-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
+                Seed guardará los minutos trabajados. Puedes seguir con el mismo paso si todavía no quieres salir.
+              </p>
+              <div className="mt-5 grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmExit(null)}
+                  className="h-12 rounded-full bg-[var(--sage)] text-sm font-semibold text-[var(--on-sage)] soft-interaction"
+                >
+                  Seguir enfocando
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmFocusExit}
+                  className="h-12 rounded-full bg-[var(--bg-app)] text-sm font-semibold text-[var(--text-muted)] soft-interaction"
+                >
+                  Salir y guardar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

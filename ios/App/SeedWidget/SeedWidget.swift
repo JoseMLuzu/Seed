@@ -1,5 +1,19 @@
 import SwiftUI
 import WidgetKit
+import ActivityKit
+
+@available(iOS 16.1, *)
+struct SeedFocusActivityAttributes: ActivityAttributes {
+    public struct ContentState: Codable, Hashable {
+        var title: String
+        var subtitle: String
+        var endDate: Date
+        var progress: Double
+    }
+
+    var noteId: String
+    var title: String
+}
 
 struct SeedWidgetEntry: TimelineEntry {
     let date: Date
@@ -132,9 +146,115 @@ struct SeedTodayWidget: Widget {
     }
 }
 
+@available(iOS 16.1, *)
+struct SeedFocusLiveActivityWidget: Widget {
+    private let islandPrimary = Color.white
+    private let islandSecondary = Color.white.opacity(0.72)
+    private let islandAccent = Color(red: 0.70, green: 0.91, blue: 0.70)
+    private let lockPrimary = Color(red: 0.14, green: 0.18, blue: 0.14)
+    private let lockSecondary = Color(red: 0.34, green: 0.39, blue: 0.34)
+    private let lockAccent = Color(red: 0.31, green: 0.45, blue: 0.34)
+
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: SeedFocusActivityAttributes.self) { context in
+            lockScreenView(context: context)
+                .activityBackgroundTint(Color(red: 0.94, green: 0.96, blue: 0.93))
+                .activitySystemActionForegroundColor(lockPrimary)
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    HStack(alignment: .center, spacing: 8) {
+                        Image(systemName: "leaf.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(islandAccent)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Seed Focus")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(islandAccent)
+                            Text(context.state.title)
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundStyle(islandPrimary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+                DynamicIslandExpandedRegion(.trailing) {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("Restante")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(islandSecondary)
+                        timerText(endDate: context.state.endDate)
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(islandPrimary)
+                    }
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    Text(context.state.subtitle)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(islandSecondary)
+                        .lineLimit(1)
+                }
+            } compactLeading: {
+                Image(systemName: "leaf.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(islandAccent)
+            } compactTrailing: {
+                timerText(endDate: context.state.endDate)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(islandPrimary)
+                    .frame(width: 42)
+            } minimal: {
+                Image(systemName: "leaf.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(islandAccent)
+            }.keylineTint(islandAccent)
+        }
+    }
+
+    private func lockScreenView(context: ActivityViewContext<SeedFocusActivityAttributes>) -> some View {
+        HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.75))
+                .frame(width: 46, height: 46)
+                .overlay {
+                    Image(systemName: "leaf.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(lockAccent)
+                }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(context.state.title)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(lockPrimary)
+                    .lineLimit(1)
+                Text(context.state.subtitle)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(lockSecondary)
+                    .lineLimit(1)
+                timerText(endDate: context.state.endDate)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(lockPrimary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+    }
+
+    private func timerText(endDate: Date) -> Text {
+        Text(timerInterval: Date.now...endDate, countsDown: true)
+    }
+}
+
 @main
 struct SeedWidgetBundle: WidgetBundle {
     var body: some Widget {
         SeedTodayWidget()
+        if #available(iOS 16.1, *) {
+            SeedFocusLiveActivityWidget()
+        }
     }
 }
