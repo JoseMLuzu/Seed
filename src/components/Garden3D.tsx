@@ -8,6 +8,7 @@ import { daysSince, wateringDue } from '../seedLogic';
 
 const PLANET_RADIUS = 15;
 type GardenFilter = 'all' | 'water' | 'progress' | 'harvest';
+type GardenMood = 'alive' | 'quiet' | 'blooming' | 'thirsty';
 type GardenPalette = {
   label: string;
   skyDay: string;
@@ -37,6 +38,10 @@ type GardenPalette = {
 
 function mutedSceneColor(color: string, intensity: number) {
   return new THREE.Color(color).multiplyScalar(intensity);
+}
+
+function latestNoteActivity(note: SeedNote) {
+  return Math.max(note.createdAt || 0, note.updatedAt || 0, note.lastWateredAt || 0, note.harvestedAt || 0);
 }
 
 const GARDEN_PALETTES: Record<Theme, GardenPalette> = {
@@ -938,6 +943,37 @@ function SurfacePatch({
   );
 }
 
+function SurfaceRing({
+  lat,
+  lon,
+  radius,
+  color,
+  stretch = 1,
+  twist = 0,
+  opacity = 0.35,
+  altitude = 0.075,
+}: {
+  lat: number;
+  lon: number;
+  radius: number;
+  color: string | THREE.Color;
+  stretch?: number;
+  twist?: number;
+  opacity?: number;
+  altitude?: number;
+}) {
+  const { position, quaternion } = useMemo(() => getSurfaceTransform(lat, lon, PLANET_RADIUS + altitude), [lat, lon, altitude]);
+
+  return (
+    <group position={position} quaternion={quaternion}>
+      <mesh rotation={[0, 0, twist]} scale={[radius * stretch, radius, 1]}>
+        <ringGeometry args={[0.88, 1, 48]} />
+        <meshBasicMaterial color={color} transparent opacity={opacity} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+}
+
 function SurfaceRock({ lat, lon, scale, color }: { lat: number; lon: number; scale: number; color: string }) {
   const { position, quaternion } = useMemo(() => getSurfaceTransform(lat, lon, PLANET_RADIUS + 0.14), [lat, lon]);
 
@@ -952,34 +988,42 @@ function SurfaceRock({ lat, lon, scale, color }: { lat: number; lon: number; sca
 }
 
 function PlanetSurface({ isDay, palette }: { isDay: boolean; palette: GardenPalette }) {
-  const surfaceColor = useMemo(() => mutedSceneColor(isDay ? palette.planet : palette.planetNight, isDay ? 0.82 : 0.74), [isDay, palette.planet, palette.planetNight]);
-  const surfaceGlow = useMemo(() => mutedSceneColor(isDay ? palette.planet : palette.planetNight, isDay ? 0.52 : 0.42), [isDay, palette.planet, palette.planetNight]);
+  const surfaceColor = useMemo(() => mutedSceneColor(isDay ? palette.planet : palette.planetNight, isDay ? 0.9 : 0.78), [isDay, palette.planet, palette.planetNight]);
+  const surfaceGlow = useMemo(() => mutedSceneColor(isDay ? palette.planet : palette.planetNight, isDay ? 0.42 : 0.5), [isDay, palette.planet, palette.planetNight]);
   const overlayColor = useMemo(() => mutedSceneColor(palette.planetOverlay, isDay ? 0.78 : 0.58), [isDay, palette.planetOverlay]);
+  const rimColor = useMemo(() => mutedSceneColor(palette.atmosphere, isDay ? 0.96 : 0.82), [isDay, palette.atmosphere]);
 
   return (
     <>
       <mesh receiveShadow castShadow>
         <icosahedronGeometry args={[PLANET_RADIUS, 5]} />
-        <meshStandardMaterial 
+        <meshPhysicalMaterial
           color={surfaceColor}
           emissive={surfaceGlow}
-          emissiveIntensity={isDay ? 0.045 : 0.24}
-          roughness={0.96}
-          metalness={0}
+          emissiveIntensity={isDay ? 0.035 : 0.18}
+          roughness={0.84}
+          metalness={0.02}
+          clearcoat={0.22}
+          clearcoatRoughness={0.78}
           flatShading
         />
       </mesh>
 
-      <mesh scale={[1.004, 1.004, 1.004]} receiveShadow>
+      <mesh scale={[1.006, 1.006, 1.006]} receiveShadow>
         <icosahedronGeometry args={[PLANET_RADIUS, 4]} />
         <meshStandardMaterial
           color={overlayColor}
           transparent
-          opacity={isDay ? 0.11 : 0.08}
+          opacity={isDay ? 0.13 : 0.1}
           roughness={1}
           depthWrite={false}
           flatShading
         />
+      </mesh>
+
+      <mesh scale={[1.018, 1.018, 1.018]}>
+        <sphereGeometry args={[PLANET_RADIUS, 64, 64]} />
+        <meshBasicMaterial color={rimColor} transparent opacity={isDay ? 0.035 : 0.055} side={THREE.BackSide} depthWrite={false} />
       </mesh>
 
       {PLANET_PATCHES.map((patch, index) => (
@@ -1005,6 +1049,20 @@ function PlanetSurface({ isDay, palette }: { isDay: boolean; palette: GardenPale
           twist={lake.twist}
           opacity={0.78}
           altitude={0.055}
+        />
+      ))}
+
+      {PLANET_LAKES.map((lake) => (
+        <SurfaceRing
+          key={`${lake.lat}-${lake.lon}-edge`}
+          lat={lake.lat}
+          lon={lake.lon}
+          radius={lake.radius}
+          color={isDay ? '#eafcff' : palette.sparkles}
+          stretch={lake.stretch}
+          twist={lake.twist}
+          opacity={isDay ? 0.28 : 0.2}
+          altitude={0.082}
         />
       ))}
 
@@ -1238,6 +1296,197 @@ function RainField({ palette, compact }: { palette: GardenPalette; compact: bool
   );
 }
 
+function LivingParticles({
+  palette,
+  isDay,
+  mood,
+  activity,
+  performanceMode,
+  compact,
+}: {
+  palette: GardenPalette;
+  isDay: boolean;
+  mood: GardenMood;
+  activity: number;
+  performanceMode: boolean;
+  compact: boolean;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const count = performanceMode ? 0 : compact ? 14 : 30;
+  const particles = useMemo(() => Array.from({ length: count }, (_, index) => {
+    const seed = index * 97;
+    const angle = seed * 0.071;
+    const radius = PLANET_RADIUS + 4.8 + (index % 7) * 0.92;
+    return {
+      angle,
+      radius,
+      y: -8 + (index % 13) * 1.35,
+      size: 0.055 + (index % 5) * 0.018,
+      speed: 0.18 + (index % 6) * 0.018,
+    };
+  }), [count]);
+
+  useFrame((state) => {
+    if (!groupRef.current) return;
+    const t = state.clock.elapsedTime;
+    groupRef.current.rotation.y = t * (0.012 + Math.min(activity, 8) * 0.0015);
+    groupRef.current.children.forEach((child, index) => {
+      const particle = particles[index];
+      child.position.y = particle.y + Math.sin(t * particle.speed + index) * 0.42;
+    });
+  });
+
+  if (count === 0) return null;
+
+  const particleColor = mood === 'blooming'
+    ? palette.fruit[0]
+    : mood === 'thirsty'
+      ? palette.water
+      : isDay
+        ? palette.sparkles
+        : palette.atmosphere;
+
+  return (
+    <group ref={groupRef}>
+      {particles.map((particle, index) => (
+        <mesh
+          key={index}
+          position={[
+            Math.cos(particle.angle) * particle.radius,
+            particle.y,
+            Math.sin(particle.angle) * particle.radius,
+          ]}
+          scale={[particle.size, particle.size, particle.size]}
+        >
+          <sphereGeometry args={[1, 10, 8]} />
+          <meshStandardMaterial
+            color={particleColor}
+            emissive={particleColor}
+            emissiveIntensity={mood === 'quiet' ? 0.18 : 0.42}
+            roughness={0.55}
+            transparent
+            opacity={mood === 'quiet' ? 0.38 : 0.62}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function Butterfly({
+  seed,
+  palette,
+  mood,
+  compact,
+}: {
+  seed: number;
+  palette: GardenPalette;
+  mood: GardenMood;
+  compact: boolean;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const leftWingRef = useRef<THREE.Group>(null);
+  const rightWingRef = useRef<THREE.Group>(null);
+  const { camera } = useThree();
+  const orbit = useMemo(() => {
+    const base = seed * 0.173;
+    return {
+      angle: base,
+      radius: PLANET_RADIUS + 4.8 + (seed % 5) * 0.72,
+      y: -5.5 + (seed % 9) * 1.35,
+      speed: 0.1 + (seed % 6) * 0.012,
+      size: compact ? 0.42 : 0.52 + (seed % 4) * 0.04,
+    };
+  }, [compact, seed]);
+  const wingColor = mood === 'blooming'
+    ? palette.fruit[seed % palette.fruit.length]
+    : mood === 'thirsty'
+      ? palette.water
+      : palette.leafAlt;
+  const wingAccent = mood === 'blooming' ? palette.sparkles : palette.fruit[(seed + 1) % palette.fruit.length];
+
+  useFrame((state) => {
+    if (!groupRef.current) return;
+    const t = state.clock.elapsedTime;
+    const angle = orbit.angle + t * orbit.speed;
+    groupRef.current.position.set(
+      Math.cos(angle) * orbit.radius,
+      orbit.y + Math.sin(t * 0.8 + seed) * 0.65,
+      Math.sin(angle) * orbit.radius,
+    );
+    groupRef.current.lookAt(camera.position);
+    const flap = Math.sin(t * 10 + seed) * 0.75;
+    if (leftWingRef.current) leftWingRef.current.rotation.y = -0.75 + flap;
+    if (rightWingRef.current) rightWingRef.current.rotation.y = 0.75 - flap;
+  });
+
+  return (
+    <group ref={groupRef} scale={[orbit.size, orbit.size, orbit.size]}>
+      <mesh scale={[0.08, 0.42, 0.08]}>
+        <capsuleGeometry args={[1, 0.7, 4, 8]} />
+        <meshStandardMaterial color={palette.trunk} roughness={0.65} />
+      </mesh>
+      <group ref={leftWingRef} position={[-0.08, 0.12, 0]} rotation={[0.2, -0.75, 0.16]}>
+        <mesh position={[-0.28, 0.12, 0]} scale={[0.48, 0.34, 0.04]}>
+          <sphereGeometry args={[1, 18, 10]} />
+          <meshStandardMaterial color={wingColor} emissive={wingColor} emissiveIntensity={0.18} roughness={0.48} transparent opacity={0.82} />
+        </mesh>
+        <mesh position={[-0.18, -0.18, 0]} scale={[0.32, 0.24, 0.035]}>
+          <sphereGeometry args={[1, 14, 8]} />
+          <meshStandardMaterial color={wingAccent} emissive={wingAccent} emissiveIntensity={0.12} roughness={0.5} transparent opacity={0.68} />
+        </mesh>
+      </group>
+      <group ref={rightWingRef} position={[0.08, 0.12, 0]} rotation={[0.2, 0.75, -0.16]}>
+        <mesh position={[0.28, 0.12, 0]} scale={[0.48, 0.34, 0.04]}>
+          <sphereGeometry args={[1, 18, 10]} />
+          <meshStandardMaterial color={wingColor} emissive={wingColor} emissiveIntensity={0.18} roughness={0.48} transparent opacity={0.82} />
+        </mesh>
+        <mesh position={[0.18, -0.18, 0]} scale={[0.32, 0.24, 0.035]}>
+          <sphereGeometry args={[1, 14, 8]} />
+          <meshStandardMaterial color={wingAccent} emissive={wingAccent} emissiveIntensity={0.12} roughness={0.5} transparent opacity={0.68} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+function ButterflyField({
+  palette,
+  mood,
+  compact,
+  performanceMode,
+  freshHarvestCount,
+}: {
+  palette: GardenPalette;
+  mood: GardenMood;
+  compact: boolean;
+  performanceMode: boolean;
+  freshHarvestCount: number;
+}) {
+  const count = useMemo(() => {
+    if (performanceMode) return 0;
+    const base = mood === 'blooming' ? 7 : mood === 'alive' ? 4 : mood === 'thirsty' ? 3 : 2;
+    return Math.min(compact ? 5 : 10, base + freshHarvestCount);
+  }, [compact, freshHarvestCount, mood, performanceMode]);
+
+  if (count === 0) return null;
+
+  return (
+    <group>
+      {Array.from({ length: count }, (_, index) => (
+        <Butterfly
+          key={index}
+          seed={index * 37 + freshHarvestCount * 11}
+          palette={palette}
+          mood={mood}
+          compact={compact}
+        />
+      ))}
+    </group>
+  );
+}
+
 function Plant3D({
   note,
   position,
@@ -1245,6 +1494,9 @@ function Plant3D({
   selected,
   needsWater,
   nourished,
+  newborn,
+  recentlyActive,
+  freshHarvest,
   routeActive,
   dimmed,
   showLabel,
@@ -1257,6 +1509,9 @@ function Plant3D({
   selected: boolean;
   needsWater: boolean;
   nourished: boolean;
+  newborn: boolean;
+  recentlyActive: boolean;
+  freshHarvest: boolean;
   routeActive: boolean;
   dimmed: boolean;
   showLabel: boolean;
@@ -1294,12 +1549,15 @@ function Plant3D({
   const targetScale = useMemo(() => {
     if (!spawned) return 0;
     if (nourished) return 1.72;
+    if (newborn) return 1.5;
+    if (freshHarvest) return 1.48;
     if (selected) return 1.58;
     if (hovered) return 1.42;
     if (routeActive) return 1.26;
+    if (recentlyActive) return 1.12;
     if (dimmed) return 0.72;
     return 1;
-  }, [spawned, hovered, selected, routeActive, dimmed, nourished]);
+  }, [spawned, hovered, selected, routeActive, dimmed, nourished, newborn, recentlyActive, freshHarvest]);
 
   useFrame((state, delta) => {
     const shouldAnimatePlant = !performanceMode || selected || hovered || needsWater || nourished || routeActive;
@@ -1324,10 +1582,10 @@ function Plant3D({
 
     if (haloRef.current) {
       const t = state.clock.elapsedTime + note.id.length;
-      const pulse = nourished ? 1.25 + Math.sin(t * 5) * 0.16 : selected ? 1.12 : 1 + Math.sin(t * 2.6) * 0.1;
+      const pulse = nourished || newborn || freshHarvest ? 1.25 + Math.sin(t * 5) * 0.16 : selected ? 1.12 : 1 + Math.sin(t * 2.6) * 0.1;
       haloRef.current.scale.set(pulse, pulse, pulse);
       if (haloRef.current.material instanceof THREE.MeshStandardMaterial) {
-        haloRef.current.material.opacity = nourished ? 0.92 : selected ? 0.82 : 0.42 + Math.sin(t * 2.6) * 0.14;
+        haloRef.current.material.opacity = nourished || newborn || freshHarvest ? 0.9 : selected ? 0.82 : 0.42 + Math.sin(t * 2.6) * 0.14;
       }
     }
   });
@@ -1362,21 +1620,40 @@ function Plant3D({
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
     >
-      {(needsWater || selected || routeActive || nourished) && (
+      {(needsWater || selected || routeActive || nourished || newborn || recentlyActive || freshHarvest) && (
         <mesh ref={haloRef} rotation={[Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-          <torusGeometry args={[nourished ? 0.82 : selected ? 0.7 : routeActive ? 0.62 : 0.52, nourished ? 0.035 : 0.025, 8, 48]} />
+          <torusGeometry args={[nourished || newborn || freshHarvest ? 0.82 : selected ? 0.7 : routeActive ? 0.62 : 0.52, nourished || newborn || freshHarvest ? 0.035 : 0.025, 8, 48]} />
           <meshStandardMaterial
-            color={nourished ? palette.water : selected ? '#ffffff' : routeActive ? palette.sparkles : palette.connection}
-            emissive={nourished ? palette.water : selected ? '#ffffff' : routeActive ? palette.sparkles : palette.connection}
-            emissiveIntensity={nourished ? 1.1 : selected ? 0.8 : 0.45}
+            color={nourished ? palette.water : freshHarvest ? palette.fruit[0] : newborn ? palette.sparkles : selected ? '#ffffff' : routeActive ? palette.sparkles : palette.connection}
+            emissive={nourished ? palette.water : freshHarvest ? palette.fruit[0] : newborn ? palette.sparkles : selected ? '#ffffff' : routeActive ? palette.sparkles : palette.connection}
+            emissiveIntensity={nourished || newborn || freshHarvest ? 1.1 : selected ? 0.8 : 0.45}
             transparent
             opacity={0.54}
             depthWrite={false}
           />
         </mesh>
       )}
-      {nourished && (
-        <Sparkles count={18} scale={2.4} size={4} speed={1.8} opacity={0.85} color={palette.water} />
+      {(nourished || newborn || freshHarvest) && (
+        <Sparkles
+          count={freshHarvest ? 28 : newborn ? 20 : 18}
+          scale={freshHarvest ? 3.1 : 2.4}
+          size={freshHarvest ? 5 : 4}
+          speed={freshHarvest ? 1.45 : 1.8}
+          opacity={0.85}
+          color={nourished ? palette.water : freshHarvest ? palette.fruit[0] : palette.sparkles}
+        />
+      )}
+      {newborn && (
+        <Line
+          points={[
+            [0, 3.1, 0],
+            [0, 1.1, 0],
+          ]}
+          color={palette.sparkles}
+          opacity={0.42}
+          transparent
+          lineWidth={1.4}
+        />
       )}
       {needsWater && (
         <mesh position={[0, 0.72, 0]} scale={[0.16, 0.16, 0.16]}>
@@ -1504,11 +1781,76 @@ function Atmosphere({ isDay, palette, performanceMode }: { isDay: boolean; palet
   );
 }
 
+function PremiumOrbit({ isDay, palette, performanceMode }: { isDay: boolean; palette: GardenPalette; performanceMode: boolean }) {
+  const orbitRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (!orbitRef.current) return;
+    orbitRef.current.rotation.y = state.clock.elapsedTime * 0.018;
+    orbitRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 0.16) * 0.018;
+  });
+
+  if (performanceMode) return null;
+
+  return (
+    <group ref={orbitRef} rotation={[0.58, 0.1, -0.32]}>
+      <mesh>
+        <torusGeometry args={[PLANET_RADIUS + 3.2, 0.018, 8, 160]} />
+        <meshBasicMaterial color={palette.sparkles} transparent opacity={isDay ? 0.16 : 0.24} depthWrite={false} />
+      </mesh>
+      <mesh rotation={[0.08, 0.16, 0]}>
+        <torusGeometry args={[PLANET_RADIUS + 3.72, 0.008, 8, 160]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={isDay ? 0.09 : 0.16} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+}
+
+function SceneBloom({ isDay, palette, isRaining }: { isDay: boolean; palette: GardenPalette; isRaining: boolean }) {
+  const bloomRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (!bloomRef.current) return;
+    const pulse = 1 + Math.sin(state.clock.elapsedTime * 0.38) * 0.018;
+    bloomRef.current.scale.setScalar(pulse);
+  });
+
+  return (
+    <group ref={bloomRef}>
+      <mesh scale={[1.36, 1.36, 1.36]}>
+        <sphereGeometry args={[PLANET_RADIUS, 64, 64]} />
+        <meshBasicMaterial
+          color={isRaining ? palette.water : palette.atmosphere}
+          transparent
+          opacity={isDay ? 0.045 : 0.09}
+          side={THREE.BackSide}
+          depthWrite={false}
+        />
+      </mesh>
+      <mesh scale={[1.62, 1.62, 1.62]}>
+        <sphereGeometry args={[PLANET_RADIUS, 48, 48]} />
+        <meshBasicMaterial
+          color={palette.sparkles}
+          transparent
+          opacity={isDay ? 0.018 : 0.038}
+          side={THREE.BackSide}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
+  );
+}
+
 function PlanetSystem({
   plants,
   connections,
   isDay,
   palette,
+  mood,
+  activityLevel,
+  newbornIds,
+  recentlyActiveIds,
+  freshHarvestIds,
   selectedId,
   routeIds,
   recentlyWateredId,
@@ -1522,6 +1864,11 @@ function PlanetSystem({
   connections: { start: [number, number, number]; end: [number, number, number]; id: string }[];
   isDay: boolean;
   palette: GardenPalette;
+  mood: GardenMood;
+  activityLevel: number;
+  newbornIds: Set<string>;
+  recentlyActiveIds: Set<string>;
+  freshHarvestIds: Set<string>;
   selectedId: string | null;
   routeIds: string[];
   recentlyWateredId?: string | null;
@@ -1569,13 +1916,29 @@ function PlanetSystem({
       <PlanetSurface isDay={isDay} palette={palette} />
       
       <Atmosphere isDay={isDay} palette={palette} performanceMode={performanceMode} />
+      <PremiumOrbit isDay={isDay} palette={palette} performanceMode={performanceMode} />
+      <LivingParticles
+        palette={palette}
+        isDay={isDay}
+        mood={mood}
+        activity={activityLevel}
+        performanceMode={performanceMode}
+        compact={compact}
+      />
+      <ButterflyField
+        palette={palette}
+        mood={mood}
+        compact={compact}
+        performanceMode={performanceMode}
+        freshHarvestCount={freshHarvestIds.size}
+      />
 
       <Sparkles 
-        count={performanceMode ? (isDay ? 28 : 70) : compact ? (isDay ? 45 : 120) : (isDay ? 100 : 300)} 
+        count={performanceMode ? (isDay ? 28 : 70) : compact ? (isDay ? 45 : 120) : (isDay ? 110 : 320)} 
         scale={PLANET_RADIUS * 3.5} 
-        size={5} 
-        speed={0.4} 
-        opacity={0.6} 
+        size={mood === 'blooming' ? 6 : 5} 
+        speed={mood === 'quiet' ? 0.22 : 0.42} 
+        opacity={mood === 'quiet' ? 0.42 : 0.64} 
         color={palette.sparkles} 
       />
 
@@ -1597,6 +1960,9 @@ function PlanetSystem({
           selected={selectedId === note.id}
           needsWater={wateringDue(note) && note.growthStage !== 'bloom' && !note.paused}
           nourished={recentlyWateredId === note.id}
+          newborn={newbornIds.has(note.id)}
+          recentlyActive={recentlyActiveIds.has(note.id)}
+          freshHarvest={freshHarvestIds.has(note.id)}
           routeActive={routeIds.includes(note.id)}
           dimmed={routeIds.length > 0 && !routeIds.includes(note.id)}
           showLabel={
@@ -1711,6 +2077,51 @@ export default function Garden3D({
     return total;
   }, { water: 0, progress: 0, harvest: 0 }), [notes]);
 
+  const lifeSignals = useMemo(() => {
+    const now = Date.now();
+    const recentlyActiveIds = new Set<string>();
+    const newbornIds = new Set<string>();
+    const freshHarvestIds = new Set<string>();
+    let quietIdeas = 0;
+
+    notes.forEach((note) => {
+      const latest = latestNoteActivity(note);
+      if (now - latest < 36 * 60 * 60 * 1000) recentlyActiveIds.add(note.id);
+      if (now - (note.createdAt || 0) < 20 * 60 * 1000) newbornIds.add(note.id);
+      if (note.harvestedAt && now - note.harvestedAt < 72 * 60 * 60 * 1000) freshHarvestIds.add(note.id);
+      if (note.growthStage !== 'bloom' && !note.paused && daysSince(note.lastWateredAt || note.updatedAt || note.createdAt) >= 5) {
+        quietIdeas += 1;
+      }
+    });
+
+    const mood: GardenMood = freshHarvestIds.size >= 2
+      ? 'blooming'
+      : stats.water >= 3
+        ? 'thirsty'
+        : recentlyActiveIds.size >= 2 || newbornIds.size > 0
+          ? 'alive'
+          : quietIdeas > Math.max(2, notes.length * 0.35)
+            ? 'quiet'
+            : 'alive';
+
+    const copy = mood === 'blooming'
+      ? 'Cosechas recientes: tu planeta recuerda lo que terminaste'
+      : mood === 'thirsty'
+        ? 'Hay ideas pidiendo cuidado, sin prisa'
+        : mood === 'quiet'
+          ? 'Planeta en calma: vuelve con un paso pequeño'
+          : 'Tu planeta está respondiendo a tus avances';
+
+    return {
+      mood,
+      copy,
+      activityLevel: recentlyActiveIds.size + newbornIds.size * 2 + freshHarvestIds.size * 2,
+      recentlyActiveIds,
+      newbornIds,
+      freshHarvestIds,
+    };
+  }, [notes, stats.water]);
+
   const isRaining = !isPreview && (stats.water >= 3 || (stats.progress >= 4 && stats.water / stats.progress >= 0.45));
   const skyColor = isDay ? (isRaining ? '#6fa6c9' : palette.skyDay) : palette.skyNight;
   const weatherCopy = isRaining
@@ -1718,6 +2129,7 @@ export default function Garden3D({
     : isDay
       ? 'Sol activo: buen momento para avanzar'
       : 'Noche tranquila: enfoca sin ruido';
+  const planetMoodCopy = lifeSignals.copy || weatherCopy;
 
   const visibleNotes = useMemo(() => {
     return notes.filter((note) => {
@@ -1816,18 +2228,21 @@ export default function Garden3D({
 	        shadows={!performanceMode}
 	        dpr={performanceMode ? [0.85, 1.1] : [1, 1.35]}
 	        gl={{ antialias: true, powerPreference: 'high-performance' }}
-	        camera={{ position: compact3D ? [46, 34, 46] : [40, 30, 40], fov: 45 }}
+	        camera={{ position: compact3D ? [48, 36, 48] : [42, 31, 42], fov: compact3D ? 43 : 42 }}
 	        onCreated={({ gl }) => {
-	          gl.toneMappingExposure = compact3D ? 0.86 : 0.92;
+	          gl.toneMapping = THREE.ACESFilmicToneMapping;
+	          gl.outputColorSpace = THREE.SRGBColorSpace;
+	          gl.toneMappingExposure = compact3D ? 0.9 : 0.98;
 	        }}
 	      >
         <AdaptiveDpr pixelated={false} />
         <color attach="background" args={[skyColor]} />
         
-	        <ambientLight intensity={isDay ? (isRaining ? 0.7 : 0.82) : 0.56} />
-	        <pointLight position={[50, 50, 50]} intensity={isRaining ? 0.82 : 1.08} castShadow={!performanceMode} />
-	        <directionalLight position={[-50, 50, -50]} intensity={isRaining ? 0.62 : 0.88} color={isDay ? "#fff1c7" : "#48cae4"} />
-        <hemisphereLight intensity={0.78} color={isRaining ? "#cfefff" : "#ffffff"} groundColor="#11170f" />
+	        <ambientLight intensity={isDay ? (isRaining ? 0.52 : 0.58) : 0.38} />
+	        <pointLight position={[42, 44, 36]} intensity={isRaining ? 0.96 : 1.28} color={isDay ? "#fff4d3" : "#9fd7ff"} castShadow={!performanceMode} />
+	        <directionalLight position={[-48, 46, -36]} intensity={isRaining ? 0.46 : 0.72} color={isDay ? "#fff1c7" : "#65c7ff"} />
+	        <pointLight position={[-34, -18, -28]} intensity={isDay ? 0.22 : 0.52} color={palette.atmosphere} />
+        <hemisphereLight intensity={0.64} color={isRaining ? "#d7f3ff" : "#ffffff"} groundColor="#182014" />
         
         {isDay && <DaySun raining={isRaining} />}
         {isDay && !isRaining && <AmbientClouds palette={palette} compact={compact3D} />}
@@ -1844,11 +2259,18 @@ export default function Garden3D({
           </>
         )}
         
+        <SceneBloom isDay={isDay} palette={palette} isRaining={isRaining} />
+
         <PlanetSystem
           plants={plants}
           connections={connections}
           isDay={isDay}
           palette={palette}
+          mood={lifeSignals.mood}
+          activityLevel={lifeSignals.activityLevel}
+          newbornIds={lifeSignals.newbornIds}
+          recentlyActiveIds={lifeSignals.recentlyActiveIds}
+          freshHarvestIds={lifeSignals.freshHarvestIds}
           selectedId={selectedId}
           routeIds={routeIds}
           recentlyWateredId={recentlyWateredId}
@@ -1895,7 +2317,7 @@ export default function Garden3D({
 		        <h4 className={`${isPreview ? 'text-4xl' : 'hidden sm:block sm:text-5xl'} font-serif text-white tracking-tight leading-none drop-shadow-xl`}>
 		          {palette.label}<br/><span className={`${isRaining ? 'text-sky-200/70' : 'text-yellow-200/70'} italic`}>{isRaining ? 'Lluvia' : 'Vivo'}</span>
 		        </h4>
-		        <p className="mt-3 hidden max-w-xs text-xs font-semibold leading-relaxed text-white/65 drop-shadow sm:block">{weatherCopy}</p>
+		        <p className="mt-3 hidden max-w-xs text-xs font-semibold leading-relaxed text-white/65 drop-shadow sm:block">{planetMoodCopy}</p>
 		      </div>
 
 		      <div className={`absolute grid-cols-3 gap-2 text-white ${isPreview ? 'right-6 top-6 grid' : 'right-10 top-10 hidden sm:grid'}`}>
