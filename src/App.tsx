@@ -3552,7 +3552,6 @@ export default function App() {
 	  const [showSettings, setShowSettings] = useState(false);
 	  const [showMobileMenu, setShowMobileMenu] = useState(false);
 	  const [showGardenSwitcher, setShowGardenSwitcher] = useState(false);
-	  const [quickEntryFocused, setQuickEntryFocused] = useState(false);
 	  const [quickEntryViewport, setQuickEntryViewport] = useState<{ height: number | null; offsetTop: number; keyboardOpen: boolean }>({
 	    height: null,
 	    offsetTop: 0,
@@ -3658,7 +3657,6 @@ export default function App() {
 	  useEffect(() => {
 	    if (!isAdding || typeof window === 'undefined') {
 	      setQuickEntryViewport({ height: null, offsetTop: 0, keyboardOpen: false });
-	      setQuickEntryFocused(false);
 	      return;
 	    }
 
@@ -4854,7 +4852,14 @@ export default function App() {
     setView(nextView);
 	  };
 
-	  const quickEntryKeyboardMode = quickEntryViewport.keyboardOpen || quickEntryFocused;
+	  const quickEntryKeyboardMode = quickEntryViewport.keyboardOpen;
+	  const quickEntryViewportStyle = quickEntryKeyboardMode && quickEntryViewport.height
+	    ? {
+	        top: `${Math.round(quickEntryViewport.offsetTop)}px`,
+	        bottom: 'auto',
+	        height: `${Math.round(quickEntryViewport.height)}px`,
+	      }
+	    : undefined;
   const startCreateMenuPress = () => {
     if (showCreateMenu) return;
     createMenuLongPressRef.current = false;
@@ -7103,11 +7108,12 @@ export default function App() {
 	        <AnimatePresence>
 	          {isAdding && (
 		            <motion.div
-		              className={`fixed inset-0 z-[70] flex h-dvh justify-center overflow-hidden bg-black/10 px-3 text-[var(--text-main)] backdrop-blur-md sm:p-5 ${
+		              className={`fixed inset-0 z-[70] flex h-dvh items-center justify-center overflow-hidden bg-black/10 px-3 text-[var(--text-main)] backdrop-blur-md sm:p-5 ${
 		                quickEntryKeyboardMode
-		                  ? 'items-stretch pb-2 pt-[max(4.6rem,calc(env(safe-area-inset-top)+1rem))]'
-		                  : 'items-center py-[calc(env(safe-area-inset-top)+0.8rem)]'
+		                  ? 'py-2'
+		                  : 'py-[calc(env(safe-area-inset-top)+0.8rem)]'
 		              }`}
+		              style={quickEntryViewportStyle}
 	              initial={{ opacity: 0 }}
 	              animate={{ opacity: 1 }}
 	              exit={{ opacity: 0 }}
@@ -7117,11 +7123,11 @@ export default function App() {
 	              <motion.div
 		                className={`relative flex w-full max-w-lg flex-col overflow-hidden border border-white/45 bg-[var(--surface-strong)]/96 shadow-[0_26px_90px_rgba(0,0,0,0.18)] backdrop-blur-2xl ${
 		                  quickEntryKeyboardMode
-		                    ? 'min-h-0 rounded-[1.85rem]'
+		                    ? 'max-h-full min-h-[20rem] rounded-[1.85rem]'
 		                    : 'h-[min(54dvh,28rem)] min-h-[22.5rem] rounded-[2.15rem]'
 		                }`}
-		                style={quickEntryKeyboardMode && quickEntryViewport.height
-		                  ? { height: `calc(${Math.max(340, Math.round(quickEntryViewport.height))}px - max(4.6rem, calc(env(safe-area-inset-top) + 1rem)) - 0.75rem)` }
+		                style={quickEntryKeyboardMode
+		                  ? { height: `min(28rem, calc(${Math.max(340, Math.round(quickEntryViewport.height))}px - 1rem))` }
 			                  : undefined}
 	                initial={{ y: 10, scale: 0.965, opacity: 0 }}
 	                animate={{ y: 0, scale: 1, opacity: 1 }}
@@ -7195,8 +7201,6 @@ export default function App() {
                     placeholder={createMode === 'sprout' || newNote.title ? (appLanguage === 'en' ? 'Notes' : 'Notas') : quickEntryCopy.placeholder}
 	                    rows={5}
 	                    value={newNote.content}
-	                    onFocus={() => setQuickEntryFocused(true)}
-	                    onBlur={() => setQuickEntryFocused(false)}
 	                    onChange={(event) => setNewNote({ ...newNote, content: event.target.value })}
                     enterKeyHint="done"
                     onKeyDown={(event) => {
