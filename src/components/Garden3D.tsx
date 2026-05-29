@@ -605,9 +605,110 @@ function SproutTreeModel({ progress, palette }: { progress: number; palette: Gar
   );
 }
 
-function QuickFlowerModel({ seed, palette }: { seed: number; palette: GardenPalette }) {
+function PremiumFlowerHead({
+  seed,
+  palette,
+  scale = 1,
+}: {
+  seed: number;
+  palette: GardenPalette;
+  scale?: number;
+}) {
   const petalColor = palette.fruit[seed % palette.fruit.length];
+  const secondaryPetal = palette.fruit[(seed + 1) % palette.fruit.length] || palette.leafAlt;
   const centerColor = palette.sparkles;
+  const outerPetals = useMemo(() => Array.from({ length: 9 }, (_, index) => {
+    const angle = index * (Math.PI * 2 / 9) + seed * 0.009;
+    return {
+      angle,
+      radius: 0.28 + (index % 2) * 0.035,
+      lift: index % 3 === 0 ? 0.015 : 0,
+      color: index % 2 ? secondaryPetal : petalColor,
+    };
+  }), [petalColor, secondaryPetal, seed]);
+  const innerPetals = useMemo(() => Array.from({ length: 6 }, (_, index) => {
+    const angle = index * (Math.PI / 3) + seed * 0.014 + 0.26;
+    return {
+      angle,
+      radius: 0.16,
+      color: index % 2 ? '#fff0cf' : secondaryPetal,
+    };
+  }), [secondaryPetal, seed]);
+
+  return (
+    <group scale={[scale, scale, scale]}>
+      <mesh position={[0, 0, -0.035]} scale={[0.74, 0.74, 0.08]}>
+        <sphereGeometry args={[0.42, 28, 14]} />
+        <meshStandardMaterial color={palette.leafAlt} roughness={0.8} transparent opacity={0.22} depthWrite={false} />
+      </mesh>
+
+      {outerPetals.map((petal, index) => (
+        <mesh
+          key={`outer-${index}`}
+          position={[Math.cos(petal.angle) * petal.radius, Math.sin(petal.angle) * petal.radius, petal.lift]}
+          rotation={[0.08, 0.18, petal.angle - Math.PI / 2]}
+          scale={[0.86, 1.08 + (index % 2) * 0.08, 0.22]}
+          castShadow
+        >
+          <capsuleGeometry args={[0.105, 0.34, 8, 18]} />
+          <meshPhysicalMaterial
+            color={petal.color}
+            emissive={petal.color}
+            emissiveIntensity={0.08}
+            roughness={0.54}
+            metalness={0.02}
+            clearcoat={0.42}
+            clearcoatRoughness={0.62}
+          />
+        </mesh>
+      ))}
+
+      {innerPetals.map((petal, index) => (
+        <mesh
+          key={`inner-${index}`}
+          position={[Math.cos(petal.angle) * petal.radius, Math.sin(petal.angle) * petal.radius, 0.09]}
+          rotation={[0.16, -0.08, petal.angle - Math.PI / 2]}
+          scale={[0.68, 0.72, 0.18]}
+          castShadow
+        >
+          <capsuleGeometry args={[0.09, 0.22, 8, 16]} />
+          <meshPhysicalMaterial
+            color={petal.color}
+            emissive={petal.color}
+            emissiveIntensity={0.06}
+            roughness={0.5}
+            clearcoat={0.36}
+            clearcoatRoughness={0.58}
+          />
+        </mesh>
+      ))}
+
+      <mesh position={[0, 0, 0.15]} castShadow>
+        <sphereGeometry args={[0.16, 24, 18]} />
+        <meshPhysicalMaterial
+          color={centerColor}
+          emissive={centerColor}
+          emissiveIntensity={0.28}
+          roughness={0.42}
+          clearcoat={0.55}
+          clearcoatRoughness={0.36}
+        />
+      </mesh>
+
+      {[0, 1, 2, 3, 4].map((dot) => {
+        const angle = dot * (Math.PI * 2 / 5) + seed * 0.03;
+        return (
+          <mesh key={dot} position={[Math.cos(angle) * 0.105, Math.sin(angle) * 0.105, 0.25]} scale={[0.035, 0.035, 0.035]}>
+            <sphereGeometry args={[1, 10, 8]} />
+            <meshStandardMaterial color="#fff8dd" emissive="#fff8dd" emissiveIntensity={0.18} roughness={0.36} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+function QuickFlowerModel({ seed, palette }: { seed: number; palette: GardenPalette }) {
 
   return (
     <group scale={[1.34, 1.34, 1.34]}>
@@ -624,26 +725,8 @@ function QuickFlowerModel({ seed, palette }: { seed: number; palette: GardenPale
           <meshStandardMaterial color={leaf.color} roughness={0.78} />
         </mesh>
       ))}
-      <group position={[0, 1.08, 0]}>
-        {[0, 1, 2, 3, 4, 5].map((petal) => {
-          const angle = petal * Math.PI / 3 + seed * 0.01;
-          return (
-            <mesh
-              key={petal}
-              position={[Math.cos(angle) * 0.25, Math.sin(angle) * 0.25, 0]}
-              rotation={[0, 0, angle]}
-              scale={[0.5, 0.23, 0.1]}
-              castShadow
-            >
-              <sphereGeometry args={[0.24, 18, 10]} />
-              <meshStandardMaterial color={petal % 2 ? palette.leafAlt : petalColor} roughness={0.58} />
-            </mesh>
-          );
-        })}
-        <mesh position={[0, 0, 0.04]} castShadow>
-          <sphereGeometry args={[0.16, 18, 14]} />
-          <meshStandardMaterial color={centerColor} emissive={centerColor} emissiveIntensity={0.22} roughness={0.45} />
-        </mesh>
+      <group position={[0, 1.08, 0]} rotation={[0.18, seed * 0.002, 0]}>
+        <PremiumFlowerHead seed={seed} palette={palette} scale={1.02} />
       </group>
       <mesh position={[0, 0.06, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[0.5, 28]} />
@@ -819,10 +902,9 @@ function BloomTreeModel({ seed, palette }: { seed: number; palette: GardenPalett
         {[0, 1, 2, 3].map((flower) => {
           const angle = flower * 1.55 + seed * 0.02;
           return (
-            <mesh key={flower} position={[Math.cos(angle) * 0.18, 1.95 + (flower % 2) * 0.12, Math.sin(angle) * 0.18]} scale={[0.18, 0.08, 0.18]}>
-              <sphereGeometry args={[1, 12, 8]} />
-              <meshStandardMaterial color={palette.fruit[flower % palette.fruit.length]} roughness={0.6} />
-            </mesh>
+            <group key={flower} position={[Math.cos(angle) * 0.18, 1.95 + (flower % 2) * 0.12, Math.sin(angle) * 0.18]} rotation={[0.16, angle, flower % 2 ? 0.24 : -0.24]}>
+              <PremiumFlowerHead seed={seed + flower * 17} palette={palette} scale={0.3} />
+            </group>
           );
         })}
       </group>
@@ -2215,7 +2297,16 @@ function PlanetSystem({
       if (selectedPlant) {
         const worldTarget = planetRef.current.localToWorld(new THREE.Vector3(...selectedPlant.position));
         const normal = worldTarget.clone().normalize();
-        const cameraTarget = worldTarget.clone().add(normal.multiplyScalar(compact ? 19 : 17)).add(new THREE.Vector3(0, compact ? 3 : 4, 0));
+        const side = new THREE.Vector3(0, 1, 0).cross(normal).normalize();
+        if (side.lengthSq() < 0.01) side.set(1, 0, 0);
+        const distance = compact ? 24 : 25;
+        const sideOffset = compact ? 7 : 11;
+        const lift = compact ? 2.2 : 2.8;
+        const cameraTarget = worldTarget
+          .clone()
+          .add(normal.clone().multiplyScalar(distance))
+          .add(side.multiplyScalar(sideOffset))
+          .add(new THREE.Vector3(0, lift, 0));
         const damping = 1 - Math.exp(-delta * 3.5);
 
         camera.position.lerp(cameraTarget, damping);

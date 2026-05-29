@@ -5804,7 +5804,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setShowGardenFullscreen(false)}
-	                    className="absolute right-5 top-[var(--safe-top-control)] z-50 grid h-12 w-12 place-items-center rounded-2xl border border-white/24 bg-white/[0.13] text-white shadow-[0_18px_60px_rgba(0,0,0,0.28)] backdrop-blur-2xl transition-colors hover:bg-white/[0.18]"
+	                    className="absolute right-5 top-[var(--safe-top-control)] z-50 grid h-12 w-12 place-items-center rounded-2xl border border-white/24 bg-white/[0.13] text-white shadow-[0_18px_60px_rgba(0,0,0,0.28)] backdrop-blur-2xl transition-colors hover:bg-white/[0.18] sm:right-6 sm:top-32"
                     aria-label="Cerrar pantalla completa"
                     title="Cerrar"
                   >
