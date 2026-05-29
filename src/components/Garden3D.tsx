@@ -280,6 +280,31 @@ const PLANET_LAKES = [
   { lat: -31, lon: 328, radius: 1.05, stretch: 1.45, twist: -0.6 },
   { lat: 47, lon: 246, radius: 0.9, stretch: 1.3, twist: 0.9 },
 ];
+const SCENIC_PATHS = [
+  {
+    id: 'north-ridge',
+    anchors: [
+      { lat: 18, lon: 40 },
+      { lat: 14, lon: 61 },
+      { lat: 18, lon: 83 },
+      { lat: 8, lon: 105 },
+      { lat: 1, lon: 128 },
+    ],
+  },
+  {
+    id: 'south-grove',
+    anchors: [
+      { lat: -24, lon: 282 },
+      { lat: -32, lon: 304 },
+      { lat: -34, lon: 329 },
+      { lat: -27, lon: 351 },
+    ],
+  },
+];
+const SCENIC_BRIDGES = [
+  { lat: 3, lon: 112, width: 2.5, length: 0.82, twist: 0.24 },
+  { lat: -31, lon: 328, width: 1.75, length: 0.66, twist: -0.58 },
+];
 const PLANET_ROCKS = [
   { lat: 17, lon: 240, scale: 0.34 },
   { lat: -24, lon: 156, scale: 0.26 },
@@ -302,6 +327,14 @@ function getSurfaceTransform(lat: number, lon: number, radius = PLANET_RADIUS) {
     Math.cos(phi),
     Math.sin(phi) * Math.sin(theta),
   ).normalize();
+  const position = normal.clone().multiplyScalar(radius);
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+
+  return { position, quaternion };
+}
+
+function getSurfaceTransformFromVector(vector: THREE.Vector3, radius = PLANET_RADIUS) {
+  const normal = vector.clone().normalize();
   const position = normal.clone().multiplyScalar(radius);
   const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
 
@@ -987,7 +1020,202 @@ function SurfaceRock({ lat, lon, scale, color }: { lat: number; lon: number; sca
   );
 }
 
-function PlanetSurface({ isDay, palette }: { isDay: boolean; palette: GardenPalette }) {
+function SurfaceStone({
+  normal,
+  size,
+  color,
+  opacity = 0.72,
+  twist = 0,
+}: {
+  normal: THREE.Vector3;
+  size: number;
+  color: string | THREE.Color;
+  opacity?: number;
+  twist?: number;
+}) {
+  const { position, quaternion } = useMemo(() => getSurfaceTransformFromVector(normal, PLANET_RADIUS + 0.115), [normal]);
+
+  return (
+    <group position={position} quaternion={quaternion}>
+      <mesh rotation={[0, 0, twist]} scale={[size * 1.28, size * 0.74, 1]}>
+        <circleGeometry args={[1, 14]} />
+        <meshStandardMaterial color={color} roughness={0.96} transparent opacity={opacity} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+}
+
+function ScenicPath({
+  anchors,
+  palette,
+  isDay,
+  density = 9,
+}: {
+  anchors: { lat: number; lon: number }[];
+  palette: GardenPalette;
+  isDay: boolean;
+  density?: number;
+}) {
+  const stones = useMemo(() => {
+    const points = anchors.map(anchor => getSurfaceTransform(anchor.lat, anchor.lon, 1).position.normalize());
+    const result: { normal: THREE.Vector3; size: number; twist: number; opacity: number }[] = [];
+
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const start = points[index];
+      const end = points[index + 1];
+      const steps = density + (index % 2);
+
+      for (let step = 0; step <= steps; step += 1) {
+        if (index > 0 && step === 0) continue;
+        const t = step / steps;
+        const normal = start.clone().lerp(end, t).normalize();
+        const wave = Math.sin((index * steps + step) * 1.7);
+        result.push({
+          normal,
+          size: 0.135 + (Math.abs(wave) * 0.045),
+          twist: wave * 0.9,
+          opacity: 0.48 + Math.abs(wave) * 0.16,
+        });
+      }
+    }
+
+    return result;
+  }, [anchors, density]);
+  const pathColor = useMemo(() => mutedSceneColor(palette.rock, isDay ? 1.06 : 0.74), [isDay, palette.rock]);
+
+  return (
+    <group>
+      {stones.map((stone, index) => (
+        <SurfaceStone
+          key={index}
+          normal={stone.normal}
+          size={stone.size}
+          color={pathColor}
+          opacity={stone.opacity}
+          twist={stone.twist}
+        />
+      ))}
+    </group>
+  );
+}
+
+function SurfaceBridge({
+  lat,
+  lon,
+  width,
+  length,
+  twist,
+  palette,
+  isDay,
+}: {
+  lat: number;
+  lon: number;
+  width: number;
+  length: number;
+  twist: number;
+  palette: GardenPalette;
+  isDay: boolean;
+}) {
+  const { position, quaternion } = useMemo(() => getSurfaceTransform(lat, lon, PLANET_RADIUS + 0.26), [lat, lon]);
+  const wood = useMemo(() => mutedSceneColor(palette.trunkLight, isDay ? 1.06 : 0.72), [isDay, palette.trunkLight]);
+  const rail = useMemo(() => mutedSceneColor(palette.trunk, isDay ? 1 : 0.68), [isDay, palette.trunk]);
+  const planks = useMemo(() => Array.from({ length: 5 }, (_, index) => {
+    const offset = (index - 2) * (width / 5.8);
+    return { offset, lift: Math.sin((index / 4) * Math.PI) * 0.16 };
+  }), [width]);
+
+  return (
+    <group position={position} quaternion={quaternion}>
+      <group rotation={[0, 0, twist]}>
+        {planks.map((plank, index) => (
+          <mesh key={index} position={[plank.offset, plank.lift, 0]} rotation={[0, 0, 0.04 * (index - 2)]} scale={[0.16, length, 0.08]} castShadow>
+            <boxGeometry args={[1, 1, 1]} />
+            <meshStandardMaterial color={wood} roughness={0.86} />
+          </mesh>
+        ))}
+        {[-length * 0.48, length * 0.48].map((y) => (
+          <mesh key={y} position={[0, y, 0.11]} scale={[width * 0.56, 0.045, 0.055]} castShadow>
+            <boxGeometry args={[1, 1, 1]} />
+            <meshStandardMaterial color={rail} roughness={0.9} />
+          </mesh>
+        ))}
+        {[-width * 0.34, width * 0.34].map((x) => (
+          <mesh key={x} position={[x, 0, -0.05]} scale={[0.035, length * 0.88, 0.035]}>
+            <boxGeometry args={[1, 1, 1]} />
+            <meshStandardMaterial color={rail} roughness={0.92} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
+function DynamicGardenPaths({
+  plants,
+  palette,
+  isDay,
+  compact,
+}: {
+  plants: { note: SeedNote; position: [number, number, number] }[];
+  palette: GardenPalette;
+  isDay: boolean;
+  compact: boolean;
+}) {
+  const paths = useMemo(() => {
+    const active = plants.filter(({ note }) => note.isGrowth && note.growthStage !== 'bloom' && !note.paused).slice(0, compact ? 2 : 4);
+    const anchors = plants.filter(({ note }) => !note.isGrowth || note.growthStage === 'bloom');
+
+    return active.flatMap((plant, index) => {
+      const start = new THREE.Vector3(...plant.position).normalize();
+      const partner = anchors[index % Math.max(anchors.length, 1)] || plants[(index + 1) % plants.length];
+      if (!partner || partner.note.id === plant.note.id) return [];
+
+      const end = new THREE.Vector3(...partner.position).normalize();
+      const steps = compact ? 5 : 7;
+      return Array.from({ length: steps }, (_, step) => {
+        const t = (step + 1) / (steps + 1);
+        const normal = start.clone().lerp(end, t).normalize();
+        return {
+          id: `${plant.note.id}-${partner.note.id}-${step}`,
+          normal,
+          size: 0.11 + (step % 3) * 0.022,
+          twist: Math.sin((index + 1) * (step + 1)) * 0.72,
+          opacity: 0.38,
+        };
+      });
+    });
+  }, [compact, plants]);
+  const color = useMemo(() => mutedSceneColor(palette.connection, isDay ? 0.86 : 0.62), [isDay, palette.connection]);
+
+  if (paths.length === 0) return null;
+
+  return (
+    <group>
+      {paths.map((path) => (
+        <SurfaceStone
+          key={path.id}
+          normal={path.normal}
+          size={path.size}
+          color={color}
+          opacity={path.opacity}
+          twist={path.twist}
+        />
+      ))}
+    </group>
+  );
+}
+
+function PlanetSurface({
+  isDay,
+  palette,
+  performanceMode,
+  compact,
+}: {
+  isDay: boolean;
+  palette: GardenPalette;
+  performanceMode: boolean;
+  compact: boolean;
+}) {
   const surfaceColor = useMemo(() => mutedSceneColor(isDay ? palette.planet : palette.planetNight, isDay ? 0.9 : 0.78), [isDay, palette.planet, palette.planetNight]);
   const surfaceGlow = useMemo(() => mutedSceneColor(isDay ? palette.planet : palette.planetNight, isDay ? 0.42 : 0.5), [isDay, palette.planet, palette.planetNight]);
   const overlayColor = useMemo(() => mutedSceneColor(palette.planetOverlay, isDay ? 0.78 : 0.58), [isDay, palette.planetOverlay]);
@@ -1063,6 +1291,29 @@ function PlanetSurface({ isDay, palette }: { isDay: boolean; palette: GardenPale
           twist={lake.twist}
           opacity={isDay ? 0.28 : 0.2}
           altitude={0.082}
+        />
+      ))}
+
+      {!performanceMode && SCENIC_PATHS.map((path) => (
+        <ScenicPath
+          key={path.id}
+          anchors={path.anchors}
+          palette={palette}
+          isDay={isDay}
+          density={compact ? 5 : 8}
+        />
+      ))}
+
+      {!performanceMode && SCENIC_BRIDGES.map((bridge) => (
+        <SurfaceBridge
+          key={`${bridge.lat}-${bridge.lon}`}
+          lat={bridge.lat}
+          lon={bridge.lon}
+          width={bridge.width}
+          length={bridge.length}
+          twist={bridge.twist}
+          palette={palette}
+          isDay={isDay}
         />
       ))}
 
@@ -1501,7 +1752,23 @@ function ButterflyField({
   );
 }
 
-function BirdFlock({ palette }: { palette: GardenPalette }) {
+function BirdFlock({
+  palette,
+  position,
+  speed = 2.25,
+  spread = 74,
+  scale = 1,
+  opacity = 0.58,
+  phase = 0,
+}: {
+  palette: GardenPalette;
+  position: [number, number, number];
+  speed?: number;
+  spread?: number;
+  scale?: number;
+  opacity?: number;
+  phase?: number;
+}) {
   const flockRef = useRef<THREE.Group>(null);
   const birds = useMemo(() => [
     { x: -12, y: 2.6, z: 0, scale: 1.35, delay: 0 },
@@ -1513,13 +1780,13 @@ function BirdFlock({ palette }: { palette: GardenPalette }) {
 
   useFrame((state) => {
     if (!flockRef.current) return;
-    const t = state.clock.elapsedTime;
-    flockRef.current.position.x = ((t * 2.25) % 74) - 37;
-    flockRef.current.position.y = Math.sin(t * 0.35) * 0.55;
+    const t = state.clock.elapsedTime + phase;
+    flockRef.current.position.x = position[0] + ((t * speed) % spread) - spread / 2;
+    flockRef.current.position.y = position[1] + Math.sin(t * 0.35) * 0.55;
   });
 
   return (
-    <group ref={flockRef} position={[-36, 17.5, -31]}>
+    <group ref={flockRef} position={position} scale={[scale, scale, scale]}>
       {birds.map((bird, index) => (
         <group key={index} position={[bird.x, bird.y, bird.z]} scale={[bird.scale, bird.scale, bird.scale]}>
           <Line
@@ -1529,7 +1796,7 @@ function BirdFlock({ palette }: { palette: GardenPalette }) {
               [0.8, 0, 0],
             ]}
             color={palette.skyNight}
-            opacity={0.58}
+            opacity={opacity}
             transparent
             lineWidth={2}
           />
@@ -1545,12 +1812,14 @@ function HotAirBalloon({
   colors,
   scale = 1,
   phase = 0,
+  opacity = 0.96,
 }: {
   palette: GardenPalette;
   position: [number, number, number];
   colors: { body: string; stripe: string; accent: string };
   scale?: number;
   phase?: number;
+  opacity?: number;
 }) {
   const balloonRef = useRef<THREE.Group>(null);
 
@@ -1566,27 +1835,27 @@ function HotAirBalloon({
     <group ref={balloonRef} position={position} scale={[scale, scale, scale]}>
       <mesh position={[0, 0.2, 0]} scale={[1.02, 1.28, 0.9]} castShadow>
         <sphereGeometry args={[1.15, 32, 22]} />
-        <meshStandardMaterial color={colors.body} roughness={0.76} metalness={0.02} />
+        <meshStandardMaterial color={colors.body} roughness={0.76} metalness={0.02} transparent opacity={opacity} />
       </mesh>
       <mesh position={[0, 0.18, 0.55]} scale={[0.34, 1.08, 0.06]}>
         <sphereGeometry args={[1, 20, 14]} />
-        <meshStandardMaterial color={colors.stripe} roughness={0.7} />
+        <meshStandardMaterial color={colors.stripe} roughness={0.7} transparent opacity={opacity} />
       </mesh>
       <mesh position={[-0.46, 0.1, 0.48]} scale={[0.18, 0.92, 0.045]}>
         <sphereGeometry args={[1, 16, 12]} />
-        <meshStandardMaterial color={colors.accent} roughness={0.7} transparent opacity={0.86} />
+        <meshStandardMaterial color={colors.accent} roughness={0.7} transparent opacity={opacity * 0.88} />
       </mesh>
       <mesh position={[0.46, 0.1, 0.48]} scale={[0.18, 0.92, 0.045]}>
         <sphereGeometry args={[1, 16, 12]} />
-        <meshStandardMaterial color={colors.accent} roughness={0.7} transparent opacity={0.86} />
+        <meshStandardMaterial color={colors.accent} roughness={0.7} transparent opacity={opacity * 0.88} />
       </mesh>
       <mesh position={[0, -1.18, 0]} scale={[0.62, 0.12, 0.5]}>
         <cylinderGeometry args={[1, 1, 1, 24]} />
-        <meshStandardMaterial color={colors.accent} roughness={0.82} />
+        <meshStandardMaterial color={colors.accent} roughness={0.82} transparent opacity={opacity} />
       </mesh>
       <mesh position={[0, -1.55, 0]} scale={[0.36, 0.28, 0.36]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color={palette.trunk} roughness={0.9} />
+        <meshStandardMaterial color={palette.trunk} roughness={0.9} transparent opacity={opacity} />
       </mesh>
       {[-0.42, 0.42].map((x) => (
         <Line
@@ -1659,6 +1928,56 @@ function BannerPlane({ palette, text }: { palette: GardenPalette; text: string }
   );
 }
 
+function SkyKite({
+  position,
+  colors,
+  scale = 1,
+  phase = 0,
+}: {
+  position: [number, number, number];
+  colors: { body: string; tail: string };
+  scale?: number;
+  phase?: number;
+}) {
+  const kiteRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (!kiteRef.current) return;
+    const t = state.clock.elapsedTime + phase;
+    kiteRef.current.position.x = position[0] + Math.sin(t * 0.18) * 2.2;
+    kiteRef.current.position.y = position[1] + Math.sin(t * 0.42) * 0.75;
+    kiteRef.current.rotation.z = Math.sin(t * 0.5) * 0.16;
+    kiteRef.current.rotation.y = Math.sin(t * 0.25) * 0.28;
+  });
+
+  return (
+    <group ref={kiteRef} position={position} scale={[scale, scale, scale]}>
+      <mesh rotation={[0, 0, Math.PI / 4]} scale={[0.62, 0.62, 0.035]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color={colors.body} roughness={0.7} transparent opacity={0.78} />
+      </mesh>
+      <Line
+        points={[
+          [0, -0.58, 0],
+          [-0.24, -1.14, 0],
+          [0.18, -1.78, 0],
+          [-0.12, -2.34, 0],
+        ]}
+        color={colors.tail}
+        opacity={0.48}
+        transparent
+        lineWidth={1.2}
+      />
+      {[-1.02, -1.66, -2.18].map((y, index) => (
+        <mesh key={y} position={[index % 2 ? 0.16 : -0.16, y, 0]} rotation={[0, 0, index % 2 ? -0.75 : 0.75]} scale={[0.16, 0.045, 0.025]}>
+          <boxGeometry args={[1, 1, 1]} />
+          <meshStandardMaterial color={colors.tail} roughness={0.8} transparent opacity={0.5} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 function SkyLife({
   palette,
   compact,
@@ -1676,13 +1995,22 @@ function SkyLife({
 
   return (
     <group>
-      <BirdFlock palette={palette} />
+      <BirdFlock palette={palette} position={[-36, 17.5, -31]} />
+      <BirdFlock palette={palette} position={[22, 24.2, -48]} speed={1.55} spread={64} scale={0.74} opacity={0.36} phase={8.4} />
       <HotAirBalloon
         palette={palette}
         position={[-25, 16.8, -32]}
         colors={{ body: '#f7d39b', stripe: '#d96b53', accent: '#fff1cb' }}
         scale={1.22}
         phase={0.3}
+      />
+      <HotAirBalloon
+        palette={palette}
+        position={[-38, 26.4, -52]}
+        colors={{ body: '#f3eee2', stripe: '#7fa6a2', accent: '#d7b778' }}
+        scale={0.64}
+        phase={1.4}
+        opacity={0.82}
       />
       <HotAirBalloon
         palette={palette}
@@ -1693,11 +2021,29 @@ function SkyLife({
       />
       <HotAirBalloon
         palette={palette}
+        position={[42, 15.6, -30]}
+        colors={{ body: '#f1c79f', stripe: '#9c6f52', accent: '#f9ead7' }}
+        scale={0.84}
+        phase={3.6}
+        opacity={0.9}
+      />
+      <HotAirBalloon
+        palette={palette}
         position={[7, 24.5, -43]}
         colors={{ body: '#e9b7c3', stripe: '#8d5f7a', accent: '#ffe6a8' }}
         scale={0.78}
         phase={4.5}
       />
+      <HotAirBalloon
+        palette={palette}
+        position={[-5, 32.5, -62]}
+        colors={{ body: '#c9d7ee', stripe: '#6e7fa0', accent: '#fff3cc' }}
+        scale={0.5}
+        phase={6.2}
+        opacity={0.74}
+      />
+      <SkyKite position={[-31, 27.5, -24]} colors={{ body: '#f6ead7', tail: palette.trunkLight }} scale={0.9} phase={1.2} />
+      <SkyKite position={[34, 28.8, -34]} colors={{ body: '#dce9df', tail: palette.connection }} scale={0.72} phase={5.6} />
       <BannerPlane palette={palette} text={bannerText} />
     </group>
   );
@@ -2129,7 +2475,7 @@ function PlanetSystem({
 
   return (
     <group ref={planetRef}>
-      <PlanetSurface isDay={isDay} palette={palette} />
+      <PlanetSurface isDay={isDay} palette={palette} performanceMode={performanceMode} compact={compact} />
       
       <Atmosphere isDay={isDay} palette={palette} performanceMode={performanceMode} />
       <PremiumOrbit isDay={isDay} palette={palette} performanceMode={performanceMode} />
@@ -2148,6 +2494,15 @@ function PlanetSystem({
         performanceMode={performanceMode}
         freshHarvestCount={freshHarvestIds.size}
       />
+
+      {!performanceMode && (
+        <DynamicGardenPaths
+          plants={plants}
+          palette={palette}
+          isDay={isDay}
+          compact={compact}
+        />
+      )}
 
       <Sparkles 
         count={performanceMode ? (isDay ? 28 : 70) : compact ? (isDay ? 45 : 120) : (isDay ? 110 : 320)} 

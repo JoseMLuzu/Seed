@@ -311,38 +311,35 @@ const SEED_TYPES: { id: NonNullable<SeedNote['seedType']>; label: string; task: 
 const ONBOARDING_STEPS = [
   {
     icon: Leaf,
-    eyebrow: 'La idea',
-    title: 'Seed es un jardín para tus notas',
-    text: 'Captura cosas pequeñas como comprar leche, ideas sueltas o proyectos grandes. No tienes que decidir todo al principio.',
-    action: 'Empieza escribiendo cualquier cosa que no quieras perder.',
-  },
-  {
-    icon: CheckCircle2,
-    eyebrow: 'Semillas',
-    title: 'Las notas rápidas se completan o crecen',
-    text: 'Una semilla puede ser algo simple. Si la marcas como Hecho, se convierte en una flor. Si necesita pasos, la conviertes en proyecto.',
-    action: 'Hecho = flor. Proyecto = brote.',
-  },
-  {
-    icon: Sprout,
-    eyebrow: 'Brotes',
-    title: 'Los proyectos son listas simples',
-    text: 'Un brote tiene pasos tipo to-do. Completar pasos hace crecer la idea sin convertir Seed en una app complicada.',
-    action: 'Un proyecto solo necesita el siguiente paso.',
+    eyebrow: 'Captura',
+    title: 'Planta una semilla',
+    text: 'Guarda una idea sin ordenar nada todavía. Seed no te pide proyecto, fecha ni categoría para empezar.',
+    action: 'Escribe primero. Decide después.',
+    detail: 'Una línea basta para no perderla.',
   },
   {
     icon: Droplets,
     eyebrow: 'Riego',
-    title: 'Regar es revisar sin presión',
-    text: 'Seed te recuerda ideas que llevan tiempo sin verse. Regar significa decidir si siguen vivas, si necesitan un paso o si se pausan.',
-    action: 'Hoy basta con revisar una.',
+    title: 'Vuelve sin presión',
+    text: 'Hoy te muestra una sola cosa útil: regar una idea, avanzar un brote o descansar si no hay nada urgente.',
+    action: 'Una revisión pequeña es suficiente.',
+    detail: 'Sin culpa por ideas olvidadas.',
   },
   {
-    icon: Box,
-    eyebrow: 'Recompensa',
-    title: 'Tu jardín muestra el progreso',
-    text: 'Flores, brotes y árboles llenan tu planeta. El jardín no es trabajo extra: es la recompensa visual por cuidar tus ideas.',
-    action: 'Llena tu planeta con cosas terminadas y proyectos vivos.',
+    icon: Sprout,
+    eyebrow: 'Brote',
+    title: 'Convierte solo lo que importa',
+    text: 'Si una semilla vale la pena, se vuelve brote. No necesitas una lista enorme: solo el siguiente paso de 5 minutos.',
+    action: 'Pequeño paso, avance real.',
+    detail: 'El brote crece con cada paso.',
+  },
+  {
+    icon: CheckCircle2,
+    eyebrow: 'Cosecha',
+    title: 'Tu jardín responde',
+    text: 'Cuando terminas algo, aparece como progreso visual. El planeta no es decoración: es la memoria de lo que cuidaste.',
+    action: 'Avanzar cambia tu jardín.',
+    detail: 'Semillas, brotes y cosechas viven ahí.',
   },
 ];
 
@@ -6991,13 +6988,14 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/30 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 backdrop-blur-sm sm:items-center sm:p-4"
+              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-md sm:items-center sm:p-4"
             >
               <motion.div
-                initial={{ opacity: 0, y: 18, scale: 0.98 }}
+                initial={{ opacity: 0, y: 24, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 12, scale: 0.98 }}
-                className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-2xl"
+                exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 360, damping: 34 }}
+                className="flex max-h-[min(88vh,44rem)] w-full max-w-lg flex-col overflow-hidden rounded-[2rem] border border-white/55 bg-[var(--surface-strong)] shadow-[0_24px_90px_rgba(20,30,24,0.28)] sm:max-w-2xl"
               >
                 {(() => {
                   const step = ONBOARDING_STEPS[onboardingStep] || ONBOARDING_STEPS[0];
@@ -7006,40 +7004,38 @@ export default function App() {
 
                   return (
                     <>
-                      <div className="relative min-h-[10rem] bg-[linear-gradient(135deg,var(--bg-app),var(--surface-soft))] p-5 sm:min-h-[13rem] sm:p-7">
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_82%_20%,rgba(255,255,255,0.75),transparent_24%),radial-gradient(circle_at_18%_80%,rgba(122,169,92,0.18),transparent_28%)]" />
-                        <div className="relative flex items-start justify-between gap-5">
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Cómo funciona Seed</p>
-                            <h2 className="mt-2 max-w-xl font-serif text-2xl font-black leading-tight text-[var(--earth)] sm:text-4xl">
-                              Un jardín simple para ideas y proyectos
-                            </h2>
-                            <p className="mt-3 max-w-xl text-sm font-semibold leading-relaxed text-[var(--text-muted)]">
-                              Escribe rápido, decide después y deja que tu planeta crezca con lo que completas.
-                            </p>
+                      <div className="relative shrink-0 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--surface-strong),var(--surface-soft))] px-5 pb-4 pt-4 sm:px-6 sm:pt-5">
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_86%_0%,rgba(255,255,255,0.82),transparent_30%),radial-gradient(circle_at_4%_100%,rgba(122,169,92,0.16),transparent_34%)]" />
+                        <div className="relative">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Primer recorrido</p>
+                              <h2 className="mt-1 text-2xl font-black tracking-tight text-[var(--earth)] sm:text-3xl">
+                                Seed en 30 segundos
+                              </h2>
+                            </div>
+                            <button
+                              onClick={finishOnboarding}
+                              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/70 text-[var(--text-muted)] shadow-sm transition-colors hover:text-[var(--earth)]"
+                              aria-label="Cerrar guía"
+                            >
+                              <X size={18} />
+                            </button>
                           </div>
-                          <button
-                            onClick={finishOnboarding}
-                            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/70 text-[var(--text-muted)] shadow-sm hover:text-[var(--earth)] transition-colors"
-                            aria-label="Cerrar guía"
-                          >
-                            <X size={18} />
-                          </button>
+                          <div className="mt-4 flex items-center gap-2">
+                            {ONBOARDING_STEPS.map((item, index) => (
+                              <button
+                                key={item.title}
+                                onClick={() => setOnboardingStep(index)}
+                                className={`h-1.5 flex-1 rounded-full transition-colors ${index <= onboardingStep ? 'bg-[var(--sage)]' : 'bg-[var(--border)]'}`}
+                                aria-label={`Ver paso ${index + 1}`}
+                              />
+                            ))}
+                          </div>
                         </div>
                       </div>
 
-                      <div className="max-h-[calc(92vh-10rem)] overflow-y-auto p-5 app-scrollbar sm:max-h-none sm:p-7">
-                        <div className="mb-5 flex items-center gap-2">
-                          {ONBOARDING_STEPS.map((item, index) => (
-                            <button
-                              key={item.title}
-                              onClick={() => setOnboardingStep(index)}
-                              className={`h-2 flex-1 rounded-full transition-colors ${index <= onboardingStep ? 'bg-[var(--sage)]' : 'bg-[var(--border)]'}`}
-                              aria-label={`Ver paso ${index + 1}`}
-                            />
-                          ))}
-                        </div>
-
+                      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 app-scrollbar sm:px-6 sm:py-6">
                         <AnimatePresence mode="wait">
                           <motion.div
                             key={step.title}
@@ -7047,29 +7043,53 @@ export default function App() {
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: -18 }}
                             transition={{ duration: 0.2 }}
-                            className="rounded-[1.75rem] border border-[var(--border)] bg-[var(--bg-app)] p-4 sm:p-5"
+                            className="space-y-4"
                           >
-                            <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-                              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[var(--sage)] text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20">
-                                <StepIcon size={24} />
-                              </span>
-                              <div>
-                                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">{step.eyebrow}</p>
-                                <h3 className="mt-1 font-serif text-2xl font-black leading-tight text-[var(--earth)] sm:text-3xl">{step.title}</h3>
-                                <p className="mt-3 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">{step.text}</p>
-                                <p className="mt-4 rounded-2xl bg-[var(--surface-strong)] px-4 py-3 text-sm font-black text-[var(--sage)]">
-                                  {step.action}
-                                </p>
+                            <div className="rounded-[1.65rem] border border-[var(--border)] bg-[var(--bg-app)] p-4 shadow-sm sm:p-5">
+                              <div className="flex items-start gap-4">
+                                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[1.1rem] bg-[var(--sage)] text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20">
+                                  <StepIcon size={22} />
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">
+                                    Paso {onboardingStep + 1} de {ONBOARDING_STEPS.length} · {step.eyebrow}
+                                  </p>
+                                  <h3 className="mt-1 text-2xl font-black leading-tight tracking-tight text-[var(--earth)] sm:text-3xl">{step.title}</h3>
+                                  <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text-muted)]">{step.text}</p>
+                                </div>
                               </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 items-center gap-2 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+                              {[
+                                { label: 'Semilla', icon: Leaf, active: onboardingStep >= 0 },
+                                { label: 'Brote', icon: Sprout, active: onboardingStep >= 2 },
+                                { label: 'Jardín', icon: Box, active: onboardingStep >= 3 },
+                              ].map((item) => {
+                                const ItemIcon = item.icon;
+                                return (
+                                  <div key={item.label} className={`rounded-2xl px-2 py-3 text-center transition-colors ${item.active ? 'bg-[var(--surface-strong)] text-[var(--earth)] shadow-sm' : 'text-[var(--text-faint)]'}`}>
+                                    <ItemIcon size={18} className="mx-auto" />
+                                    <p className="mt-2 truncate text-[11px] font-black">{item.label}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <div className="rounded-[1.4rem] bg-[var(--surface-strong)] px-4 py-3">
+                              <p className="text-sm font-black leading-snug text-[var(--sage)]">{step.action}</p>
+                              <p className="mt-1 text-xs font-semibold leading-relaxed text-[var(--text-muted)]">{step.detail}</p>
                             </div>
                           </motion.div>
                         </AnimatePresence>
+                      </div>
 
-                        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-[auto_1fr_auto]">
+                      <div className="shrink-0 border-t border-[var(--border)] bg-[var(--surface-strong)] px-5 py-3 sm:px-6">
+                        <div className="grid grid-cols-[auto_1fr] gap-3">
                           <button
                             onClick={() => setOnboardingStep(value => Math.max(0, value - 1))}
                             disabled={onboardingStep === 0}
-                            className="rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-5 py-3 font-black text-[var(--sage)] disabled:opacity-40"
+                            className="min-h-12 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-4 font-black text-[var(--sage)] transition-opacity disabled:opacity-35"
                           >
                             Atrás
                           </button>
@@ -7082,20 +7102,20 @@ export default function App() {
                               }
                               setOnboardingStep(value => Math.min(ONBOARDING_STEPS.length - 1, value + 1));
                             }}
-                            className="rounded-2xl bg-[var(--sage)] px-5 py-3 font-black text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
+                            className="min-h-12 rounded-2xl bg-[var(--sage)] px-5 font-black text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
                           >
-                            {isLastStep ? 'Plantar primera semilla' : 'Siguiente'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              finishOnboarding();
-                              setView('3D');
-                            }}
-                            className="rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-5 py-3 font-black text-[var(--sage)] hover:bg-[var(--surface-strong)] transition-colors"
-                          >
-                            Ver jardín
+                            {isLastStep ? 'Plantar semilla' : 'Siguiente'}
                           </button>
                         </div>
+                        <button
+                          onClick={() => {
+                            finishOnboarding();
+                            setView('3D');
+                          }}
+                          className="mt-2 min-h-10 w-full rounded-2xl text-sm font-black text-[var(--text-muted)] transition-colors hover:text-[var(--earth)]"
+                        >
+                          Ver mi jardín primero
+                        </button>
                       </div>
                     </>
                   );
