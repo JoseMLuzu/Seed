@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config = {
   appId: 'seedapp.com.ec',
-  appName: 'Seed',
+  appName: 'Seeds',
   webDir: 'dist',
   backgroundColor: '#f5f5f7',
   ios: {

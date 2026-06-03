@@ -11,7 +11,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: bo
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('Seed failed to render', error, info);
+    console.error('Seeds failed to render', error, info);
   }
 
   render() {
@@ -42,7 +42,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: bo
           }}>
             S
           </div>
-          <h1 style={{ margin: 0, fontSize: 24, lineHeight: 1.15 }}>Seed necesita recargar</h1>
+          <h1 style={{ margin: 0, fontSize: 24, lineHeight: 1.15 }}>Seeds necesita recargar</h1>
           <p style={{ margin: '10px 0 20px', color: '#6e6e73', fontSize: 15, lineHeight: 1.45 }}>
             Hubo un problema cargando la interfaz.
           </p>
@@ -58,7 +58,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: bo
               fontSize: 15
             }}
           >
-            Recargar Seed
+            Recargar Seeds
           </button>
         </section>
       </main>

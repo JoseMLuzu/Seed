@@ -1,4 +1,4 @@
--- Seed Supabase schema
+-- Seeds Supabase schema
 -- Run this in Supabase SQL Editor.
 
 create table if not exists public.seed_planets (

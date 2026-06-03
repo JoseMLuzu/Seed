@@ -25,7 +25,7 @@ export async function startFocusLiveActivity(payload: FocusLiveActivityPayload) 
   try {
     await LiveActivity.start(payload);
   } catch (error) {
-    console.warn('Seed Live Activity could not start.', error);
+    console.warn('Seeds Live Activity could not start.', error);
   }
 }
 
@@ -34,7 +34,7 @@ export async function updateFocusLiveActivity(payload: FocusLiveActivityPayload)
   try {
     await LiveActivity.update(payload);
   } catch (error) {
-    console.warn('Seed Live Activity could not update.', error);
+    console.warn('Seeds Live Activity could not update.', error);
   }
 }
 
@@ -43,6 +43,6 @@ export async function stopFocusLiveActivity() {
   try {
     await LiveActivity.stop();
   } catch (error) {
-    console.warn('Seed Live Activity could not stop.', error);
+    console.warn('Seeds Live Activity could not stop.', error);
   }
 }

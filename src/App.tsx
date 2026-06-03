@@ -313,7 +313,7 @@ const ONBOARDING_STEPS = [
     icon: Leaf,
     eyebrow: 'Captura',
     title: 'Planta una semilla',
-    text: 'Guarda una idea sin ordenar nada todavía. Seed no te pide proyecto, fecha ni categoría para empezar.',
+    text: 'Guarda una idea sin ordenar nada todavía. Seeds no te pide proyecto, fecha ni categoría para empezar.',
     action: 'Escribe primero. Decide después.',
     detail: 'Una línea basta para no perderla.',
   },
@@ -2410,7 +2410,7 @@ function FocusView({
               </div>
               <h3 className="mt-4 text-xl font-semibold tracking-tight text-[var(--earth)]">Cerrar enfoque</h3>
               <p className="mt-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
-                Seed guardará los minutos trabajados. Puedes seguir con el mismo paso si todavía no quieres salir.
+                Seeds guardará los minutos trabajados. Puedes seguir con el mismo paso si todavía no quieres salir.
               </p>
               <div className="mt-5 grid gap-2">
                 <button
@@ -2763,7 +2763,7 @@ function MiniProductStrip() {
           </div>
         </div>
         <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Siempre sabes qué hacer</h4>
-        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">Abres Seed y encuentras una acción simple: plantar algo nuevo, cuidar una idea o avanzar un paso.</p>
+        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">Abres Seeds y encuentras una acción simple: plantar algo nuevo, cuidar una idea o avanzar un paso.</p>
       </div>
 
       <div className="rounded-[2rem] border border-[#e3e8df] bg-white p-5 shadow-sm">
@@ -2863,7 +2863,7 @@ function LandingPage({
 }) {
   const features = [
     { icon: Leaf, title: 'Guarda ideas sin pensarlo tanto', text: 'Escribe eso que se te ocurrió y déjalo crecer poco a poco, sin tener que organizarlo todo desde el primer día.' },
-    { icon: Droplets, title: 'Vuelve a lo que vale la pena', text: 'Seed te recuerda ideas que podrían seguir vivas, para revisarlas en segundos y decidir si quieres darles cariño.' },
+    { icon: Droplets, title: 'Vuelve a lo que vale la pena', text: 'Seeds te recuerda ideas que podrían seguir vivas, para revisarlas en segundos y decidir si quieres darles cariño.' },
     { icon: Target, title: 'Menos distracción, más avance', text: 'Cuando quieras trabajar, eliges una idea y la app te deja con lo justo: foco, pasos y una sensación clara de progreso.' },
     { icon: Box, title: 'Un jardín para cada parte de ti', text: 'Trabajo, estudio, vida personal o proyectos creativos pueden vivir separados, cada uno con su propio planeta visual.' },
   ];
@@ -2946,9 +2946,9 @@ function LandingPage({
 
         <nav className="relative z-10 mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/icon-192.png" alt="Seed" className="h-12 w-12 rounded-[1.15rem] shadow-sm" />
+            <img src="/icon-192.png" alt="Seeds" className="h-12 w-12 rounded-[1.15rem] shadow-sm" />
             <div>
-              <p className="text-xl font-semibold leading-none tracking-tight text-[#111813]">Seed</p>
+              <p className="text-xl font-semibold leading-none tracking-tight text-[#111813]">Seeds</p>
               <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.22em] text-[#71836b]">Grow What Matters</p>
             </div>
           </div>
@@ -2960,7 +2960,7 @@ function LandingPage({
         <div className="relative z-10 mx-auto grid min-h-[calc(100vh-6rem)] max-w-6xl grid-cols-1 gap-8 py-10 lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-center">
           <section className="mx-auto max-w-3xl text-center lg:mx-0 lg:text-left">
             <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#6e835d]">
-              Bienvenido a Seed
+              Bienvenido a Seeds
             </motion.p>
             <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }} className="mt-5 text-5xl font-semibold leading-[0.96] tracking-tight text-[#101612] sm:text-7xl lg:text-8xl">
               Haz crecer lo que importa.
@@ -3047,9 +3047,9 @@ function LandingPage({
         <HeroGardenScene />
         <nav className="relative z-10 mx-auto flex max-w-7xl items-center justify-between py-6">
           <div className="flex items-center gap-3.5">
-            <img src="/icon-192.png" alt="Seed" className="h-14 w-14 rounded-[1.35rem] shadow-sm" />
+            <img src="/icon-192.png" alt="Seeds" className="h-14 w-14 rounded-[1.35rem] shadow-sm" />
             <div>
-              <p className="font-serif text-3xl font-black leading-none text-[#1f2d23]">Seed</p>
+              <p className="font-serif text-3xl font-black leading-none text-[#1f2d23]">Seeds</p>
               <p className="text-[10px] font-black uppercase text-[#7a8f63]">Grow What Matters</p>
             </div>
           </div>
@@ -3072,7 +3072,7 @@ function LandingPage({
               Haz crecer tus ideas.
             </motion.h1>
             <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="mt-7 max-w-2xl text-lg font-semibold leading-relaxed text-[#536159] sm:text-xl">
-              Seed convierte esas ideas que normalmente se pierden en algo que puedes cuidar. Planta lo que se te ocurre, vuelve cuando haga falta y mira cómo toma forma sin sentir que tienes otra app complicada que aprender.
+              Seeds convierte esas ideas que normalmente se pierden en algo que puedes cuidar. Planta lo que se te ocurre, vuelve cuando haga falta y mira cómo toma forma sin sentir que tienes otra app complicada que aprender.
             </motion.p>
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} className="mt-9 flex flex-col gap-3 sm:flex-row">
               <button onClick={onShowRegister} className="rounded-2xl bg-[#1f2d23] px-6 py-4 font-black text-white shadow-[0_18px_50px_rgba(31,45,35,0.22)] transition-colors hover:bg-[#324434]">
@@ -3109,7 +3109,7 @@ function LandingPage({
               <h2 className="mt-4 max-w-3xl font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">No guardes ideas para olvidarlas. Dales un lugar donde crecer.</h2>
             </div>
             <p className="text-lg font-semibold leading-relaxed text-[#536159]">
-              Muchas apps terminan siendo cajones llenos de notas. Seed se siente más como cuidar un jardín: vuelves con curiosidad, eliges algo pequeño y lo haces avanzar.
+              Muchas apps terminan siendo cajones llenos de notas. Seeds se siente más como cuidar un jardín: vuelves con curiosidad, eliges algo pequeño y lo haces avanzar.
             </p>
           </div>
           <div className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -3158,7 +3158,7 @@ function LandingPage({
             <p className="text-[10px] font-black uppercase text-[#7a8f63]">Interfaz</p>
             <h2 className="mt-4 font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Una app que te invita a volver.</h2>
             <p className="mt-5 text-lg font-semibold leading-relaxed text-[#536159]">
-              Seed no quiere llenarte de botones. Quiere ayudarte a recordar qué importa, elegir un paso pequeño y sentir que tus ideas siguen vivas.
+              Seeds no quiere llenarte de botones. Quiere ayudarte a recordar qué importa, elegir un paso pequeño y sentir que tus ideas siguen vivas.
             </p>
           </div>
           <div className="mt-12">
@@ -3202,7 +3202,7 @@ function LandingPage({
                 <div>
                   <Box className="mx-auto text-[#6e9b58]" size={36} />
                   <p className="mt-4 font-serif text-3xl font-black text-[#162019]">Cargando mundo 3D</p>
-                  <p className="mt-2 text-sm font-semibold text-[#667466]">El mismo planeta que verás dentro de Seed.</p>
+                  <p className="mt-2 text-sm font-semibold text-[#667466]">El mismo planeta que verás dentro de Seeds.</p>
                 </div>
               </div>
             }>
@@ -3228,7 +3228,7 @@ function LandingPage({
           <Sparkles className="mx-auto text-[#b8d69c]" size={28} />
           <h2 className="mx-auto mt-5 max-w-3xl font-serif text-5xl font-black leading-[0.98] sm:text-6xl">Empieza con una idea pequeña. Deja que crezca contigo.</h2>
           <p className="mx-auto mt-5 max-w-2xl text-lg font-semibold leading-relaxed text-white/70">
-            No necesitas tener todo claro. Solo planta una idea, vuelve cuando puedas y deja que Seed te ayude a convertirla en algo real.
+            No necesitas tener todo claro. Solo planta una idea, vuelve cuando puedas y deja que Seeds te ayude a convertirla en algo real.
           </p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <button onClick={onShowRegister} className="rounded-2xl bg-white px-6 py-4 font-black text-[#162019]">
@@ -3297,11 +3297,11 @@ function AuthEntryPage({
         { title: 'Tus ideas contigo', text: 'Empieza en un dispositivo y vuelve desde otro sin perder lo que estabas cuidando.' },
         { title: 'Sin configurar mil cosas', text: 'Planta una idea ahora. Ya habrá tiempo para darle forma cuando vuelva a llamar tu atención.' },
         { title: 'Recordatorios amables', text: 'El riego te ayuda a volver a ideas buenas sin culpa, presión ni listas eternas.' },
-        { title: 'Un paso a la vez', text: 'Cuando quieras avanzar, Seed te ayuda a mirar una sola idea y hacer algo pequeño.' },
+        { title: 'Un paso a la vez', text: 'Cuando quieras avanzar, Seeds te ayuda a mirar una sola idea y hacer algo pequeño.' },
       ]
     : [
         { title: 'Vuelve sin perderte', text: 'Encuentra tus jardines, tus ideas y el siguiente paso que dejaste pendiente.' },
-        { title: 'Ideas que piden atención', text: 'Seed te muestra lo que vale la pena volver a mirar antes de que se enfríe.' },
+        { title: 'Ideas que piden atención', text: 'Seeds te muestra lo que vale la pena volver a mirar antes de que se enfríe.' },
         { title: 'Foco más fácil', text: 'Retoma una idea, pon un tiempo y avanza sin rodearte de distracciones.' },
         { title: 'Tu progreso guardado', text: 'Cada idea terminada deja claridad para la próxima vez que quieras crear algo.' },
       ];
@@ -3322,9 +3322,9 @@ function AuthEntryPage({
         <div className="grid flex-1 grid-cols-1 gap-8 py-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] lg:items-center lg:gap-12">
           <section className="hidden lg:block">
             <div className="flex items-center gap-3.5">
-              <img src="/icon-192.png" alt="Seed" className="h-14 w-14 rounded-[1.35rem] shadow-sm" />
+              <img src="/icon-192.png" alt="Seeds" className="h-14 w-14 rounded-[1.35rem] shadow-sm" />
               <div>
-                <p className="font-serif text-4xl font-black leading-none text-[#1f2d23]">Seed</p>
+                <p className="font-serif text-4xl font-black leading-none text-[#1f2d23]">Seeds</p>
                 <p className="text-[10px] font-black uppercase text-[#7a8f63]">Grow What Matters</p>
               </div>
             </div>
@@ -3336,7 +3336,7 @@ function AuthEntryPage({
               {isRegister ? 'Un lugar bonito para no perder tus mejores ideas.' : 'Tus ideas siguen creciendo donde las dejaste.'}
             </h1>
             <p className="mt-6 max-w-2xl text-lg font-semibold leading-relaxed text-[#536159]">
-              Seed te ayuda a guardar lo que se te ocurre, volver con ganas y avanzar poco a poco. Sin tableros infinitos. Sin sentir que tienes que organizar tu vida entera.
+              Seeds te ayuda a guardar lo que se te ocurre, volver con ganas y avanzar poco a poco. Sin tableros infinitos. Sin sentir que tienes que organizar tu vida entera.
             </p>
 
             <div className="mt-9 grid max-w-2xl grid-cols-2 gap-4">
@@ -3387,7 +3387,7 @@ function AuthEntryPage({
           <section className="mx-auto w-full max-w-[29rem] rounded-[2rem] border border-[#dfe8dd] bg-white p-5 shadow-[0_30px_100px_rgba(31,45,35,0.14)] sm:p-7">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <img src="/icon-192.png" alt="Seed" className="h-11 w-11 rounded-2xl shadow-sm lg:hidden" />
+                <img src="/icon-192.png" alt="Seeds" className="h-11 w-11 rounded-2xl shadow-sm lg:hidden" />
                 <div>
                   <p className="text-[11px] font-black uppercase text-[#7a8f63]">{isRegister ? 'Crear cuenta' : 'Iniciar sesión'}</p>
                   <h2 className="mt-1 font-serif text-4xl font-black leading-none text-[#162019]">{isRegister ? 'Crea tu jardín' : 'Entra a tu jardín'}</h2>
@@ -4346,7 +4346,7 @@ export default function App() {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     if ('serviceWorker' in navigator) {
       const registration = await navigator.serviceWorker.ready;
-      await registration.showNotification('Seed', {
+      await registration.showNotification('Seeds', {
         body,
         icon: '/icon-192.png',
         badge: '/icon-192.png',
@@ -4354,7 +4354,7 @@ export default function App() {
       });
       return;
     }
-    new Notification('Seed', { body, icon: '/icon-192.png', tag: 'seed-daily-review' });
+    new Notification('Seeds', { body, icon: '/icon-192.png', tag: 'seed-daily-review' });
   };
 
   const enableNotifications = async () => {
@@ -4574,7 +4574,7 @@ export default function App() {
     const parsedRecord = parsed && typeof parsed === 'object' ? parsed as { notes?: unknown; planets?: unknown; activePlanetId?: unknown } : null;
     const rawNotes = Array.isArray(parsed) ? parsed : parsedRecord?.notes;
     if (!Array.isArray(rawNotes)) {
-      window.alert('El archivo no parece ser un backup de Seed.');
+      window.alert('El archivo no parece ser un backup de Seeds.');
       return;
     }
     const importedNotes = normalizeNotes(rawNotes);
@@ -5059,7 +5059,7 @@ export default function App() {
             </div>
           </div>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight text-[var(--earth)] leading-none">Seed</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-[var(--earth)] leading-none">Seeds</h1>
             <p className="mt-1 text-[11px] font-medium text-[var(--text-muted)]">Ideas y proyectos</p>
           </div>
           <button
@@ -7011,7 +7011,7 @@ export default function App() {
                             <div className="min-w-0">
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Primer recorrido</p>
                               <h2 className="mt-1 text-2xl font-black tracking-tight text-[var(--earth)] sm:text-3xl">
-                                Seed en 30 segundos
+                                Seeds en 30 segundos
                               </h2>
                             </div>
                             <button
@@ -7128,26 +7128,30 @@ export default function App() {
 	        <AnimatePresence>
 	          {isAdding && (
 		            <motion.div
-		              className={`fixed inset-0 z-[70] flex h-dvh items-center justify-center overflow-hidden bg-black/10 px-3 text-[var(--text-main)] backdrop-blur-md sm:p-5 ${
-		                quickEntryKeyboardMode
-		                  ? 'py-2'
-		                  : 'py-[calc(env(safe-area-inset-top)+0.8rem)]'
-		              }`}
-		              style={quickEntryViewportStyle}
+		              className="fixed inset-0 z-[70] overflow-hidden text-[var(--text-main)]"
 	              initial={{ opacity: 0 }}
 	              animate={{ opacity: 1 }}
 	              exit={{ opacity: 0 }}
               transition={{ duration: 0.16 }}
               onClick={() => setIsAdding(false)}
 	            >
+	              <div className={`absolute inset-0 ${quickEntryKeyboardMode ? 'bg-black/24 backdrop-blur-xl' : 'bg-black/10 backdrop-blur-md'}`} />
+	              <div
+	                className={`absolute inset-x-0 flex justify-center px-3 sm:p-5 ${
+	                  quickEntryKeyboardMode
+	                    ? 'items-end pb-0 pt-2'
+	                    : 'inset-y-0 items-center py-[calc(env(safe-area-inset-top)+0.8rem)]'
+	                }`}
+	                style={quickEntryViewportStyle}
+	              >
 	              <motion.div
 		                className={`relative flex w-full max-w-lg flex-col overflow-hidden border border-white/45 bg-[var(--surface-strong)]/96 shadow-[0_26px_90px_rgba(0,0,0,0.18)] backdrop-blur-2xl ${
 		                  quickEntryKeyboardMode
-		                    ? 'max-h-full min-h-[20rem] rounded-[1.85rem]'
+		                    ? 'quick-entry-keyboard max-h-full min-h-[17.5rem] rounded-t-[1.85rem] rounded-b-[1.25rem]'
 		                    : 'h-[min(54dvh,28rem)] min-h-[22.5rem] rounded-[2.15rem]'
 		                }`}
 		                style={quickEntryKeyboardMode
-		                  ? { height: `min(28rem, calc(${Math.max(340, Math.round(quickEntryViewport.height))}px - 1rem))` }
+		                  ? { height: `min(22.5rem, calc(${Math.max(300, Math.round(quickEntryViewport.height))}px - 0.5rem))` }
 			                  : undefined}
 	                initial={{ y: 10, scale: 0.965, opacity: 0 }}
 	                animate={{ y: 0, scale: 1, opacity: 1 }}
@@ -7164,7 +7168,7 @@ export default function App() {
                 }}
                 onClick={(event) => event.stopPropagation()}
               >
-	                <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[linear-gradient(180deg,var(--bg-app)_0%,transparent_82%)] opacity-55" />
+	                <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,var(--bg-app)_0%,transparent_82%)] opacity-55" />
 	                <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-white/70" />
 	                <div className={`relative mx-auto h-1 w-10 rounded-full bg-[var(--border)]/75 sm:hidden ${quickEntryKeyboardMode ? 'mt-2' : 'mt-3'}`} />
 	                <div className={`relative z-10 flex shrink-0 items-center border-b border-[var(--border)]/55 px-4 sm:px-5 ${
@@ -7197,8 +7201,8 @@ export default function App() {
                   </button>
                 </div>
 
-	                <div className={`relative z-10 flex min-h-0 flex-1 flex-col px-5 sm:px-6 ${quickEntryKeyboardMode ? 'pt-4' : 'pt-5'}`}>
-	                  <div className={`flex shrink-0 items-center gap-3 ${quickEntryKeyboardMode ? 'mb-3' : 'mb-4'}`}>
+	                <div className={`relative z-10 flex min-h-0 flex-1 flex-col px-5 sm:px-6 ${quickEntryKeyboardMode ? 'pt-3' : 'pt-5'}`}>
+	                  <div className={`flex shrink-0 items-center gap-3 ${quickEntryKeyboardMode ? 'mb-2' : 'mb-4'}`}>
 	                    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl border ${
 	                      createMode === 'sprout'
 	                        ? 'border-[var(--text-muted)]/35 text-[var(--text-muted)]'
@@ -7231,7 +7235,7 @@ export default function App() {
 	                    className="quick-seed-textarea min-h-0 flex-1 resize-none bg-transparent text-[1.12rem] font-medium leading-[1.5] tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/42 sm:text-[1.22rem]"
 	                  />
 
-		                  <div className={`relative mb-3 flex min-h-12 shrink-0 items-center gap-2 rounded-[1.35rem] bg-[var(--bg-app)]/62 px-2.5 shadow-[inset_0_0_0_1px_var(--border)] ${quickEntryKeyboardMode ? 'mt-2' : 'mt-4'}`}>
+		                  <div className={`relative mb-3 flex min-h-12 shrink-0 items-center gap-2 rounded-[1.35rem] bg-[var(--bg-app)]/62 px-2.5 shadow-[inset_0_0_0_1px_var(--border)] ${quickEntryKeyboardMode ? 'mt-1' : 'mt-4'}`}>
 		                    <label className={`relative grid h-9 w-9 shrink-0 place-items-center rounded-full transition-colors ${
 		                      newNote.dueDate ? 'bg-[var(--sage)] text-[var(--on-sage)]' : 'text-[var(--text-muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--sage)]'
 		                    }`} aria-label={t('date')}>
@@ -7296,6 +7300,7 @@ export default function App() {
 
                 <div className="h-[env(safe-area-inset-bottom)] shrink-0" />
               </motion.div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

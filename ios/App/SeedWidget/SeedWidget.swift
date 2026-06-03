@@ -82,7 +82,7 @@ struct SeedWidgetView: View {
                 seedMark
                     .frame(width: 56, height: 56)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Seed Hoy")
+                    Text("Seeds Hoy")
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundStyle(Color(red: 0.29, green: 0.45, blue: 0.33))
                     Text("Una idea puede empezar con una frase.")
@@ -140,7 +140,7 @@ struct SeedTodayWidget: Widget {
         StaticConfiguration(kind: kind, provider: SeedWidgetProvider()) { entry in
             SeedWidgetView(entry: entry)
         }
-        .configurationDisplayName("Seed Hoy")
+        .configurationDisplayName("Seeds Hoy")
         .description("Captura una idea y vuelve a lo importante.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
@@ -168,7 +168,7 @@ struct SeedFocusLiveActivityWidget: Widget {
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(islandAccent)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("Seed Focus")
+                            Text("Seeds Focus")
                                 .font(.system(size: 11, weight: .bold, design: .rounded))
                                 .foregroundStyle(islandAccent)
                             Text(context.state.title)

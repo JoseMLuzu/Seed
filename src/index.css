@@ -93,6 +93,15 @@
   .quick-seed-textarea {
     font-size: 1.12rem !important;
   }
+
+  .quick-entry-keyboard .quick-entry-title-input {
+    font-size: 1.34rem !important;
+  }
+
+  .quick-entry-keyboard .quick-seed-textarea {
+    font-size: 1rem !important;
+    line-height: 1.42 !important;
+  }
 }
 
 .soft-interaction {

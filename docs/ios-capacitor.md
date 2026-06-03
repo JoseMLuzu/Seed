@@ -1,4 +1,4 @@
-# Seed iOS with Capacitor
+# Seeds iOS with Capacitor
 
 ## Local test without Apple Developer Program
 

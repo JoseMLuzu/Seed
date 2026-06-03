@@ -1,6 +1,6 @@
 {
-  "name": "Seed",
-  "short_name": "Seed",
+  "name": "Seeds",
+  "short_name": "Seeds",
   "description": "Planta, riega y enfoca tus ideas.",
   "start_url": "/",
   "display": "standalone",
