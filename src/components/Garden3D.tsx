@@ -2433,6 +2433,7 @@ export default function Garden3D({
   notes,
   theme,
   planetName,
+  dailyIntention,
   onSelectNote,
   onReviewNote,
   onFocusNote,
@@ -2443,6 +2444,7 @@ export default function Garden3D({
   notes: SeedNote[];
   theme: Theme;
   planetName?: string;
+  dailyIntention?: string;
   onSelectNote: (id: string) => void;
   onReviewNote?: (id: string) => void;
   onFocusNote?: (id: string) => void;
@@ -2539,12 +2541,22 @@ export default function Garden3D({
       ? 'Sol activo: buen momento para avanzar'
       : 'Noche tranquila: enfoca sin ruido';
   const planetMoodCopy = lifeSignals.copy || weatherCopy;
+  const cleanDailyIntention = dailyIntention?.trim() || '';
+  const intentionPreview = cleanDailyIntention.length > 42
+    ? `${cleanDailyIntention.slice(0, 39)}...`
+    : cleanDailyIntention;
   const skyBannerText = useMemo(() => {
     const date = new Date().toLocaleDateString('es', { day: 'numeric', month: 'short' }).replace('.', '');
+    if (cleanDailyIntention) {
+      const bannerIntention = cleanDailyIntention.length > 24
+        ? `${cleanDailyIntention.slice(0, 21)}...`
+        : cleanDailyIntention;
+      return `Hoy · ${bannerIntention}`;
+    }
     if (stats.water > 0) return `${date} · regar ${stats.water}`;
     if (stats.harvest > 0) return `${date} · ${stats.harvest} cierres`;
     return `${date} · ${planetName || palette.label}`;
-  }, [palette.label, planetName, stats.harvest, stats.water]);
+  }, [cleanDailyIntention, palette.label, planetName, stats.harvest, stats.water]);
 
   const visibleNotes = useMemo(() => {
     return notes.filter((note) => {
@@ -2742,6 +2754,12 @@ export default function Garden3D({
 		          {palette.label}<br/><span className={`${isRaining ? 'text-sky-200/70' : 'text-yellow-200/70'} italic`}>{isRaining ? 'Lluvia' : 'Vivo'}</span>
 		        </h4>
 		        <p className="mt-3 hidden max-w-xs text-xs font-semibold leading-relaxed text-white/65 drop-shadow sm:block">{planetMoodCopy}</p>
+		        {intentionPreview && !isPreview && (
+		          <div className="mt-3 hidden max-w-xs rounded-2xl border border-white/16 bg-white/[0.13] px-3 py-2 text-white shadow-[0_18px_60px_rgba(0,0,0,0.18)] backdrop-blur-2xl sm:block">
+		            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/45">Intención de hoy</p>
+		            <p className="mt-1 text-xs font-semibold leading-relaxed text-white/78">{intentionPreview}</p>
+		          </div>
+		        )}
 		      </div>
 
 		      <div className={`absolute grid-cols-3 gap-2 text-white ${isPreview ? 'right-6 top-6 grid' : 'right-10 top-10 hidden sm:grid'}`}>

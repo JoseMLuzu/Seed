@@ -30,6 +30,7 @@ export interface SeedNote {
   paused?: boolean;
   inbox?: boolean;
   seedType?: 'idea' | 'project' | 'goal' | 'learning';
+  priority?: 'light' | 'normal' | 'important';
   reflection?: string;
   takeaway?: string;
   focusedMinutes?: number;

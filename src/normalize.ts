@@ -3,6 +3,7 @@ import { SeedNote } from './types';
 const FALLBACK_PLANET_ID = 'personal';
 const VALID_STAGES = new Set<SeedNote['growthStage']>(['seed', 'sprout', 'bloom', 'withered']);
 const VALID_SEED_TYPES = new Set<NonNullable<SeedNote['seedType']>>(['idea', 'project', 'goal', 'learning']);
+const VALID_PRIORITIES = new Set<NonNullable<SeedNote['priority']>>(['light', 'normal', 'important']);
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? value as Record<string, unknown> : null;
@@ -39,6 +40,7 @@ export function normalizeNote(value: unknown): SeedNote | null {
   const rawStage = asString(raw.growthStage) as SeedNote['growthStage'] | undefined;
   const growthStage = rawStage && VALID_STAGES.has(rawStage) ? rawStage : tasks.length > 0 ? 'sprout' : 'seed';
   const seedType = asString(raw.seedType) as SeedNote['seedType'] | undefined;
+  const priority = asString(raw.priority) as SeedNote['priority'] | undefined;
   const isGrowth = Boolean(raw.isGrowth) || tasks.length > 0 || growthStage === 'sprout';
 
   return {
@@ -60,6 +62,7 @@ export function normalizeNote(value: unknown): SeedNote | null {
     paused: Boolean(raw.paused),
     inbox: Boolean(raw.inbox),
     seedType: seedType && VALID_SEED_TYPES.has(seedType) ? seedType : 'idea',
+    priority: priority && VALID_PRIORITIES.has(priority) ? priority : 'normal',
     reflection: asString(raw.reflection),
     takeaway: asString(raw.takeaway),
     focusedMinutes: Math.max(0, asNumber(raw.focusedMinutes) || 0),

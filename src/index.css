@@ -58,9 +58,16 @@
   background-clip: padding-box;
 }
 
-:where(button, input, textarea, select, a):focus-visible {
+:where(button, a):focus-visible {
   outline: 3px solid color-mix(in srgb, var(--sage) 55%, white);
   outline-offset: 3px;
+}
+
+:where(input, textarea, select):focus,
+:where(input, textarea, select):focus-visible {
+  border-color: var(--border) !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 .garden-switcher-input:focus,
@@ -73,6 +80,18 @@
 .quick-seed-textarea:focus-visible {
   outline: none;
   box-shadow: none;
+}
+
+.quick-entry-overlay {
+  height: 100dvh;
+  min-height: 100svh;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+.quick-entry-overlay textarea,
+.quick-entry-overlay input {
+  -webkit-text-size-adjust: 100%;
 }
 
 @media (max-width: 767px) {

@@ -47,13 +47,14 @@ import {
   Droplets,
   Pause,
   Archive,
-  Bell,
   Inbox,
   Target,
   Download,
   Sparkles,
+  Star,
   User,
-  Maximize2
+  Maximize2,
+  type LucideIcon
 } from 'lucide-react';
 import { Theme, SeedNote, Planet } from './types';
 import { addFocusMinutes, DAY_MS, daysSince, toggleTaskForNote, wateringDue, waterNote as waterSeedNote } from './seedLogic';
@@ -62,6 +63,7 @@ import { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';
 import { deleteNoteFromSupabase, deletePlanetFromSupabase, pushGardenToSupabase, syncGardenWithSupabase } from './supabaseSync';
 import { normalizeNote, normalizeNotes } from './normalize';
+import { playSeedSound, preloadSeedSounds, unlockSeedAudio, type SeedSoundKind } from './sound';
 
 const Garden3D = lazy(() => import('./components/Garden3D'));
 
@@ -77,8 +79,9 @@ type AppView = 'today' | 'inbox' | 'projects' | 'focus' | 'garden' | 'profile' |
 type AppLanguage = 'es' | 'en';
 type CreateMode = 'seed' | 'sprout' | 'journal';
 type TodayWidgetId = 'summary' | 'watering' | 'path' | 'learning';
+type QuickEntryPicker = 'type' | 'priority' | 'garden' | null;
 
-const DEFAULT_TODAY_WIDGETS: TodayWidgetId[] = ['summary', 'watering', 'learning'];
+const DEFAULT_TODAY_WIDGETS: TodayWidgetId[] = ['watering'];
 const TODAY_WIDGET_IDS = new Set<TodayWidgetId>(['summary', 'watering', 'path', 'learning']);
 const IDEA_CARD_RADIUS = 'rounded-[1.45rem]';
 const IDEA_CARD_WRAPPER = `${IDEA_CARD_RADIUS} bg-[var(--surface-strong)]`;
@@ -252,6 +255,13 @@ function getStoredNumber(key: string, fallback: number, min = -Infinity, max = I
   return Math.min(max, Math.max(min, value));
 }
 
+function getStoredBoolean(key: string, fallback: boolean) {
+  const value = getStoredItem(key);
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return fallback;
+}
+
 const THEMES: { id: Theme; label: string; icon: string }[] = [
   { id: 'earth', label: 'Pradera', icon: '🌾' },
   { id: 'forest', label: 'Bosque', icon: '🌲' },
@@ -308,38 +318,62 @@ const SEED_TYPES: { id: NonNullable<SeedNote['seedType']>; label: string; task: 
   { id: 'learning', label: 'Aprendizaje', task: 'Practicar o resumir el primer concepto' },
 ];
 
+const PRIORITY_OPTIONS: {
+  id: NonNullable<SeedNote['priority']>;
+  label: string;
+  labelEn: string;
+  detail: string;
+  detailEn: string;
+}[] = [
+  { id: 'light', label: 'Ligera', labelEn: 'Light', detail: 'Puede esperar', detailEn: 'Can wait' },
+  { id: 'normal', label: 'Normal', labelEn: 'Normal', detail: 'Ritmo natural', detailEn: 'Natural pace' },
+  { id: 'important', label: 'Importante', labelEn: 'Important', detail: 'Sube en Hoy', detailEn: 'Rises in Today' },
+];
+
+function priorityWeight(note: SeedNote) {
+  return note.priority === 'important' ? 8 : note.priority === 'light' ? -3 : 0;
+}
+
+function priorityLabel(option: (typeof PRIORITY_OPTIONS)[number]) {
+  return appLanguage === 'en' ? option.labelEn : option.label;
+}
+
+function priorityDetail(option: (typeof PRIORITY_OPTIONS)[number]) {
+  return appLanguage === 'en' ? option.detailEn : option.detail;
+}
+
 const ONBOARDING_STEPS = [
   {
     icon: Leaf,
     eyebrow: 'Captura',
     title: 'Planta una semilla',
-    text: 'Guarda una idea sin ordenar nada todavía. Seeds no te pide proyecto, fecha ni categoría para empezar.',
-    action: 'Escribe primero. Decide después.',
-    detail: 'Una línea basta para no perderla.',
+    text: 'Escribe lo que apareció en tu cabeza sin abrir un formulario. Seeds lo guarda sin exigirte claridad.',
+    action: 'Captura ahora. Decide después.',
+    detail: 'Una línea basta para que la idea no se pierda.',
   },
   {
     icon: Droplets,
     eyebrow: 'Riego',
     title: 'Vuelve sin presión',
-    text: 'Hoy te muestra una sola cosa útil: regar una idea, avanzar un brote o descansar si no hay nada urgente.',
-    action: 'Una revisión pequeña es suficiente.',
-    detail: 'Sin culpa por ideas olvidadas.',
+    text: 'Las ideas quietas no te juzgan. Seeds solo pregunta si siguen vivas y te deja elegir en segundos.',
+    action: 'Regar no significa trabajar.',
+    detail: 'Puedes regar, pausar, convertir o cosechar.',
   },
   {
     icon: Sprout,
     eyebrow: 'Brote',
     title: 'Convierte solo lo que importa',
-    text: 'Si una semilla vale la pena, se vuelve brote. No necesitas una lista enorme: solo el siguiente paso de 5 minutos.',
-    action: 'Pequeño paso, avance real.',
-    detail: 'El brote crece con cada paso.',
+    text: 'Cuando una semilla pide avanzar, se vuelve brote. No necesitas planificarlo todo: solo el primer paso.',
+    action: 'Un paso pequeño cambia el estado.',
+    detail: 'El brote crece cuando marcas progreso real.',
   },
   {
     icon: CheckCircle2,
     eyebrow: 'Cosecha',
     title: 'Tu jardín responde',
-    text: 'Cuando terminas algo, aparece como progreso visual. El planeta no es decoración: es la memoria de lo que cuidaste.',
-    action: 'Avanzar cambia tu jardín.',
-    detail: 'Semillas, brotes y cosechas viven ahí.',
+    text: 'Cuando cierras una idea, el jardín lo recuerda. Puedes guardar qué aprendiste o simplemente seguir.',
+    action: 'Tu progreso se vuelve visible.',
+    detail: 'Semillas, brotes y cosechas viven en tu planeta.',
   },
 ];
 
@@ -407,7 +441,7 @@ function AppSelect({
           event.stopPropagation();
           if (!disabled) setOpen(current => !current);
         }}
-        className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-3.5 py-2.5 text-left text-sm font-bold text-[var(--earth)] shadow-sm outline-none transition-all hover:bg-[var(--surface-strong)] focus:ring-2 focus:ring-[var(--sage)]/20 disabled:cursor-not-allowed disabled:opacity-55"
+        className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-3.5 py-2.5 text-left text-sm font-bold text-[var(--earth)] shadow-sm outline-none transition-all hover:bg-[var(--surface-strong)] focus:ring-0 disabled:cursor-not-allowed disabled:opacity-55"
       >
         <span className="min-w-0">
           <span className="block truncate">{selected?.label || placeholder}</span>
@@ -482,7 +516,7 @@ function AppSwitch({
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border border-transparent p-0.5 outline-none transition-colors focus:ring-2 focus:ring-[var(--sage)]/25 disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border border-transparent p-0.5 outline-none transition-colors focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 ${
         checked ? 'bg-[var(--sage)]' : 'bg-[var(--border)]'
       }`}
     >
@@ -511,7 +545,7 @@ function QuickCaptureBox({
   const canSubmit = Boolean(value.trim());
 
   return (
-    <div className="rounded-[1.5rem] border border-[var(--border)] bg-[var(--bg-app)] p-2 shadow-inner shadow-black/[0.02] transition-all focus-within:border-[var(--sage)] focus-within:bg-[var(--surface-strong)] focus-within:ring-2 focus-within:ring-[var(--sage)]/15">
+    <div className="rounded-[1.5rem] border border-[var(--border)] bg-[var(--bg-app)] p-2 shadow-inner shadow-black/[0.02] transition-all focus-within:border-[var(--border)] focus-within:bg-[var(--surface-strong)]">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <label className="flex min-h-14 flex-1 items-center gap-3 rounded-[1.2rem] px-3 py-2">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--surface-strong)] text-[var(--sage)]">
@@ -540,6 +574,81 @@ function QuickCaptureBox({
         </button>
       </div>
     </div>
+  );
+}
+
+function EmptyStatePanel({
+  icon: Icon,
+  eyebrow,
+  title,
+  detail,
+  actionLabel,
+  onAction,
+  secondaryLabel,
+  onSecondary,
+}: {
+  icon: LucideIcon;
+  eyebrow?: string;
+  title: string;
+  detail: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+}) {
+  return (
+    <section className="overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface-strong),var(--surface-soft))] p-6 text-center shadow-sm">
+      <div className="mx-auto grid h-14 w-14 place-items-center rounded-[1.35rem] bg-[var(--bg-app)] text-[var(--sage)] shadow-sm ring-1 ring-[var(--border)]">
+        <Icon size={24} />
+      </div>
+      {eyebrow && (
+        <p className="mt-5 text-[10px] font-black uppercase tracking-[0.22em] text-[var(--text-muted)]">{eyebrow}</p>
+      )}
+      <h3 className="mx-auto mt-2 max-w-sm text-2xl font-semibold tracking-tight text-[var(--earth)]">{title}</h3>
+      <p className="mx-auto mt-2 max-w-sm text-sm font-medium leading-relaxed text-[var(--text-muted)]">{detail}</p>
+      {(actionLabel || secondaryLabel) && (
+        <div className="mx-auto mt-6 grid max-w-sm gap-2 sm:grid-cols-2">
+          {actionLabel && onAction && (
+            <button
+              type="button"
+              onClick={onAction}
+              className="flex h-11 items-center justify-center rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] shadow-sm soft-interaction"
+            >
+              {actionLabel}
+            </button>
+          )}
+          {secondaryLabel && onSecondary && (
+            <button
+              type="button"
+              onClick={onSecondary}
+              className="flex h-11 items-center justify-center rounded-full bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--sage)] ring-1 ring-[var(--border)] soft-interaction"
+            >
+              {secondaryLabel}
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function formatReviewAge(note: SeedNote) {
+  const days = daysSince(note.lastWateredAt || note.createdAt);
+  if (!Number.isFinite(days) || days <= 0) return appLanguage === 'en' ? 'reviewed today' : 'revisada hoy';
+  if (appLanguage === 'en') return `${days} day${days === 1 ? '' : 's'} without review`;
+  return `${days} día${days === 1 ? '' : 's'} sin revisión`;
+}
+
+const DAILY_CLOSURE_TAG = 'daily-closure';
+
+function isDailyClosureForDate(note: SeedNote, date = Date.now()) {
+  const noteDate = note.harvestedAt || note.createdAt;
+  const legacyDailyClosure = note.title === 'Cierre del día' || note.title === 'Today closure';
+  return (
+    note.seedType === 'learning' &&
+    note.growthStage === 'bloom' &&
+    format(noteDate, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd') &&
+    (note.tags?.includes(DAILY_CLOSURE_TAG) || legacyDailyClosure)
   );
 }
 
@@ -1287,50 +1396,65 @@ function CalendarView({
 }
 
 function TodayView({
+  accountName,
   notes,
   quickNote,
   setQuickNote,
   onQuickCapture,
   onOpenWatering,
+  onSkipWatering,
   onSelectNote,
   onToggleTask,
   onFocusNote,
-  onEnableNotifications,
   onStartPlanting,
+  onCloseDay,
   onNavigate,
   onShowWateringQueue,
   todayWidgets,
   wateredToday,
   wateringStreak,
   getProgress,
+  dailyIntention,
+  setDailyIntention,
 }: {
+  accountName: string;
   notes: SeedNote[];
   quickNote: string;
   setQuickNote: (value: string) => void;
   onQuickCapture: () => void;
   onOpenWatering: (id: string) => void;
+  onSkipWatering: (id: string) => void;
   onSelectNote: (id: string) => void;
   onToggleTask: (noteId: string, taskId: string) => void;
   onFocusNote: (id: string) => void;
-  onEnableNotifications: () => void;
   onStartPlanting: () => void;
+  onCloseDay: (reflection: string, intention: string, intentionOutcome?: 'yes' | 'some' | 'no' | '') => void;
   onNavigate: (view: AppView) => void;
   onShowWateringQueue: () => void;
   todayWidgets: TodayWidgetId[];
   wateredToday: boolean;
   wateringStreak: number;
   getProgress: (note: SeedNote) => number;
+  dailyIntention: string;
+  setDailyIntention: (value: string) => void;
 }) {
+  const [showTodayMore, setShowTodayMore] = useState(false);
+  const [showDaySummary, setShowDaySummary] = useState(false);
+  const [dayReflection, setDayReflection] = useState('');
+  const [intentionDraft, setIntentionDraft] = useState(dailyIntention);
+  const [isEditingIntention, setIsEditingIntention] = useState(!dailyIntention.trim());
+  const [intentionOutcome, setIntentionOutcome] = useState<'yes' | 'some' | 'no' | ''>('');
   const today = new Date();
   const activeNotes = notes.filter(note => !note.inbox && note.growthStage !== 'bloom' && !note.paused);
   const allThirstyNotes = activeNotes
     .filter(note => wateringDue(note))
-    .sort((a, b) => daysSince(b.lastWateredAt || b.createdAt) - daysSince(a.lastWateredAt || a.createdAt));
+    .sort((a, b) => (priorityWeight(b) + daysSince(b.lastWateredAt || b.createdAt)) - (priorityWeight(a) + daysSince(a.lastWateredAt || a.createdAt)));
   const firstWatering = allThirstyNotes[0];
   const nextActions = notes
     .filter(note => !note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom' && !wateringDue(note))
     .map(note => ({ note, task: note.tasks.find(task => !task.completed) }))
     .filter((item): item is { note: SeedNote; task: NonNullable<typeof item.task> } => Boolean(item.task))
+    .sort((a, b) => priorityWeight(b.note) - priorityWeight(a.note))
     .slice(0, 1);
   const nextAction = nextActions[0];
   const inboxNotes = notes
@@ -1340,8 +1464,15 @@ function TodayView({
   const inboxCount = notes.filter(note => note.inbox).length;
   const sproutCount = notes.filter(note => !note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom').length;
   const completedToday = notes.filter(note => note.harvestedAt && isToday(note.harvestedAt)).length;
+  const dayClosure = notes.find(note => isDailyClosureForDate(note));
+  const dayAlreadyClosed = Boolean(dayClosure);
   const plantedToday = notes.filter(note => isToday(note.createdAt)).length;
   const wateredTodayCount = notes.filter(note => note.lastWateredAt && isToday(note.lastWateredAt)).length;
+  const stepsToday = notes.filter(note =>
+    note.updatedAt &&
+    isToday(note.updatedAt) &&
+    note.tasks.some(task => task.completed)
+  ).length;
   const activeDaysThisMonth = new Set(notes
     .flatMap(note => [note.createdAt, note.lastWateredAt, note.harvestedAt].filter((date): date is number => Boolean(date)))
     .filter(date => isSameMonth(date, today))
@@ -1352,22 +1483,49 @@ function TodayView({
   const learningMemory = learnedNotes[0];
   const hour = new Date().getHours();
   const greeting = hour < 12 ? t('goodMorning') : hour < 19 ? t('goodAfternoon') : t('goodEvening');
+  const firstName = accountName.trim().split(/\s+/)[0] || (appLanguage === 'en' ? 'there' : 'jardinero');
   const todayWeekday = format(today, 'EEEE', { locale: appDateLocale });
   const todayDate = formatDayMonth(today);
+  const dailyPhraseSeed = Number(format(today, 'd')) + notes.length + wateringStreak;
+  const motivationalPhrases = appLanguage === 'en'
+    ? [
+        'One small return is enough.',
+        'Keep it light. Keep it alive.',
+        'A seed only needs one next move.',
+        'No rush. Just choose what still matters.',
+        'Good ideas grow quietly.',
+        'Today can be one clear step.',
+      ]
+    : [
+        'Volver un poco también cuenta.',
+        'Cuida una idea, no toda la lista.',
+        'Una semilla solo necesita el siguiente paso.',
+        'Sin prisa. Solo elige lo que sigue vivo.',
+        'Las buenas ideas crecen en silencio.',
+        'Hoy puede ser un paso claro.',
+      ];
+  const motivationalText = motivationalPhrases[dailyPhraseSeed % motivationalPhrases.length];
   const doneTodayText = wateredToday
     ? appLanguage === 'en'
       ? `${wateringStreak}-day streak`
       : `Racha de ${wateringStreak} día${wateringStreak === 1 ? '' : 's'}`
-    : t('noPressure');
+    : motivationalText;
   const primaryMode = firstWatering ? 'water' : nextAction ? 'focus' : inboxCount > 0 ? 'seed' : 'calm';
   const primaryTitle = firstWatering?.title || nextAction?.note.title || inboxNotes[0]?.title || t('quietGarden');
   const primaryDetail = firstWatering
-    ? `${daysSince(firstWatering.lastWateredAt || firstWatering.createdAt)} días sin revisión`
+    ? formatReviewAge(firstWatering)
     : nextAction
       ? nextAction.task.text
       : inboxNotes[0]
         ? t('seedWaiting')
         : t('captureIdea');
+  const primaryEyebrow = firstWatering
+    ? appLanguage === 'en' ? 'Review gently' : 'Riego amable'
+    : nextAction
+      ? appLanguage === 'en' ? 'One small step' : 'Un paso pequeño'
+      : inboxCount > 0
+        ? appLanguage === 'en' ? 'Decide later, now' : 'Decidir sin presión'
+        : appLanguage === 'en' ? 'Quiet garden' : 'Jardín tranquilo';
   const PrimaryIcon = firstWatering ? Droplets : nextAction ? Target : inboxCount > 0 ? Sprout : Leaf;
   const primaryActionLabel = firstWatering
     ? t('waterNow')
@@ -1376,6 +1534,13 @@ function TodayView({
       : inboxCount > 0
         ? t('viewSeeds')
         : appLanguage === 'en' ? 'Plant seed' : 'Plantar semilla';
+  const secondaryActionLabel = firstWatering
+    ? appLanguage === 'en' ? 'Later today' : 'Más tarde'
+    : nextAction
+      ? appLanguage === 'en' ? 'Open sprout' : 'Abrir brote'
+      : inboxCount > 0
+        ? appLanguage === 'en' ? 'Plant another' : 'Plantar otra'
+        : appLanguage === 'en' ? 'View garden' : 'Ver jardín';
   const primaryAccent =
     primaryMode === 'water' ? 'text-[var(--sage)]' :
     primaryMode === 'focus' ? 'text-[var(--seed-accent)]' :
@@ -1400,6 +1565,49 @@ function TodayView({
           : appLanguage === 'en'
             ? 'Garden is quiet. Capture an idea or rest without guilt.'
             : 'Jardín tranquilo. Captura una idea o descansa sin culpa.';
+  const contextualPhrase = firstWatering
+    ? appLanguage === 'en'
+      ? 'Before adding more, return to what may still be alive.'
+      : 'Antes de sumar más, vuelve a lo que todavía puede seguir vivo.'
+    : nextAction
+      ? appLanguage === 'en'
+        ? 'A small step keeps the sprout awake.'
+        : 'Un paso pequeño mantiene el brote despierto.'
+      : inboxCount > 0
+        ? appLanguage === 'en'
+          ? 'Choose one seed. The rest can wait.'
+          : 'Elige una semilla. Las demás pueden esperar.'
+        : appLanguage === 'en'
+          ? 'Your garden is quiet. That is also progress.'
+          : 'Tu jardín está tranquilo. Eso también es avance.';
+  const gardenMood = firstWatering
+    ? {
+        label: appLanguage === 'en' ? 'Garden asks for water' : 'El jardín pide agua',
+        detail: appLanguage === 'en' ? `${allThirstyNotes.length} idea${allThirstyNotes.length === 1 ? '' : 's'} waiting` : `${allThirstyNotes.length} idea${allThirstyNotes.length === 1 ? '' : 's'} esperando`,
+        icon: Droplets,
+        tone: 'text-[var(--sage)]',
+      }
+    : nextAction
+      ? {
+          label: appLanguage === 'en' ? 'Garden is growing' : 'El jardín está creciendo',
+          detail: appLanguage === 'en' ? 'One next step is ready' : 'Hay un siguiente paso listo',
+          icon: Sprout,
+          tone: 'text-[#4f715b]',
+        }
+      : inboxCount > 0
+        ? {
+            label: appLanguage === 'en' ? 'Garden is collecting seeds' : 'El jardín junta semillas',
+            detail: appLanguage === 'en' ? `${inboxCount} to decide` : `${inboxCount} por decidir`,
+            icon: Leaf,
+            tone: 'text-[#8a6a3e]',
+          }
+        : {
+            label: appLanguage === 'en' ? 'Garden feels calm' : 'El jardín se siente tranquilo',
+            detail: appLanguage === 'en' ? 'Nothing urgent today' : 'Nada urgente por hoy',
+            icon: CheckCircle2,
+            tone: 'text-[var(--sage)]',
+          };
+  const GardenMoodIcon = gardenMood.icon;
   const todayRoutes = [
     {
       label: t('seeds'),
@@ -1486,6 +1694,36 @@ function TodayView({
     }
     onStartPlanting();
   };
+  const secondaryClick = () => {
+    if (firstWatering) {
+      onSkipWatering(firstWatering.id);
+      return;
+    }
+    if (nextAction) {
+      onSelectNote(nextAction.note.id);
+      return;
+    }
+    if (inboxCount > 0) {
+      onStartPlanting();
+      return;
+    }
+    onNavigate('garden');
+  };
+  const savedIntention = dailyIntention.trim();
+  const cleanIntentionDraft = intentionDraft.trim();
+  const saveIntention = () => {
+    setDailyIntention(cleanIntentionDraft);
+    setIsEditingIntention(!cleanIntentionDraft);
+  };
+  const closeDaySummary = () => {
+    setShowDaySummary(false);
+    setIntentionOutcome('');
+  };
+
+  useEffect(() => {
+    setIntentionDraft(dailyIntention);
+    setIsEditingIntention(!dailyIntention.trim());
+  }, [dailyIntention]);
 
   return (
     <motion.div
@@ -1495,13 +1733,17 @@ function TodayView({
       exit={{ opacity: 0, y: 12 }}
       className="space-y-4 pb-24"
     >
-      <div className="flex items-start justify-between gap-4">
+      <div>
         <div className="min-w-0">
-          <p className="text-sm font-medium capitalize text-[var(--text-muted)]">{greeting} · {todayWeekday}</p>
-          <h3 className="mt-0.5 truncate text-3xl font-semibold capitalize tracking-tight text-[var(--earth)]">{todayDate}</h3>
+          <p className="text-sm font-medium capitalize text-[var(--text-muted)]">{todayWeekday} · {todayDate}</p>
+          <h3 className="mt-0.5 truncate text-3xl font-semibold tracking-tight text-[var(--earth)]">{greeting}, {firstName}</h3>
           <p className="mt-1 max-w-[22rem] text-sm font-medium leading-relaxed text-[var(--text-muted)]">{todayPlan}</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <span className="rounded-full bg-[var(--surface-strong)] px-3 py-1 text-[11px] font-semibold text-[var(--sage)] shadow-sm ring-1 ring-[var(--border)]">{doneTodayText}</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface-strong)] px-3 py-1 text-[11px] font-semibold text-[var(--text-muted)] shadow-sm ring-1 ring-[var(--border)]">
+              <GardenMoodIcon size={12} className={gardenMood.tone} />
+              {gardenMood.label}
+            </span>
             {completedToday > 0 && (
               <span className="rounded-full bg-[#eef4ec] px-3 py-1 text-[11px] font-semibold text-[#5b765f] ring-1 ring-[#dfe8dd]">
                 {appLanguage === 'en'
@@ -1511,86 +1753,340 @@ function TodayView({
             )}
           </div>
         </div>
-        <button
-          onClick={onEnableNotifications}
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--sage)] shadow-sm transition-colors hover:bg-[var(--surface-hover)]"
-          title="Activar recordatorios"
-          aria-label="Activar recordatorios"
-        >
-          <Bell size={18} />
-        </button>
       </div>
 
-      <section className="overflow-hidden rounded-[1.85rem] border border-[var(--border)] bg-[linear-gradient(135deg,var(--surface-strong),var(--surface-soft))] p-4 shadow-sm">
+      <section className="rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)]/82 p-3 shadow-sm">
+        {isEditingIntention ? (
+          <form
+            className="flex items-center gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveIntention();
+            }}
+          >
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)]">
+              <Target size={17} />
+            </span>
+            <label className="min-w-0 flex-1">
+              <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                {appLanguage === 'en' ? 'Choose a small direction' : 'Elige una dirección pequeña'}
+              </span>
+              <input
+                value={intentionDraft}
+                onChange={(event) => setIntentionDraft(event.target.value)}
+                placeholder={appLanguage === 'en' ? 'Today I want to care for...' : 'Hoy quiero cuidar...'}
+                className="mt-0.5 h-8 w-full bg-transparent text-base font-semibold text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/62"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={!cleanIntentionDraft}
+              className="h-9 shrink-0 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold text-[var(--on-sage)] shadow-sm transition disabled:bg-[var(--bg-app)] disabled:text-[var(--text-muted)] disabled:shadow-none"
+            >
+              {appLanguage === 'en' ? 'Save' : 'Guardar'}
+            </button>
+          </form>
+        ) : (
+          <div className="flex items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)]">
+              <CheckCircle2 size={17} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                {appLanguage === 'en' ? 'Today you are caring for' : 'Hoy estás cuidando'}
+              </p>
+              <p className="mt-1 line-clamp-2 text-base font-semibold leading-snug text-[var(--earth)]">{savedIntention}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setIsEditingIntention(true)}
+                className="h-8 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)] ring-1 ring-[var(--border)]"
+              >
+                {appLanguage === 'en' ? 'Edit' : 'Cambiar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDailyIntention('');
+                  setIntentionDraft('');
+                }}
+                className="grid h-8 w-8 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)] hover:text-[var(--earth)]"
+                aria-label={appLanguage === 'en' ? 'Clear today intention' : 'Borrar intención de hoy'}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[linear-gradient(135deg,var(--surface-strong),var(--surface-soft))] p-4 shadow-sm sm:p-5">
+        <p className="mb-4 rounded-full bg-[var(--bg-app)] px-3 py-2 text-xs font-semibold leading-relaxed text-[var(--text-muted)]">
+          {contextualPhrase}
+        </p>
         <button type="button" onClick={primaryClick} className="flex w-full items-start gap-4 text-left">
           <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] shadow-sm ring-1 ring-[var(--border)] ${primaryAccent}`}>
             <PrimaryIcon size={22} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">{appLanguage === 'en' ? 'One thing today' : 'Una cosa para hoy'}</span>
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">{primaryEyebrow}</span>
             <span className="mt-1 block truncate text-xl font-semibold tracking-tight text-[var(--earth)]">{primaryTitle}</span>
             <span className="mt-1 block line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{primaryDetail}</span>
           </span>
           <ChevronRight size={18} className="mt-3 shrink-0 text-[var(--text-muted)]" />
         </button>
-        <button
-          onClick={primaryClick}
-          className="mt-5 flex h-11 w-full items-center justify-center rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
-        >
-          {primaryActionLabel}
-        </button>
+        <div className="mt-5 grid grid-cols-[1.4fr_1fr] gap-2">
+          <button
+            onClick={primaryClick}
+            className="flex h-11 items-center justify-center rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
+          >
+            {primaryActionLabel}
+          </button>
+          <button
+            onClick={secondaryClick}
+            className="flex h-11 items-center justify-center rounded-full bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--sage)] ring-1 ring-[var(--border)] active:translate-y-px soft-interaction"
+          >
+            {secondaryActionLabel}
+          </button>
+        </div>
+        <div className="mt-4 flex flex-col gap-3 border-t border-[var(--border)] pt-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs font-semibold text-[var(--text-muted)]">
+            {appLanguage === 'en'
+              ? `${wateredTodayCount} watered · ${stepsToday} steps · ${completedToday} harvests today`
+              : `${wateredTodayCount} riegos · ${stepsToday} pasos · ${completedToday} cosechas hoy`}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (dayAlreadyClosed) {
+                onNavigate('harvest');
+                return;
+              }
+              setIntentionOutcome('');
+              setShowDaySummary(true);
+            }}
+            className={`inline-flex h-9 items-center justify-center gap-2 rounded-full px-3 text-xs font-semibold ring-1 ring-[var(--border)] transition-colors ${
+              dayAlreadyClosed
+                ? 'bg-[var(--surface-strong)] text-[var(--text-muted)]'
+                : 'bg-[var(--bg-app)] text-[var(--sage)] hover:bg-[var(--surface-hover)]'
+            }`}
+          >
+            {dayAlreadyClosed ? <CheckCircle2 size={14} /> : <Archive size={14} />}
+            {dayAlreadyClosed
+              ? appLanguage === 'en' ? 'Day closed' : 'Día cerrado'
+              : appLanguage === 'en' ? 'Close day' : 'Cerrar día'}
+          </button>
+        </div>
       </section>
 
-      {todayWidgets.includes('summary') && (
-        <section className="grid grid-cols-3 gap-2 rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-strong)] p-1.5 shadow-sm">
-          {todayRoutes.map(item => (
-            <button
-              key={item.label}
-              type="button"
-              onClick={item.onClick}
-              className="flex min-h-[5.25rem] flex-col items-center justify-center rounded-[1rem] px-2 py-2.5 text-center soft-interaction hover:bg-[var(--surface-hover)]"
-            >
-              <div className="flex items-center justify-center gap-1.5">
-                <item.icon size={14} className={item.tone} />
-                <p className="text-lg font-semibold leading-none text-[var(--earth)]">{item.value}</p>
-              </div>
-              <p className="mt-1 w-full truncate text-[10px] font-medium text-[var(--text-muted)]">{item.label}</p>
-              <p className="mt-0.5 w-full truncate text-[9px] font-semibold text-[var(--text-muted)]/75">{item.detail}</p>
-            </button>
-          ))}
-        </section>
-      )}
+      <button
+        type="button"
+        onClick={() => setShowTodayMore(value => !value)}
+        className="mx-auto flex h-9 items-center gap-1.5 rounded-full bg-[var(--surface-strong)] px-4 text-xs font-semibold text-[var(--text-muted)] ring-1 ring-[var(--border)] transition-colors hover:text-[var(--sage)]"
+      >
+        {showTodayMore
+          ? appLanguage === 'en' ? 'Hide garden state' : 'Ocultar estado'
+          : appLanguage === 'en' ? 'View garden state' : 'Ver estado'}
+        <ChevronDown size={14} className={`transition-transform ${showTodayMore ? 'rotate-180' : ''}`} />
+      </button>
 
-      {todayModules.length > 0 && (
-        <section className="grid gap-3">
-          {todayModules.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={item.onClick}
-              className="rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 text-left shadow-sm transition-colors hover:bg-[var(--surface-hover)]"
+      <AnimatePresence initial={false}>
+        {showTodayMore && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            className="space-y-3"
+          >
+            {todayWidgets.includes('summary') && (
+              <section className="grid grid-cols-3 gap-1.5 rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-strong)] p-1.5 shadow-sm">
+                {todayRoutes.map(item => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={item.onClick}
+                    className="flex min-h-[5.25rem] min-w-0 flex-col items-center justify-center rounded-[1rem] px-1.5 py-2.5 text-center soft-interaction hover:bg-[var(--surface-hover)]"
+                  >
+                    <div className="flex min-w-0 items-center justify-center gap-1.5">
+                      <item.icon size={14} className={item.tone} />
+                      <p className="text-lg font-semibold leading-none text-[var(--earth)]">{item.value}</p>
+                    </div>
+                    <p className="mt-1 w-full truncate text-[10px] font-medium text-[var(--text-muted)]">{item.label}</p>
+                    <p className="mt-0.5 w-full truncate text-[9px] font-semibold text-[var(--text-muted)]/75">{item.detail}</p>
+                  </button>
+                ))}
+              </section>
+            )}
+
+            {todayModules.length > 0 && (
+              <section className="grid gap-3">
+                {todayModules.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={item.onClick}
+                    className="rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 text-left shadow-sm transition-colors hover:bg-[var(--surface-hover)]"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)]">
+                        <item.icon size={18} className={item.tone} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">{item.eyebrow}</span>
+                        <span className="mt-1 block truncate text-[15px] font-semibold text-[var(--earth)]">{item.title}</span>
+                        <span className="mt-1 block line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{item.detail}</span>
+                      </span>
+                      <span className="flex shrink-0 flex-col items-end gap-2">
+                        <span className="rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-[10px] font-black text-[var(--sage)]">{item.metric}</span>
+                        <ChevronRight size={16} className="text-[var(--text-muted)]" />
+                      </span>
+                    </div>
+                    <span className="mt-3 inline-flex h-8 items-center rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)]">
+                      {item.action}
+                    </span>
+                  </button>
+                ))}
+              </section>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showDaySummary && (
+          <motion.div
+            className="fixed inset-0 z-[75] flex items-end justify-center bg-black/20 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-md sm:items-center sm:pb-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={closeDaySummary}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ type: 'spring', stiffness: 520, damping: 40 }}
+              onClick={(event) => event.stopPropagation()}
+              className="w-full max-w-md overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.24)]"
             >
-              <div className="flex items-start gap-3">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)]">
-                  <item.icon size={18} className={item.tone} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">{item.eyebrow}</span>
-                  <span className="mt-1 block truncate text-[15px] font-semibold text-[var(--earth)]">{item.title}</span>
-                  <span className="mt-1 block line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{item.detail}</span>
-                </span>
-                <span className="flex shrink-0 flex-col items-end gap-2">
-                  <span className="rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-[10px] font-black text-[var(--sage)]">{item.metric}</span>
-                  <ChevronRight size={16} className="text-[var(--text-muted)]" />
-                </span>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                    {appLanguage === 'en' ? 'Day summary' : 'Resumen del día'}
+                  </p>
+                  <h3 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--earth)]">
+                    {appLanguage === 'en' ? 'What moved today?' : '¿Qué se movió hoy?'}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeDaySummary}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--text-muted)]"
+                  aria-label={appLanguage === 'en' ? 'Close day summary' : 'Cerrar resumen del día'}
+                >
+                  <X size={16} />
+                </button>
               </div>
-              <span className="mt-3 inline-flex h-8 items-center rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)]">
-                {item.action}
-              </span>
-            </button>
-          ))}
-        </section>
-      )}
+
+              {dailyIntention.trim() && (
+                <div className="mt-4 rounded-2xl bg-[var(--bg-app)] px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                    {appLanguage === 'en' ? 'Intention' : 'Intención'}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold leading-relaxed text-[var(--earth)]">{dailyIntention}</p>
+                </div>
+              )}
+
+              {savedIntention && (
+                <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] p-3">
+                  <p className="text-xs font-semibold text-[var(--text-muted)]">
+                    {appLanguage === 'en' ? 'Did you move your intention?' : '¿Lograste mover tu intención?'}
+                  </p>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'yes', label: appLanguage === 'en' ? 'Yes' : 'Sí' },
+                      { id: 'some', label: appLanguage === 'en' ? 'A little' : 'Un poco' },
+                      { id: 'no', label: appLanguage === 'en' ? 'Not today' : 'No hoy' },
+                    ].map(option => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setIntentionOutcome(option.id as 'yes' | 'some' | 'no')}
+                        className={`h-10 rounded-full px-2 text-xs font-semibold transition ${
+                          intentionOutcome === option.id
+                            ? 'bg-[var(--sage)] text-[var(--on-sage)] shadow-sm'
+                            : 'bg-[var(--surface-strong)] text-[var(--text-muted)] ring-1 ring-[var(--border)]'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  { label: appLanguage === 'en' ? 'Planted' : 'Plantadas', value: plantedToday, icon: Leaf },
+                  { label: appLanguage === 'en' ? 'Watered' : 'Riegos', value: wateredTodayCount, icon: Droplets },
+                  { label: appLanguage === 'en' ? 'Moved' : 'Avances', value: stepsToday, icon: Target },
+                  { label: appLanguage === 'en' ? 'Harvests' : 'Cosechas', value: completedToday, icon: Archive },
+                ].map(item => (
+                  <div key={item.label} className="rounded-2xl bg-[var(--bg-app)] p-3 text-center">
+                    <item.icon size={16} className="mx-auto text-[var(--sage)]" />
+                    <p className="mt-1 text-xl font-semibold leading-none text-[var(--earth)]">{item.value}</p>
+                    <p className="mt-1 truncate text-[10px] font-semibold text-[var(--text-muted)]">{item.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <label className="mt-4 block">
+                <span className="text-xs font-semibold text-[var(--text-muted)]">
+                  {dailyIntention.trim()
+                    ? appLanguage === 'en'
+                      ? `What did "${dailyIntention}" leave you today?`
+                      : `¿Qué te dejó "${dailyIntention}" hoy?`
+                    : appLanguage === 'en'
+                      ? 'One last reflection'
+                      : 'Una última reflexión'}
+                </span>
+                <textarea
+                  value={dayReflection}
+                  onChange={(event) => setDayReflection(event.target.value)}
+                  rows={4}
+                  className="mt-2 w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-4 py-3 text-sm font-medium leading-relaxed text-[var(--earth)] outline-none focus:border-[var(--border)]"
+                  placeholder={appLanguage === 'en' ? 'Write one sentence...' : 'Escribe una frase...'}
+                />
+              </label>
+
+              <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCloseDay(dayReflection, dailyIntention, intentionOutcome);
+                    setDayReflection('');
+                    closeDaySummary();
+                  }}
+                  className="h-11 rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] shadow-sm"
+                >
+                  {appLanguage === 'en' ? 'Save closure' : 'Guardar cierre'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDayReflection('');
+                    closeDaySummary();
+                  }}
+                  className="h-11 rounded-full bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--text-muted)] ring-1 ring-[var(--border)]"
+                >
+                  {appLanguage === 'en' ? 'Not now' : 'Ahora no'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -1607,6 +2103,7 @@ function InboxView({
   onSelectNote,
   onShowActions,
   recentlyCreatedNoteId,
+  onStartPlanting,
 }: {
   notes: SeedNote[];
   quickNote: string;
@@ -1619,6 +2116,7 @@ function InboxView({
   onSelectNote: (id: string) => void;
   onShowActions: (id: string) => void;
   recentlyCreatedNoteId: string | null;
+  onStartPlanting: () => void;
 }) {
   const inboxNotes = notes.filter(note => note.inbox);
 
@@ -1635,13 +2133,18 @@ function InboxView({
         <p className="mt-1 text-sm font-medium text-[var(--text-muted)]">{inboxNotes.length} {t('pendingSeeds')}</p>
       </div>
 
-      <div className={inboxNotes.length === 0 ? `${IDEA_CARD_SURFACE}` : 'space-y-3'}>
+      <div className={inboxNotes.length === 0 ? '' : 'space-y-3'}>
         {inboxNotes.length === 0 ? (
-          <div className="px-6 py-10 text-center">
-            <Inbox className="mx-auto mb-4 text-[var(--sage)] opacity-45" size={32} />
-            <p className="text-lg font-semibold text-[var(--earth)]">{t('noPendingSeeds')}</p>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">{t('plusReady')}</p>
-          </div>
+          <EmptyStatePanel
+            icon={Inbox}
+            eyebrow={appLanguage === 'en' ? 'Seedbed clear' : 'Semillero limpio'}
+            title={t('noPendingSeeds')}
+            detail={appLanguage === 'en'
+              ? 'Capture ideas without organizing them. They will wait here until you decide what deserves a next step.'
+              : 'Captura ideas sin ordenarlas. Van a esperar aquí hasta que decidas cuál merece un siguiente paso.'}
+            actionLabel={appLanguage === 'en' ? 'Plant a seed' : 'Plantar semilla'}
+            onAction={onStartPlanting}
+          />
         ) : inboxNotes.map((note) => {
           const hasUsefulDescription = note.content.trim().toLowerCase() !== note.title.trim().toLowerCase();
           const cardDescription = hasUsefulDescription
@@ -1707,6 +2210,7 @@ function ProjectsView({
   onOpenWatering,
   onTogglePause,
   onShowActions,
+  onStartSprout,
   getProgress,
 }: {
   notes: SeedNote[];
@@ -1716,6 +2220,7 @@ function ProjectsView({
   onOpenWatering: (id: string) => void;
   onTogglePause: (id: string) => void;
   onShowActions: (id: string) => void;
+  onStartSprout: () => void;
   getProgress: (note: SeedNote) => number;
 }) {
   const activeProjects = notes.filter(note => !note.inbox && note.isGrowth && note.growthStage !== 'bloom');
@@ -1777,11 +2282,16 @@ function ProjectsView({
 
       <section className="space-y-3">
         {sortedProjects.length === 0 ? (
-          <div className="rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)] p-8 text-center">
-            <Sprout className="mx-auto mb-4 text-[var(--sage)] opacity-40" size={38} />
-            <p className="text-xl font-semibold text-[var(--earth)]">Todavía no hay brotes</p>
-            <p className="mt-2 text-sm text-[var(--text-muted)]">Convierte una semilla en proyecto cuando necesite pasos.</p>
-          </div>
+          <EmptyStatePanel
+            icon={Sprout}
+            eyebrow={appLanguage === 'en' ? 'No active sprouts' : 'Sin brotes activos'}
+            title={appLanguage === 'en' ? 'Nothing needs steps yet' : 'Nada necesita pasos todavía'}
+            detail={appLanguage === 'en'
+              ? 'When an idea is worth moving, turn it into a sprout with one five-minute next step.'
+              : 'Cuando una idea valga la pena, conviértela en brote con un solo siguiente paso de 5 minutos.'}
+            actionLabel={appLanguage === 'en' ? 'Create sprout' : 'Crear brote'}
+            onAction={onStartSprout}
+          />
         ) : sortedProjects.map(note => {
           const nextTask = note.tasks.find(task => !task.completed);
           const progress = getProgress(note);
@@ -1835,7 +2345,7 @@ function ProjectsView({
   );
 }
 
-function HarvestView({ notes, onSelectNote }: { notes: SeedNote[]; onSelectNote: (id: string) => void }) {
+function HarvestView({ notes, onSelectNote, onStartPlanting }: { notes: SeedNote[]; onSelectNote: (id: string) => void; onStartPlanting: () => void }) {
   const harvests = notes
     .filter(note => note.growthStage === 'bloom')
     .sort((a, b) => (b.harvestedAt || b.createdAt) - (a.harvestedAt || a.createdAt));
@@ -1875,11 +2385,16 @@ function HarvestView({ notes, onSelectNote }: { notes: SeedNote[]; onSelectNote:
       </section>
 
       {harvests.length === 0 ? (
-        <section className="rounded-[2rem] border border-[var(--border)] bg-[var(--surface-soft)] p-8 text-center">
-          <Archive className="mx-auto mb-4 text-[var(--sage)] opacity-40" size={44} />
-          <p className="font-serif text-2xl text-[var(--earth)]">Todavía no hay cosechas</p>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">Completa los pasos de una idea para guardar aquí su cierre.</p>
-        </section>
+        <EmptyStatePanel
+          icon={Archive}
+          eyebrow={appLanguage === 'en' ? 'Living archive' : 'Archivo vivo'}
+          title={appLanguage === 'en' ? 'No harvests yet' : 'Todavía no hay cosechas'}
+          detail={appLanguage === 'en'
+            ? 'Complete a small step cycle and Seeds will save what changed, what you learned and what can grow next.'
+            : 'Completa un ciclo pequeño y Seeds guardará qué cambió, qué aprendiste y qué podría crecer después.'}
+          actionLabel={appLanguage === 'en' ? 'Plant first idea' : 'Plantar primera idea'}
+          onAction={onStartPlanting}
+        />
       ) : (
         <>
           {featuredLearning && (
@@ -3502,6 +4017,8 @@ function AuthEntryPage({
 export default function App() {
   const [notes, setNotes] = useState<SeedNote[]>([]);
   const [notesLoaded, setNotesLoaded] = useState(false);
+  const todayKey = format(new Date(), 'yyyy-MM-dd');
+  const [dailyIntention, setDailyIntention] = useState(() => getStoredItem(`seed-daily-intention-${todayKey}`) || '');
   const [showLanding, setShowLanding] = useState(() => getStoredItem('seed-welcome-v2-seen') !== 'true');
   const [landingRoute, setLandingRoute] = useState<'landing' | 'login' | 'register'>('landing');
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -3535,7 +4052,16 @@ export default function App() {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [quickActionsNoteId, setQuickActionsNoteId] = useState<string | null>(null);
   const [recentlyCreatedNoteId, setRecentlyCreatedNoteId] = useState<string | null>(null);
-  const [newNote, setNewNote] = useState<{ title: string; content: string; dueDate: string; seedType: NonNullable<SeedNote['seedType']> }>({ title: '', content: '', dueDate: '', seedType: 'idea' });
+  const [newNote, setNewNote] = useState<{
+    title: string;
+    content: string;
+    dueDate: string;
+    seedType: NonNullable<SeedNote['seedType']>;
+    priority: NonNullable<SeedNote['priority']>;
+    planetId: string;
+  }>({ title: '', content: '', dueDate: '', seedType: 'idea', priority: 'normal', planetId: DEFAULT_PLANET_ID });
+  const [quickEntryPicker, setQuickEntryPicker] = useState<QuickEntryPicker>(null);
+  const [showQuickEntryDetails, setShowQuickEntryDetails] = useState(false);
   const [quickNote, setQuickNote] = useState('');
   const [isLinking, setIsLinking] = useState(false);
   const [wateringNoteId, setWateringNoteId] = useState<string | null>(null);
@@ -3546,6 +4072,8 @@ export default function App() {
   const [celebration, setCelebration] = useState<string | null>(null);
   const [flowerReward, setFlowerReward] = useState<{ id: string; title: string } | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => getStoredItem('seed-onboarded') !== 'true');
+  const [hapticsEnabled, setHapticsEnabled] = useState(() => getStoredBoolean('seed-haptics', true));
+  const [soundsEnabled, setSoundsEnabled] = useState(() => getStoredBoolean('seed-sounds', false));
 	  const [showSettings, setShowSettings] = useState(false);
 	  const [showMobileMenu, setShowMobileMenu] = useState(false);
 	  const [showGardenSwitcher, setShowGardenSwitcher] = useState(false);
@@ -3599,7 +4127,6 @@ export default function App() {
       return { lastDate: '', streak: 0 };
     }
   });
-  const todayKey = format(Date.now(), 'yyyy-MM-dd');
   const wateredToday = wateringRitual.lastDate === todayKey;
   const accountInitials = getAccountInitials(account.name, account.email);
   const profileStats = useMemo(() => {
@@ -3911,8 +4438,24 @@ export default function App() {
   }, [account]);
 
   useEffect(() => {
+    setStoredItem(`seed-daily-intention-${todayKey}`, dailyIntention);
+  }, [dailyIntention, todayKey]);
+
+  useEffect(() => {
     setStoredItem('seed-watering-ritual', JSON.stringify(wateringRitual));
   }, [wateringRitual]);
+
+  useEffect(() => {
+    setStoredItem('seed-haptics', hapticsEnabled ? 'true' : 'false');
+  }, [hapticsEnabled]);
+
+  useEffect(() => {
+    setStoredItem('seed-sounds', soundsEnabled ? 'true' : 'false');
+  }, [soundsEnabled]);
+
+  useEffect(() => {
+    preloadSeedSounds();
+  }, []);
 
   useEffect(() => {
     if (!supabase) return;
@@ -3931,6 +4474,23 @@ export default function App() {
       subscription.subscription.unsubscribe();
     };
   }, []);
+
+  const playMicroSound = (kind: SeedSoundKind, force = false) => {
+    playSeedSound(kind, soundsEnabled, force);
+  };
+
+  const feel = (kind: 'open' | SeedSoundKind, force = false) => {
+    if ((force || hapticsEnabled) && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      const pattern =
+        kind === 'harvest' ? [12, 36, 18] :
+        kind === 'plant' ? [14, 24, 10] :
+        kind === 'water' ? [8, 18, 8] :
+        kind === 'step' ? 10 :
+        7;
+      navigator.vibrate(pattern);
+    }
+    if (kind !== 'open') playMicroSound(kind, force);
+  };
 
   useEffect(() => {
     if (!session?.user || !notesLoaded) {
@@ -4128,6 +4688,7 @@ export default function App() {
 	    const isJournal = createMode === 'journal';
 	    const firstStep = title || content || (appLanguage === 'en' ? 'Take the first five-minute step' : 'Dar el primer paso de 5 minutos');
 	    const now = Date.now();
+	    const targetPlanetId = planets.some(planet => planet.id === newNote.planetId) ? newNote.planetId : activePlanetId;
 	    
 	    const note: SeedNote = {
 	      id: crypto.randomUUID(),
@@ -4143,18 +4704,25 @@ export default function App() {
 	      wateringIntervalDays: defaultWateringInterval,
 	      inbox: !isSprout && !isJournal,
 	      seedType: isJournal ? 'learning' : isSprout ? 'project' : newNote.seedType,
+	      priority: newNote.priority,
 	      reflection: isJournal ? fallbackContent : undefined,
 	      harvestedAt: isJournal ? now : undefined,
-	      planetId: activePlanetId,
+	      planetId: targetPlanetId,
 	    };
     
 	    setNotes([touchNote(note), ...notes]);
-	    setNewNote({ title: '', content: '', dueDate: '', seedType: 'idea' });
+	    setActivePlanetId(targetPlanetId);
+	    setNewNote({ title: '', content: '', dueDate: '', seedType: 'idea', priority: 'normal', planetId: targetPlanetId });
 	    setCreateMode('seed');
+	    setQuickEntryPicker(null);
+	    setShowQuickEntryDetails(false);
 	    setIsAdding(false);
 	    setSelectedNoteId(null);
 	    setRecentlyCreatedNoteId(note.id);
+	    feel(isJournal ? 'harvest' : isSprout ? 'sprout' : 'plant');
+	    setCelebration(isJournal ? 'Reflexión guardada' : isSprout ? 'Brote creado' : 'Semilla plantada');
 	    window.setTimeout(() => setRecentlyCreatedNoteId(current => current === note.id ? null : current), 1800);
+	    window.setTimeout(() => setCelebration(null), 1500);
 	    setView(isJournal ? 'harvest' : isSprout ? 'projects' : 'inbox');
 	  };
 
@@ -4175,11 +4743,15 @@ export default function App() {
       wateringIntervalDays: defaultWateringInterval,
       inbox: true,
       seedType: 'idea',
+      priority: 'normal',
       planetId: activePlanetId,
     };
 
     setNotes([touchNote(note), ...notes]);
     setQuickNote('');
+    feel('plant');
+    setCelebration('Semilla plantada');
+    window.setTimeout(() => setCelebration(null), 1500);
     setView('inbox');
   };
 
@@ -4248,6 +4820,9 @@ export default function App() {
       addTinyStep(sproutPromptNoteId, firstStep);
     } else {
       growNote(sproutPromptNoteId, firstStep);
+      feel('sprout');
+      setCelebration('Semilla convertida en brote');
+      window.setTimeout(() => setCelebration(null), 1500);
       setSelectedNoteId(null);
       setFilterStage('all');
       setSearch('');
@@ -4261,8 +4836,90 @@ export default function App() {
     setNotes(notes.map(n => n.id === id ? touchNote(waterSeedNote(n, note)) : n));
     recordWateringRitual();
     markRecentlyWatered(id);
+    feel('water');
+    setCelebration('Idea regada');
+    window.setTimeout(() => setCelebration(null), 1500);
     setWateringNoteId(null);
     setWateringNote('');
+  };
+
+  const skipWateringToday = (id: string) => {
+    setNotes(notes.map(n => n.id === id ? touchNote({
+      ...n,
+      lastWateredAt: Date.now(),
+      lastWateringNote: appLanguage === 'en' ? 'Later today: still worth keeping.' : 'Más tarde: sigue valiendo la pena.',
+    }) : n));
+    setCelebration(appLanguage === 'en' ? 'Saved for later' : 'La dejamos para después');
+    window.setTimeout(() => setCelebration(null), 1500);
+  };
+
+  const closeDayWithReflection = (reflection: string, intention: string, intentionOutcome: 'yes' | 'some' | 'no' | '' = '') => {
+    if (notes.some(note => isDailyClosureForDate(note))) {
+      setCelebration(appLanguage === 'en' ? 'Day already closed' : 'El día ya está cerrado');
+      window.setTimeout(() => setCelebration(null), 1500);
+      setView('harvest');
+      return;
+    }
+
+    const cleanedReflection = reflection.trim();
+    const cleanedIntention = intention.trim();
+    const outcomeText = intentionOutcome === 'yes'
+      ? appLanguage === 'en' ? 'Intention moved: yes' : 'Intención lograda: sí'
+      : intentionOutcome === 'some'
+        ? appLanguage === 'en' ? 'Intention moved: a little' : 'Intención lograda: un poco'
+        : intentionOutcome === 'no'
+          ? appLanguage === 'en' ? 'Intention moved: not today' : 'Intención lograda: no hoy'
+          : '';
+    const todayNotes = notes.filter(note => isToday(note.createdAt));
+    const todayWatered = notes.filter(note => note.lastWateredAt && isToday(note.lastWateredAt));
+    const todayHarvests = notes.filter(note => note.harvestedAt && isToday(note.harvestedAt));
+    const todaySteps = notes.filter(note =>
+      note.updatedAt &&
+      isToday(note.updatedAt) &&
+      note.tasks.some(task => task.completed)
+    );
+    const summary = appLanguage === 'en'
+      ? `${todayNotes.length} planted · ${todayWatered.length} watered · ${todaySteps.length} moved · ${todayHarvests.length} harvested`
+      : `${todayNotes.length} plantadas · ${todayWatered.length} riegos · ${todaySteps.length} avances · ${todayHarvests.length} cosechas`;
+    const content = [
+      cleanedIntention
+        ? appLanguage === 'en'
+          ? `Intention: ${cleanedIntention}`
+          : `Intención: ${cleanedIntention}`
+        : null,
+      outcomeText || null,
+      summary,
+      cleanedReflection,
+    ].filter(Boolean).join('\n\n');
+
+    const note: SeedNote = {
+      id: crypto.randomUUID(),
+      title: appLanguage === 'en' ? 'Today closure' : 'Cierre del día',
+      content,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      tags: [DAILY_CLOSURE_TAG],
+      isGrowth: false,
+      tasks: [],
+      growthStage: 'bloom',
+      lastWateredAt: Date.now(),
+      wateringIntervalDays: defaultWateringInterval,
+      inbox: false,
+      seedType: 'learning',
+      priority: 'normal',
+      reflection: cleanedReflection || content,
+      takeaway: outcomeText || cleanedIntention || summary,
+      harvestedAt: Date.now(),
+      planetId: activePlanetId,
+    };
+
+    setNotes(current => {
+      if (current.some(existing => isDailyClosureForDate(existing))) return current;
+      return [touchNote(note), ...current];
+    });
+    setCelebration(appLanguage === 'en' ? 'Day closed' : 'Día cerrado');
+    window.setTimeout(() => setCelebration(null), 1500);
+    setView('harvest');
   };
 
   const harvestFromWatering = (id: string) => {
@@ -4279,6 +4936,7 @@ export default function App() {
     markRecentlyWatered(id);
     setWateringNoteId(null);
     setWateringNote('');
+    feel('harvest');
     if (completedNote) setFlowerReward({ id, title: completedNote.title });
   };
 
@@ -4304,6 +4962,7 @@ export default function App() {
     }) : n));
     setSelectedNoteId(null);
     if (completedNote) {
+      feel('harvest');
       setFlowerReward({ id, title: completedNote.title });
     }
   };
@@ -4314,6 +4973,7 @@ export default function App() {
 
   const addTinyStep = (id: string, text?: string) => {
     const taskText = (text || wateringNote).trim() || 'Dedicar 2 minutos a destrabar esta idea';
+    const previousNote = notes.find(note => note.id === id);
     setNotes(notes.map(n => {
       if (n.id !== id) return n;
       return touchNote({
@@ -4329,6 +4989,9 @@ export default function App() {
     }));
     recordWateringRitual();
     markRecentlyWatered(id);
+    feel(previousNote?.growthStage === 'seed' || !previousNote?.isGrowth ? 'sprout' : 'step');
+    setCelebration('Brote con siguiente paso');
+    window.setTimeout(() => setCelebration(null), 1500);
     openFocusMode(id);
     setWateringNoteId(null);
     setWateringNote('');
@@ -4423,11 +5086,13 @@ export default function App() {
         const currentTask = n.tasks.find(t => t.id === taskId);
         const wasBloom = n.growthStage === 'bloom';
         if (currentTask && !currentTask.completed) {
-          setCelebration(n.title);
-          window.setTimeout(() => setCelebration(null), 1800);
+          feel('step');
+          setCelebration('Paso completado');
+          window.setTimeout(() => setCelebration(null), 1500);
         }
         const updated = toggleTaskForNote(n, taskId);
         if (!wasBloom && updated.growthStage === 'bloom') {
+          feel('harvest');
           window.setTimeout(() => setHarvestNoteId(updated.id), 500);
         }
         return touchNote(updated);
@@ -4533,6 +5198,7 @@ export default function App() {
 	  const selectedReviewDays = selectedNote ? daysSince(selectedNote.lastWateredAt || selectedNote.createdAt) : 0;
 	  const selectedGuidance = selectedNote ? getIdeaGuidance(selectedNote) : null;
 	  const selectedSeedType = selectedNote ? (SEED_TYPES.find(type => type.id === (selectedNote.seedType || 'idea')) || SEED_TYPES[0]) : SEED_TYPES[0];
+	  const selectedPriority = selectedNote ? (PRIORITY_OPTIONS.find(option => option.id === (selectedNote.priority || 'normal')) || PRIORITY_OPTIONS[1]) : PRIORITY_OPTIONS[1];
 	  const selectedNextTask = selectedNote?.tasks.find(task => !task.completed);
 
   const exportGarden = () => {
@@ -4616,10 +5282,15 @@ export default function App() {
 	  const startPlanting = () => {
 	    setShowCreateMenu(false);
 	    setCreateMode('seed');
+	    setQuickEntryPicker(null);
+	    setShowQuickEntryDetails(false);
+	    unlockSeedAudio();
+	    feel('open');
+	    playMicroSound('pop', true);
 	    setSelectedNoteId(null);
 	    setFilterStage('all');
 	    setSearch('');
-	    setNewNote({ title: '', content: '', dueDate: '', seedType: 'idea' });
+	    setNewNote({ title: '', content: '', dueDate: '', seedType: 'idea', priority: 'normal', planetId: activePlanetId });
 	    setIsAdding(true);
 	  };
 
@@ -4859,10 +5530,12 @@ export default function App() {
 	    : undefined;
   const startCreateMenuPress = () => {
     if (showCreateMenu) return;
+    unlockSeedAudio();
     createMenuLongPressRef.current = false;
     if (createMenuTimerRef.current) window.clearTimeout(createMenuTimerRef.current);
     createMenuTimerRef.current = window.setTimeout(() => {
       createMenuLongPressRef.current = true;
+      playMicroSound('holdPop', true);
       setShowCreateMenu(true);
     }, 420);
   };
@@ -4886,11 +5559,15 @@ export default function App() {
     setFilterStage('all');
     setSearch('');
     setCreateMode(option);
+    setQuickEntryPicker(null);
+    setShowQuickEntryDetails(option !== 'seed');
     setNewNote({
       title: '',
       content: '',
       dueDate: '',
       seedType: option === 'sprout' ? 'project' : option === 'journal' ? 'learning' : 'idea',
+      priority: 'normal',
+      planetId: activePlanetId,
     });
     setIsAdding(true);
   };
@@ -4966,7 +5643,14 @@ export default function App() {
           titlePlaceholder: appLanguage === 'en' ? 'New seed' : 'Nueva semilla',
         };
   const quickEntryTypeLabel = SEED_TYPES.find(type => type.id === newNote.seedType)?.label || 'Idea';
+  const quickEntryPriority = PRIORITY_OPTIONS.find(option => option.id === newNote.priority) || PRIORITY_OPTIONS[1];
+  const quickEntryPlanet = planets.find(planet => planet.id === newNote.planetId) || activePlanet;
   const quickEntryToday = format(new Date(), 'yyyy-MM-dd');
+  const closeQuickEntry = () => {
+    setQuickEntryPicker(null);
+    setShowQuickEntryDetails(false);
+    setIsAdding(false);
+  };
 
   if (showLanding) {
     if (landingRoute !== 'landing') {
@@ -5017,8 +5701,13 @@ export default function App() {
         </button>
         <button
           type="button"
-          onClick={() => setShowMobileMenu(true)}
+          onClick={() => {
+            setSelectedNoteId(null);
+            setShowCreateMenu(false);
+            setView('today');
+          }}
           className="min-w-0 flex-1 px-2 text-center"
+          aria-label="Ir a Hoy"
         >
           <span className="block truncate text-[15px] font-semibold text-[var(--earth)]">{activePlanet.name}</span>
           <span className="block truncate text-[11px] font-medium text-[var(--text-muted)]">{planetNotes.length} ideas</span>
@@ -5188,7 +5877,7 @@ export default function App() {
                           <p className="text-[10px] font-semibold text-[var(--text-muted)]">Crea un espacio para un tema.</p>
                         </div>
                       </div>
-                      <label className="flex h-12 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-3 shadow-sm focus-within:border-[var(--sage)] focus-within:ring-2 focus-within:ring-[var(--sage)]/10">
+                      <label className="flex h-12 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-3 shadow-sm focus-within:border-[var(--border)]">
                         <Sprout size={15} className="shrink-0 text-[var(--sage)]" />
                         <input
                           value={newPlanetName}
@@ -5232,7 +5921,7 @@ export default function App() {
                           <p className="text-[10px] font-semibold text-[var(--text-muted)]">Renombra o elimina este jardín.</p>
                         </div>
                       </div>
-                      <label className="flex h-12 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-3 shadow-sm focus-within:border-[var(--sage)] focus-within:ring-2 focus-within:ring-[var(--sage)]/10">
+                      <label className="flex h-12 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-3 shadow-sm focus-within:border-[var(--border)]">
                         <Leaf size={15} className="shrink-0 text-[var(--sage)]" />
                         <input
                           value={editingPlanetName}
@@ -5426,7 +6115,7 @@ export default function App() {
                   placeholder="Buscar en el jardín..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] pl-10 pr-4 text-sm transition-all focus:bg-[var(--surface-strong)] focus:outline-none focus:ring-1 focus:ring-[var(--sage)] md:h-11 md:rounded-xl"
+                  className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] pl-10 pr-4 text-sm transition-all focus:bg-[var(--surface-strong)] focus:outline-none focus:ring-0 md:h-11 md:rounded-xl"
                 />
               </div>
             </header>
@@ -5434,22 +6123,26 @@ export default function App() {
             <AnimatePresence mode="popLayout" initial={false}>
               {view === 'today' ? (
                 <TodayView
+                  accountName={account.name}
                   notes={planetNotes}
                   quickNote={quickNote}
                   setQuickNote={setQuickNote}
                   onQuickCapture={addQuickNote}
                   onOpenWatering={openWatering}
+                  onSkipWatering={skipWateringToday}
                   onSelectNote={setSelectedNoteId}
                   onToggleTask={toggleTask}
                   onFocusNote={openFocusMode}
-                  onEnableNotifications={enableNotifications}
                   onStartPlanting={startPlanting}
+                  onCloseDay={closeDayWithReflection}
                   onNavigate={navigateToView}
                   onShowWateringQueue={showWateringQueue}
                   todayWidgets={todayWidgets}
                   wateredToday={wateredToday}
                   wateringStreak={wateringRitual.streak}
                   getProgress={getProgress}
+                  dailyIntention={dailyIntention}
+                  setDailyIntention={setDailyIntention}
                 />
               ) : view === 'inbox' ? (
                 <InboxView
@@ -5464,6 +6157,7 @@ export default function App() {
 	                  onSelectNote={setSelectedNoteId}
 	                  onShowActions={setQuickActionsNoteId}
 	                  recentlyCreatedNoteId={recentlyCreatedNoteId}
+	                  onStartPlanting={() => openCreateOption('seed')}
 	                />
               ) : view === 'projects' ? (
                 <ProjectsView
@@ -5474,6 +6168,7 @@ export default function App() {
                   onOpenWatering={openWatering}
                   onTogglePause={togglePauseNote}
                   onShowActions={setQuickActionsNoteId}
+                  onStartSprout={() => openCreateOption('sprout')}
                   getProgress={getProgress}
                 />
               ) : view === 'focus' ? (
@@ -5558,7 +6253,7 @@ export default function App() {
                   </section>
                 </motion.div>
               ) : view === 'harvest' ? (
-                <HarvestView notes={planetNotes} onSelectNote={setSelectedNoteId} />
+                <HarvestView notes={planetNotes} onSelectNote={setSelectedNoteId} onStartPlanting={() => openCreateOption('seed')} />
               ) : view === 'garden' ? (
                 <motion.div
                   key={`${view}-view`}
@@ -5782,6 +6477,7 @@ export default function App() {
                       notes={filteredNotes} 
                       theme={activePlanet.theme || theme}
                       planetName={activePlanet.name}
+                      dailyIntention={dailyIntention}
                       onSelectNote={setSelectedNoteId} 
                       onReviewNote={openWatering}
                       onFocusNote={openFocusMode}
@@ -5823,6 +6519,7 @@ export default function App() {
                       notes={filteredNotes}
                       theme={activePlanet.theme || theme}
                       planetName={activePlanet.name}
+                      dailyIntention={dailyIntention}
                       fullscreen
                       onSelectNote={(id) => {
                         setSelectedNoteId(id);
@@ -5841,33 +6538,25 @@ export default function App() {
             </AnimatePresence>
 
             {visibleGardenNotes.length === 0 && !isAdding && view === 'garden' && (
-              <div className="text-center py-24 flex flex-col items-center rounded-[2rem] bg-[var(--surface-soft)] border border-[var(--border)]">
-                <div className="relative mb-8">
-                  <Leaf className="text-[var(--seed)] opacity-10" size={120} />
-                  <motion.div 
-                    animate={{ y: [0, -10, 0] }}
-                    transition={{ duration: 4, repeat: Infinity }}
-                    className="absolute inset-0 flex items-center justify-center"
-                  >
-                    <Sprout size={48} className="text-[var(--sage)] opacity-20" />
-                  </motion.div>
-                </div>
-                <p className="text-[var(--earth)] opacity-50 font-serif italic text-2xl max-w-xs mx-auto leading-relaxed">
-                  {search || filterStage !== 'all'
-                    ? 'No hay ideas con este filtro. Prueba Colección Total o busca otra palabra.'
-                    : 'Escribe una idea que no quieres perder. No tiene que estar perfecta.'}
-                </p>
-                <motion.button 
-                  whileHover={{ y: -2 }}
-                  whileTap={{ y: 0 }}
-                  onClick={() => {
-                    startPlanting();
-                  }}
-                  className="mt-10 bg-[var(--sage)] text-[var(--on-sage)] px-10 py-4 rounded-2xl font-bold shadow-xl shadow-[var(--sage)]/20 soft-interaction hover:brightness-110"
-                >
-                  Plantar mi primera semilla
-                </motion.button>
-              </div>
+              <EmptyStatePanel
+                icon={Leaf}
+                eyebrow={search || filterStage !== 'all' ? 'Filtro sin resultados' : 'Jardín listo'}
+                title={search || filterStage !== 'all' ? 'No hay ideas con este filtro' : 'Tu jardín todavía está esperando su primera semilla'}
+                detail={search || filterStage !== 'all'
+                  ? 'Prueba Todo el jardín o busca otra palabra para encontrar lo que ya plantaste.'
+                  : 'Escribe una idea que no quieres perder. No tiene que estar perfecta para empezar a crecer.'}
+                actionLabel={search || filterStage !== 'all' ? 'Ver todo' : 'Plantar semilla'}
+                onAction={() => {
+                  if (search || filterStage !== 'all') {
+                    setSearch('');
+                    setFilterStage('all');
+                    return;
+                  }
+                  startPlanting();
+                }}
+                secondaryLabel={search || filterStage !== 'all' ? 'Plantar nueva' : undefined}
+                onSecondary={search || filterStage !== 'all' ? startPlanting : undefined}
+              />
             )}
           </div>
         </section>
@@ -5900,12 +6589,21 @@ export default function App() {
 	                    <div className="absolute inset-x-0 top-0 h-24 bg-[linear-gradient(135deg,var(--surface-soft),transparent)]" />
 	                    <div className="relative">
 	                      <div className="mb-4 flex items-center justify-between gap-3">
-	                        <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold ${STAGE_META[selectedNote.growthStage].bg} ${STAGE_META[selectedNote.growthStage].color}`}>
-	                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-	                          {selectedNote.paused ? 'Pausada' : STAGE_META[selectedNote.growthStage].shortLabel}
-	                        </span>
-	                        <span className="rounded-full bg-[var(--bg-app)] px-3 py-1.5 text-[11px] font-semibold text-[var(--text-muted)]">
-	                          {selectedSeedType.label}
+	                        <div className="flex min-w-0 flex-wrap gap-2">
+	                          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold ${STAGE_META[selectedNote.growthStage].bg} ${STAGE_META[selectedNote.growthStage].color}`}>
+	                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+	                            {selectedNote.paused ? 'Pausada' : STAGE_META[selectedNote.growthStage].shortLabel}
+	                          </span>
+	                          <span className="rounded-full bg-[var(--bg-app)] px-3 py-1.5 text-[11px] font-semibold text-[var(--text-muted)]">
+	                            {selectedSeedType.label}
+	                          </span>
+	                          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--bg-app)] px-3 py-1.5 text-[11px] font-semibold text-[var(--text-muted)]">
+	                            <Star size={12} />
+	                            {priorityLabel(selectedPriority)}
+	                          </span>
+	                        </div>
+	                        <span className="shrink-0 rounded-full bg-[var(--bg-app)] px-3 py-1.5 text-[11px] font-semibold text-[var(--text-muted)]">
+	                          {formatShortDate(selectedNote.createdAt)}
 	                        </span>
 	                      </div>
 	
@@ -5913,20 +6611,17 @@ export default function App() {
 	                        type="text"
 	                        value={selectedNote.title}
 	                        onChange={(e) => updateNote(selectedNote.id, { title: e.target.value })}
-	                        className="seed-title-input w-full bg-transparent text-[2rem] font-semibold leading-none tracking-tight text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/38"
+	                        className="seed-title-input w-full bg-transparent text-[2rem] font-semibold leading-tight tracking-tight text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/38"
 	                        placeholder="Sin título"
 	                      />
 	
 	                      <textarea
 	                        value={selectedNote.content}
 	                        onChange={(e) => updateNote(selectedNote.id, { content: e.target.value })}
-	                        rows={4}
-	                        className="mt-4 w-full resize-none bg-transparent text-[15px] font-medium leading-relaxed text-[var(--text-main)] outline-none placeholder:text-[var(--text-muted)]/50"
-	                        placeholder="Qué quieres recordar de esta semilla?"
+	                        rows={3}
+	                        className="mt-3 min-h-[5.5rem] w-full resize-none bg-transparent text-base font-medium leading-relaxed text-[var(--text-main)] outline-none placeholder:text-[var(--text-muted)]/50"
+	                        placeholder="Qué quieres recordar de esta idea?"
 	                      />
-	                      <p className="mt-3 text-xs font-medium text-[var(--text-muted)]">
-	                        {appLanguage === 'en' ? 'Created' : 'Creada'} {formatShortDate(selectedNote.createdAt)}
-	                      </p>
 	                    </div>
 	                  </div>
 	                </section>
@@ -5943,6 +6638,14 @@ export default function App() {
 	                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Siguiente movimiento</p>
 	                      <h4 className="mt-1 text-lg font-semibold tracking-tight text-[var(--earth)]">{selectedGuidance.title}</h4>
 	                      <p className="mt-1 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{selectedGuidance.detail}</p>
+	                      <div className="mt-3 flex flex-wrap gap-2">
+	                        <span className="rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-[10px] font-semibold text-[var(--text-muted)]">
+	                          {selectedNote.growthStage === 'bloom' ? 'Cosechada' : formatReviewAge(selectedNote)}
+	                        </span>
+	                        <span className="rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-[10px] font-semibold text-[var(--text-muted)]">
+	                          {selectedNote.isGrowth && selectedNote.tasks.length > 0 ? `${selectedCompletedSteps}/${selectedNote.tasks.length} pasos` : 'Sin pasos'}
+	                        </span>
+	                      </div>
 	                    </div>
 	                  </div>
 	                  {!(selectedIsDone && selectedGuidance.kind === 'open') && (
@@ -5972,7 +6675,7 @@ export default function App() {
 	                    <div className="border-b border-[var(--border)] p-4">
 	                      <div className="flex items-center justify-between">
 	                        <div>
-	                          <p className="text-sm font-semibold text-[var(--earth)]">Brote</p>
+	                          <p className="text-sm font-semibold text-[var(--earth)]">Siguiente paso</p>
 	                          <p className="mt-0.5 text-xs font-medium text-[var(--text-muted)]">
 	                            {selectedNextTask ? selectedNextTask.text : selectedNote.growthStage === 'bloom' ? 'Cosecha completada' : 'Añade un paso pequeño'}
 	                          </p>
@@ -6023,7 +6726,7 @@ export default function App() {
 	                      </AnimatePresence>
 	                      <button
 	                        onClick={() => addTask(selectedNote.id)}
-	                        className="mt-1 flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--bg-app)] text-xs font-semibold text-[var(--sage)] soft-interaction"
+	                        className="mt-1 flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--bg-app)] text-sm font-semibold text-[var(--sage)] soft-interaction"
 	                      >
 	                        <Plus size={14} /> Añadir paso mínimo
 	                      </button>
@@ -6054,12 +6757,12 @@ export default function App() {
 	                <section className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
 	                  {[
 	                    { label: 'Creada', value: formatShortDate(selectedNote.createdAt) },
-	                    { label: 'Revisión', value: selectedNote.growthStage === 'bloom' ? 'Lista' : `${selectedReviewDays}d` },
-	                    { label: 'Pasos', value: selectedNote.isGrowth ? `${selectedCompletedSteps}/${selectedNote.tasks.length}` : 'Libre' },
+	                    { label: 'Riego', value: selectedNote.growthStage === 'bloom' ? 'Lista' : selectedReviewDays <= 0 ? 'Hoy' : `${selectedReviewDays}d` },
+	                    { label: 'Pasos', value: selectedNote.isGrowth && selectedNote.tasks.length > 0 ? `${selectedCompletedSteps}/${selectedNote.tasks.length}` : 'Libre' },
 	                    { label: 'Foco', value: `${selectedNote.focusedMinutes || 0}m` },
 	                  ].map(item => (
-	                    <div key={item.label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-3 text-center shadow-sm">
-	                      <p className="text-lg font-semibold text-[var(--earth)]">{item.value}</p>
+	                    <div key={item.label} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-3 py-3 text-center shadow-sm">
+	                      <p className="truncate text-lg font-semibold text-[var(--earth)]">{item.value}</p>
 	                      <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">{item.label}</p>
 	                    </div>
 	                  ))}
@@ -6086,14 +6789,14 @@ export default function App() {
 	                      value={selectedNote.reflection || ''}
 	                      onChange={(e) => updateNote(selectedNote.id, { reflection: e.target.value })}
 	                      rows={3}
-	                      className="mt-3 w-full resize-none rounded-2xl border border-[#dfe8dd] bg-[var(--surface-strong)]/85 p-3 text-sm font-medium text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/65 focus:ring-1 focus:ring-[var(--sage)]"
+	                      className="mt-3 w-full resize-none rounded-2xl border border-[#dfe8dd] bg-[var(--surface-strong)]/85 p-3 text-sm font-medium text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/65 focus:ring-0"
 	                      placeholder="Qué aprendiste de esta idea?"
 	                    />
 	                    <textarea
 	                      value={selectedNote.takeaway || ''}
 	                      onChange={(e) => updateNote(selectedNote.id, { takeaway: e.target.value })}
 	                      rows={2}
-	                      className="mt-2 w-full resize-none rounded-2xl border border-[#dfe8dd] bg-[var(--surface-strong)]/85 p-3 text-sm font-medium text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/65 focus:ring-1 focus:ring-[var(--sage)]"
+	                      className="mt-2 w-full resize-none rounded-2xl border border-[#dfe8dd] bg-[var(--surface-strong)]/85 p-3 text-sm font-medium text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/65 focus:ring-0"
 	                      placeholder="Qué te dejó este proyecto?"
 	                    />
 	                  </section>
@@ -6126,6 +6829,24 @@ export default function App() {
 	                            }`}
 	                          >
 	                            {type.label}
+	                          </button>
+	                        ))}
+	                      </div>
+	                    </div>
+	                    <div className="border-b border-[var(--border)] px-4 py-3">
+	                      <p className="mb-2 text-sm font-medium text-[var(--text-muted)]">Prioridad</p>
+	                      <div className="flex gap-2 overflow-x-auto pb-1 app-scrollbar">
+	                        {PRIORITY_OPTIONS.map(option => (
+	                          <button
+	                            key={option.id}
+	                            onClick={() => updateNote(selectedNote.id, { priority: option.id })}
+	                            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+	                              selectedPriority.id === option.id
+	                                ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+	                                : 'bg-[var(--bg-app)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--earth)]'
+	                            }`}
+	                          >
+	                            {priorityLabel(option)}
 	                          </button>
 	                        ))}
 	                      </div>
@@ -6350,7 +7071,7 @@ export default function App() {
                     onChange={(event) => setSproutFirstStep(event.target.value)}
                     rows={3}
                     placeholder="Ej. Escribir 3 ideas, abrir el archivo, mandar un mensaje..."
-                    className="mt-4 w-full resize-none rounded-2xl bg-[var(--bg-app)] p-4 text-sm font-medium outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                    className="mt-4 w-full resize-none rounded-2xl bg-[var(--bg-app)] p-4 text-sm font-medium outline-none focus:ring-0"
                   />
 
                   <div className="mt-4 grid grid-cols-2 gap-2">
@@ -6377,44 +7098,52 @@ export default function App() {
           {wateringNoteId && (() => {
             const note = notes.find(n => n.id === wateringNoteId);
             if (!note) return null;
+            const nextTask = note.tasks.find(task => !task.completed);
+            const reviewAge = formatReviewAge(note);
 
             return (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+                className="fixed inset-0 z-50 flex items-end justify-center bg-black/24 p-3 pt-[calc(env(safe-area-inset-top)+1rem)] backdrop-blur-xl sm:items-center sm:p-4"
                 onClick={() => setWateringNoteId(null)}
               >
                 <motion.div
                   initial={{ opacity: 0, y: 24, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 16, scale: 0.98 }}
-                  className="w-full max-w-md rounded-[2rem] bg-[var(--surface-strong)] shadow-2xl border border-[var(--border)] p-6"
+                  className="w-full max-w-md rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-2xl sm:p-6"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex items-start justify-between gap-4 mb-5">
+                  <div className="mb-5 flex items-start justify-between gap-4">
 	                    <div>
 	                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Riego inteligente</p>
 	                      <h3 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--earth)]">¿Sigue viva?</h3>
+                        <p className="mt-1 text-sm font-medium text-[var(--text-muted)]">{reviewAge}</p>
 	                    </div>
                     <button onClick={() => setWateringNoteId(null)} className="p-2 rounded-full hover:bg-[var(--bg-app)] transition-colors">
                       <X size={18} />
                     </button>
                   </div>
 
-                  <div className="rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 mb-4">
-                    <p className="font-bold text-[var(--earth)]">{note.title}</p>
-                    <p className="text-xs text-[var(--text-muted)] mt-2">
+                  <div className="mb-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] p-4">
+                    <p className="font-semibold text-[var(--earth)]">{note.title}</p>
+                    <p className="mt-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
 	                      Regar no significa trabajar. Solo decide qué merece esta idea hoy.
                     </p>
+                    {nextTask && (
+                      <p className="mt-3 rounded-2xl bg-[var(--surface-strong)] px-3 py-2 text-xs font-semibold leading-relaxed text-[var(--sage)]">
+                        Siguiente paso: {nextTask.text}
+                      </p>
+                    )}
                   </div>
 
                   <textarea
                     value={wateringNote}
                     onChange={(event) => setWateringNote(event.target.value)}
                     rows={3}
-                    className="w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 text-sm outline-none resize-none focus:bg-[var(--surface-strong)] focus:ring-1 focus:ring-[var(--sage)] transition-all"
+                    className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] p-4 text-base font-medium leading-relaxed text-[var(--earth)] outline-none transition-all placeholder:text-[var(--text-muted)]/65 focus:bg-[var(--surface-strong)] focus:ring-0 sm:text-sm"
 	                    placeholder="Opcional: qué viste al volver?"
 	                  />
 
@@ -6443,7 +7172,7 @@ export default function App() {
 	                      </button>
 	                      <button
 	                        onClick={() => harvestFromWatering(note.id)}
-	                        className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-green-50 px-3 text-xs font-semibold text-green-700 transition-colors hover:bg-green-100"
+	                        className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-[#eef4ec] px-3 text-xs font-semibold text-[#5b765f] transition-colors hover:bg-[#e4eee2]"
 	                      >
 	                        <CheckCircle2 size={13} /> Cosechar
 	                      </button>
@@ -6461,10 +7190,10 @@ export default function App() {
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12, scale: 0.96 }}
-              className="fixed left-1/2 top-8 -translate-x-1/2 z-[60] rounded-full bg-[var(--surface-strong)] border border-[var(--border)] shadow-2xl px-5 py-3 flex items-center gap-3"
+              className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[60] flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-5 py-3 shadow-2xl backdrop-blur-2xl"
             >
               <Sparkles className="text-[var(--seed-accent)]" size={18} />
-              <span className="text-sm font-black text-[var(--earth)]">+1 avance en {celebration}</span>
+              <span className="text-sm font-black text-[var(--earth)]">{celebration}</span>
             </motion.div>
           )}
         </AnimatePresence>
@@ -6578,14 +7307,14 @@ export default function App() {
                     value={note.reflection || ''}
                     onChange={(event) => updateNote(note.id, { reflection: event.target.value })}
                     rows={3}
-                    className="mt-5 w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 text-sm outline-none resize-none focus:bg-[var(--surface-strong)] focus:ring-1 focus:ring-[var(--sage)] transition-all"
+                    className="mt-5 w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 text-sm outline-none resize-none focus:bg-[var(--surface-strong)] focus:ring-0 transition-all"
                     placeholder="Lo aprendido..."
                   />
                   <textarea
                     value={note.takeaway || ''}
                     onChange={(event) => updateNote(note.id, { takeaway: event.target.value })}
                     rows={2}
-                    className="mt-3 w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 text-sm outline-none resize-none focus:bg-[var(--surface-strong)] focus:ring-1 focus:ring-[var(--sage)] transition-all"
+                    className="mt-3 w-full rounded-2xl bg-[var(--bg-app)] border border-[var(--border)] p-4 text-sm outline-none resize-none focus:bg-[var(--surface-strong)] focus:ring-0 transition-all"
                     placeholder="Qué te dejó este proyecto?"
                   />
                   <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -6763,6 +7492,48 @@ export default function App() {
                         </div>
                         <div className="rounded-[1.25rem] border border-[var(--border)] bg-[var(--bg-app)]/45 p-3">
                           <div className="mb-2">
+                            <p className="text-sm font-semibold text-[var(--earth)]">Sensación premium</p>
+                            <p className="text-xs font-medium text-[var(--text-muted)]">Pequeños rituales al plantar, regar y cosechar.</p>
+                          </div>
+                          <div className="divide-y divide-[var(--border)]">
+                            <div className="flex min-h-12 items-center gap-3 py-2">
+                              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--surface-strong)] text-[var(--sage)]">
+                                <Sparkles size={15} />
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-[var(--earth)]">Haptics</p>
+                                <p className="truncate text-xs font-medium text-[var(--text-muted)]">Vibración sutil en acciones importantes</p>
+                              </div>
+                              <AppSwitch
+                                checked={hapticsEnabled}
+                                onChange={(checked) => {
+                                  setHapticsEnabled(checked);
+                                  if (checked) window.setTimeout(() => feel('open', true), 0);
+                                }}
+                                ariaLabel={hapticsEnabled ? 'Desactivar haptics' : 'Activar haptics'}
+                              />
+                            </div>
+                            <div className="flex min-h-12 items-center gap-3 py-2">
+                              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--surface-strong)] text-[var(--sage)]">
+                                <Droplets size={15} />
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-[var(--earth)]">Sonidos suaves</p>
+                                <p className="truncate text-xs font-medium text-[var(--text-muted)]">Tonos breves al plantar, regar y cerrar</p>
+                              </div>
+                              <AppSwitch
+                                checked={soundsEnabled}
+                                onChange={(checked) => {
+                                  setSoundsEnabled(checked);
+                                  if (checked) playMicroSound('pop', true);
+                                }}
+                                ariaLabel={soundsEnabled ? 'Desactivar sonidos' : 'Activar sonidos'}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="rounded-[1.25rem] border border-[var(--border)] bg-[var(--bg-app)]/45 p-3">
+                          <div className="mb-2">
                             <p className="text-sm font-semibold text-[var(--earth)]">Módulos de Hoy</p>
                             <p className="text-xs font-medium text-[var(--text-muted)]">Elige qué aparece debajo de la prioridad diaria.</p>
                           </div>
@@ -6864,21 +7635,21 @@ export default function App() {
                               value={authEmail}
                               onChange={(event) => setAuthEmail(event.target.value)}
                               placeholder="correo@email.com"
-                              className="h-11 w-full rounded-2xl bg-[var(--surface-strong)] px-3 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                              className="h-11 w-full rounded-2xl bg-[var(--surface-strong)] px-3 text-sm outline-none focus:ring-0"
                             />
                             <input
                               type="password"
                               value={authPassword}
                               onChange={(event) => setAuthPassword(event.target.value)}
                               placeholder="Contraseña"
-                              className="h-11 w-full rounded-2xl bg-[var(--surface-strong)] px-3 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                              className="h-11 w-full rounded-2xl bg-[var(--surface-strong)] px-3 text-sm outline-none focus:ring-0"
                             />
                             <input
                               type="password"
                               value={authConfirmPassword}
                               onChange={(event) => setAuthConfirmPassword(event.target.value)}
                               placeholder="Confirmar contraseña"
-                              className="h-11 w-full rounded-2xl bg-[var(--surface-strong)] px-3 text-sm outline-none focus:ring-1 focus:ring-[var(--sage)]"
+                              className="h-11 w-full rounded-2xl bg-[var(--surface-strong)] px-3 text-sm outline-none focus:ring-0"
                             />
                             <div className="grid grid-cols-2 gap-2 pt-1">
                               <button
@@ -7128,12 +7899,12 @@ export default function App() {
 	        <AnimatePresence>
 	          {isAdding && (
 		            <motion.div
-		              className="fixed inset-0 z-[70] overflow-hidden text-[var(--text-main)]"
+		              className="quick-entry-overlay fixed inset-0 z-[70] overflow-hidden text-[var(--text-main)]"
 	              initial={{ opacity: 0 }}
 	              animate={{ opacity: 1 }}
 	              exit={{ opacity: 0 }}
               transition={{ duration: 0.16 }}
-              onClick={() => setIsAdding(false)}
+              onClick={closeQuickEntry}
 	            >
 	              <div className={`absolute inset-0 ${quickEntryKeyboardMode ? 'bg-black/24 backdrop-blur-xl' : 'bg-black/10 backdrop-blur-md'}`} />
 	              <div
@@ -7163,7 +7934,7 @@ export default function App() {
                 dragDirectionLock
                 onDragEnd={(_, info) => {
                   if (!quickEntryKeyboardMode && info.offset.y > 78) {
-                    setIsAdding(false);
+                    closeQuickEntry();
                   }
                 }}
                 onClick={(event) => event.stopPropagation()}
@@ -7176,7 +7947,9 @@ export default function App() {
 	                }`}>
                   <button
                     type="button"
-                    onClick={() => setIsAdding(false)}
+                    onClick={() => {
+                      closeQuickEntry();
+                    }}
                     className="absolute left-4 top-1/2 z-10 h-9 -translate-y-1/2 rounded-full text-left text-[15px] font-semibold text-[var(--sage)]"
                   >
                     {t('cancel')}
@@ -7212,7 +7985,12 @@ export default function App() {
 	                    </span>
 	                    <input
 	                      type="text"
+                        inputMode="text"
+                        autoCapitalize="sentences"
+                        autoComplete="off"
+                        spellCheck
 	                      autoFocus={createMode === 'sprout'}
+	                      onFocus={() => setQuickEntryPicker(null)}
 	                      placeholder={quickEntryCopy.titlePlaceholder}
 	                      value={newNote.title}
 	                      onChange={(event) => setNewNote({ ...newNote, title: event.target.value })}
@@ -7221,7 +7999,12 @@ export default function App() {
 	                  </div>
 
                   <textarea
+                    inputMode="text"
+                    autoCapitalize="sentences"
+                    autoComplete="off"
+                    spellCheck
                     autoFocus={createMode !== 'sprout'}
+                    onFocus={() => setQuickEntryPicker(null)}
                     placeholder={createMode === 'sprout' || newNote.title ? (appLanguage === 'en' ? 'Notes' : 'Notas') : quickEntryCopy.placeholder}
 	                    rows={5}
 	                    value={newNote.content}
@@ -7235,66 +8018,243 @@ export default function App() {
 	                    className="quick-seed-textarea min-h-0 flex-1 resize-none bg-transparent text-[1.12rem] font-medium leading-[1.5] tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/42 sm:text-[1.22rem]"
 	                  />
 
-		                  <div className={`relative mb-3 flex min-h-12 shrink-0 items-center gap-2 rounded-[1.35rem] bg-[var(--bg-app)]/62 px-2.5 shadow-[inset_0_0_0_1px_var(--border)] ${quickEntryKeyboardMode ? 'mt-1' : 'mt-4'}`}>
-		                    <label className={`relative grid h-9 w-9 shrink-0 place-items-center rounded-full transition-colors ${
-		                      newNote.dueDate ? 'bg-[var(--sage)] text-[var(--on-sage)]' : 'text-[var(--text-muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--sage)]'
-		                    }`} aria-label={t('date')}>
-		                      <CalendarIcon size={17} />
-		                      <input
-		                        type="date"
-		                        value={newNote.dueDate}
-		                        onChange={(event) => setNewNote({ ...newNote, dueDate: event.target.value })}
-		                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-		                      />
-		                    </label>
-
-		                    {createMode === 'seed' ? (
-		                      <details className="group relative [&_summary::-webkit-details-marker]:hidden">
-		                        <summary className="grid h-9 w-9 cursor-pointer list-none place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-strong)] hover:text-[var(--sage)] group-open:bg-[var(--sage)] group-open:text-[var(--on-sage)]" aria-label={appLanguage === 'en' ? 'Seed type' : 'Tipo de semilla'}>
-		                          <Tag size={17} />
-		                        </summary>
-		                        <div className="absolute bottom-12 left-0 z-20 w-56 rounded-[1.25rem] border border-[var(--border)] bg-[var(--surface-strong)]/98 p-2 shadow-[0_18px_45px_rgba(0,0,0,0.14)] backdrop-blur-xl">
-		                          {SEED_TYPES.map(type => (
-		                            <button
-		                              key={type.id}
-		                              type="button"
-		                              onClick={() => setNewNote({ ...newNote, seedType: type.id })}
-		                              className={`flex h-10 w-full items-center justify-between rounded-xl px-3 text-sm font-semibold transition-colors ${
-		                                newNote.seedType === type.id
-		                                  ? 'bg-[var(--sage)] text-[var(--on-sage)]'
-		                                  : 'text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-[var(--earth)]'
-		                              }`}
-		                            >
-		                              {type.label}
-		                              {newNote.seedType === type.id && <CheckCircle2 size={15} />}
-		                            </button>
-		                          ))}
-		                        </div>
-		                      </details>
-		                    ) : (
-		                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--text-muted)]">
-		                        {createMode === 'sprout' ? <ListChecks size={17} /> : <Sparkles size={17} />}
+		                  <div className={`relative mb-3 flex shrink-0 flex-col gap-2 rounded-[1.35rem] bg-[var(--bg-app)]/62 p-2 shadow-[inset_0_0_0_1px_var(--border)] ${quickEntryKeyboardMode ? 'mt-1' : 'mt-4'}`}>
+		                    <AnimatePresence>
+		                      {quickEntryPicker && (
+		                        <motion.div
+		                          key={quickEntryPicker}
+		                          initial={{ opacity: 0, y: 8, scale: 0.98 }}
+		                          animate={{ opacity: 1, y: 0, scale: 1 }}
+		                          exit={{ opacity: 0, y: 6, scale: 0.98 }}
+		                          transition={{ duration: 0.16 }}
+		                          className="absolute bottom-[calc(100%+0.45rem)] left-2 right-2 z-30 max-h-56 overflow-y-auto rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-strong)]/98 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.2)] backdrop-blur-2xl app-scrollbar"
+		                        >
+		                          {quickEntryPicker === 'type' && (
+		                            <div className="grid gap-1">
+		                              {SEED_TYPES.map(type => (
+		                                <button
+		                                  key={type.id}
+		                                  type="button"
+		                                  onClick={() => {
+		                                    setNewNote({ ...newNote, seedType: type.id });
+		                                    setQuickEntryPicker(null);
+		                                  }}
+		                                  className={`flex h-11 w-full items-center justify-between rounded-xl px-3 text-sm font-semibold transition-colors ${
+		                                    newNote.seedType === type.id
+		                                      ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+		                                      : 'text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-[var(--earth)]'
+		                                  }`}
+		                                >
+		                                  {type.label}
+		                                  {newNote.seedType === type.id && <CheckCircle2 size={15} />}
+		                                </button>
+		                              ))}
+		                            </div>
+		                          )}
+		                          {quickEntryPicker === 'priority' && (
+		                            <div className="grid gap-1">
+		                              {PRIORITY_OPTIONS.map(option => (
+		                                <button
+		                                  key={option.id}
+		                                  type="button"
+		                                  onClick={() => {
+		                                    setNewNote({ ...newNote, priority: option.id });
+		                                    setQuickEntryPicker(null);
+		                                  }}
+		                                  className={`flex h-12 w-full items-center justify-between rounded-xl px-3 text-left transition-colors ${
+		                                    newNote.priority === option.id
+		                                      ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+		                                      : 'text-[var(--earth)] hover:bg-[var(--bg-app)]'
+		                                  }`}
+		                                >
+		                                  <span className="min-w-0">
+		                                    <span className="block truncate text-sm font-semibold">{priorityLabel(option)}</span>
+		                                    <span className={`mt-0.5 block truncate text-[10px] font-medium ${newNote.priority === option.id ? 'text-white/70' : 'text-[var(--text-muted)]'}`}>{priorityDetail(option)}</span>
+		                                  </span>
+		                                  {newNote.priority === option.id && <CheckCircle2 size={15} className="shrink-0" />}
+		                                </button>
+		                              ))}
+		                            </div>
+		                          )}
+		                          {quickEntryPicker === 'garden' && (
+		                            <div className="grid gap-1">
+		                              {planets.map(planet => (
+		                                <button
+		                                  key={planet.id}
+		                                  type="button"
+		                                  onClick={() => {
+		                                    setNewNote({ ...newNote, planetId: planet.id });
+		                                    setQuickEntryPicker(null);
+		                                  }}
+		                                  className={`flex h-11 w-full items-center justify-between rounded-xl px-3 text-sm font-semibold transition-colors ${
+		                                    newNote.planetId === planet.id
+		                                      ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+		                                      : 'text-[var(--text-muted)] hover:bg-[var(--bg-app)] hover:text-[var(--earth)]'
+		                                  }`}
+		                                >
+		                                  <span className="min-w-0 truncate">{planet.name}</span>
+		                                  {newNote.planetId === planet.id && <CheckCircle2 size={15} className="shrink-0" />}
+		                                </button>
+		                              ))}
+		                            </div>
+		                          )}
+		                        </motion.div>
+		                      )}
+		                    </AnimatePresence>
+		                    <div className="flex min-h-10 items-center gap-2">
+		                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--surface-strong)] text-[var(--sage)]">
+		                        {createMode === 'sprout' ? <Sprout size={15} /> : createMode === 'journal' ? <Sparkles size={15} /> : <Leaf size={15} />}
 		                      </span>
-		                    )}
+		                      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--text-muted)]">
+		                        {newNote.dueDate
+		                          ? `${formatShortDate(dateInputToEndOfDay(newNote.dueDate) || new Date().getTime())} · ${priorityLabel(quickEntryPriority)}`
+		                          : `${createMode === 'seed' ? quickEntryTypeLabel : quickEntryCopy.compactLabel} · ${quickEntryPlanet.name}`}
+		                      </span>
+		                      <button
+		                        type="button"
+		                        onClick={() => {
+		                          setShowQuickEntryDetails(value => !value);
+		                          setQuickEntryPicker(null);
+		                        }}
+		                        className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors ${
+		                          showQuickEntryDetails
+		                            ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+		                            : 'bg-[var(--surface-strong)] text-[var(--sage)]'
+		                        }`}
+		                      >
+		                        {quickEntryCopy.details}
+		                        <ChevronDown size={13} className={`transition-transform ${showQuickEntryDetails ? 'rotate-180' : ''}`} />
+		                      </button>
+		                    </div>
 
-		                    <button
-		                      type="button"
-		                      onClick={() => setNewNote({ ...newNote, dueDate: newNote.dueDate === quickEntryToday ? '' : quickEntryToday })}
-		                      className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-colors ${
-		                        newNote.dueDate === quickEntryToday ? 'bg-[var(--sage)] text-[var(--on-sage)]' : 'text-[var(--text-muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--sage)]'
-		                      }`}
-		                      aria-label={appLanguage === 'en' ? 'Mark for today' : 'Marcar para hoy'}
-		                    >
-		                      <Flag size={17} />
-		                    </button>
+		                    <AnimatePresence initial={false}>
+		                      {showQuickEntryDetails && (
+		                        <motion.div
+		                          initial={{ opacity: 0, height: 0 }}
+		                          animate={{ opacity: 1, height: 'auto' }}
+		                          exit={{ opacity: 0, height: 0 }}
+		                          className="overflow-hidden"
+		                        >
+		                          <div className="grid grid-cols-5 gap-1.5 border-t border-[var(--border)] pt-2">
+		                            <label className={`relative grid h-9 place-items-center rounded-full transition-colors ${
+		                              newNote.dueDate ? 'bg-[var(--sage)] text-[var(--on-sage)]' : 'text-[var(--text-muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--sage)]'
+		                            }`} aria-label={t('date')}>
+		                              <CalendarIcon size={17} />
+		                              <input
+		                                type="date"
+		                                value={newNote.dueDate}
+		                                onChange={(event) => {
+		                                  setNewNote({ ...newNote, dueDate: event.target.value });
+		                                  setQuickEntryPicker(null);
+		                                }}
+		                                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+		                              />
+		                            </label>
 
-		                    <span className="min-w-0 flex-1 truncate px-1 text-xs font-semibold text-[var(--text-muted)]">
-		                      {newNote.dueDate ? formatShortDate(dateInputToEndOfDay(newNote.dueDate) || new Date().getTime()) : createMode === 'seed' ? quickEntryTypeLabel : quickEntryCopy.compactLabel}
-		                    </span>
-		                    <span className="hidden shrink-0 items-center gap-1.5 rounded-full bg-[var(--surface-strong)] px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)] sm:inline-flex">
-		                      {createMode === 'sprout' ? <Sprout size={13} /> : createMode === 'journal' ? <Sparkles size={13} /> : <Inbox size={13} />}
-		                      {createMode === 'sprout' ? (appLanguage === 'en' ? 'Sprout' : 'Brote') : createMode === 'journal' ? (appLanguage === 'en' ? 'Reflection' : 'Reflexión') : (appLanguage === 'en' ? 'Seedbed' : 'Semillero')}
-		                    </span>
+		                            {createMode === 'seed' ? (
+		                              <button
+		                                type="button"
+		                                onClick={() => setQuickEntryPicker(current => current === 'type' ? null : 'type')}
+		                                className={`grid h-9 place-items-center rounded-full transition-colors ${
+		                                  quickEntryPicker === 'type'
+		                                    ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+		                                    : 'text-[var(--text-muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--sage)]'
+		                                }`}
+		                                aria-label={appLanguage === 'en' ? 'Seed type' : 'Tipo de semilla'}
+		                                aria-expanded={quickEntryPicker === 'type'}
+		                              >
+		                                <Tag size={17} />
+		                              </button>
+		                            ) : (
+		                              <span className="grid h-9 place-items-center rounded-full text-[var(--text-muted)]">
+		                                {createMode === 'sprout' ? <ListChecks size={17} /> : <Sparkles size={17} />}
+		                              </span>
+		                            )}
+
+		                            <button
+		                              type="button"
+		                              onClick={() => {
+		                                setQuickEntryPicker(current => current === 'priority' ? null : 'priority');
+		                              }}
+		                              className={`grid h-9 place-items-center rounded-full transition-colors ${
+		                                newNote.priority === 'important'
+		                                  ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+		                                  : quickEntryPicker === 'priority'
+		                                    ? 'bg-[var(--surface-strong)] text-[var(--sage)]'
+		                                    : newNote.priority === 'light'
+		                                    ? 'bg-[var(--surface-strong)] text-[var(--text-muted)]'
+		                                    : 'text-[var(--text-muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--sage)]'
+		                              }`}
+		                              aria-label={appLanguage === 'en' ? 'Priority' : 'Prioridad'}
+		                              aria-expanded={quickEntryPicker === 'priority'}
+		                            >
+		                              <Star size={17} />
+		                            </button>
+
+		                            {planets.length > 1 ? (
+		                              <button
+		                                type="button"
+		                                onClick={() => setQuickEntryPicker(current => current === 'garden' ? null : 'garden')}
+		                                className={`grid h-9 place-items-center rounded-full transition-colors ${
+		                                  quickEntryPicker === 'garden'
+		                                    ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+		                                    : 'text-[var(--text-muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--sage)]'
+		                                }`}
+		                                aria-label={appLanguage === 'en' ? 'Garden' : 'Jardín'}
+		                                aria-expanded={quickEntryPicker === 'garden'}
+		                              >
+		                                <Box size={17} />
+		                              </button>
+		                            ) : (
+		                              <span className="grid h-9 place-items-center rounded-full text-[var(--text-muted)]">
+		                                <Box size={17} />
+		                              </span>
+		                            )}
+
+		                            {createMode !== 'journal' ? (
+		                              <button
+		                                type="button"
+		                                onClick={() => {
+		                                  const nextMode = createMode === 'sprout' ? 'seed' : 'sprout';
+		                                  setCreateMode(nextMode);
+		                                  setNewNote({ ...newNote, seedType: nextMode === 'sprout' ? 'project' : 'idea' });
+		                                  setQuickEntryPicker(null);
+		                                }}
+		                                className={`grid h-9 place-items-center rounded-full transition-colors ${
+		                                  createMode === 'sprout'
+		                                    ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+		                                    : 'text-[var(--text-muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--sage)]'
+		                                }`}
+		                                aria-label={createMode === 'sprout' ? 'Guardar como semilla' : 'Convertir en brote'}
+		                              >
+		                                <ListChecks size={17} />
+		                              </button>
+		                            ) : (
+		                              <span className="grid h-9 place-items-center rounded-full text-[var(--text-muted)]">
+		                                <Sparkles size={17} />
+		                              </span>
+		                            )}
+		                          </div>
+		                          <button
+		                            type="button"
+		                            onClick={() => {
+		                              setNewNote({ ...newNote, dueDate: newNote.dueDate === quickEntryToday ? '' : quickEntryToday });
+		                              setQuickEntryPicker(null);
+		                            }}
+		                            className={`mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-full text-xs font-semibold transition-colors ${
+		                              newNote.dueDate === quickEntryToday
+		                                ? 'bg-[var(--sage)] text-[var(--on-sage)]'
+		                                : 'bg-[var(--surface-strong)] text-[var(--text-muted)] hover:text-[var(--sage)]'
+		                            }`}
+		                          >
+		                            <Flag size={14} />
+		                            {newNote.dueDate === quickEntryToday
+		                              ? appLanguage === 'en' ? 'Planned for today' : 'Para hoy'
+		                              : appLanguage === 'en' ? 'Use today if this matters now' : 'Marcar para hoy si importa ahora'}
+		                          </button>
+		                        </motion.div>
+		                      )}
+		                    </AnimatePresence>
 		                  </div>
                 </div>
 
@@ -7329,13 +8289,14 @@ export default function App() {
                     className="fixed bottom-[calc(env(safe-area-inset-bottom)+5rem)] right-4 z-50 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)]/95 p-2 shadow-[0_24px_70px_rgba(0,0,0,0.16)] backdrop-blur-2xl md:bottom-24 md:right-8"
                   >
                     <div className="px-3 pb-2 pt-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">Crear</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                        {appLanguage === 'en' ? 'Choose capture type' : 'Elegir captura'}
+                      </p>
                     </div>
                     {[
                       { id: 'seed' as const, icon: Leaf, title: 'Semilla rápida', detail: 'Captura ahora, decide después' },
                       { id: 'sprout' as const, icon: Sprout, title: 'Brote', detail: 'Idea con primer paso' },
                       { id: 'journal' as const, icon: Sparkles, title: 'Reflexión', detail: 'Guardar aprendizaje o cierre' },
-                      { id: 'garden' as const, icon: LayoutGrid, title: 'Jardín', detail: 'Crear un nuevo espacio' },
                     ].map((item, index) => (
                       <motion.button
                         key={item.id}
