@@ -28,6 +28,7 @@ const SOUND_FILES: Partial<Record<SeedSoundKind, string[]>> = {
   holdPop: ['/sounds/mixkit-long-pop-2358.wav'],
   plant: ['/sounds/mixkit-hard-pop-click-2364.wav'],
   step: ['/sounds/mixkit-message-pop-alert-2354.mp3'],
+  water: ['/sounds/water.wav'],
 };
 
 const SOUND_PRESETS: Record<SeedSoundKind, SoundPreset> = {
