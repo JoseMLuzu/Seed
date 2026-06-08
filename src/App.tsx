@@ -1973,7 +1973,7 @@ function TodayView({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }}
-      className="space-y-4 pb-24"
+      className="space-y-4 pb-2 md:pb-8"
     >
       <div>
         <div className="min-w-0">
@@ -2394,7 +2394,7 @@ function InboxView({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }}
-      className="pb-24"
+      className="pb-2 md:pb-8"
     >
       <div className="mb-5">
         <h3 className="text-3xl font-semibold tracking-tight text-[var(--earth)]">{t('seeds')}</h3>
@@ -2506,7 +2506,7 @@ function ProjectsView({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }}
-      className="space-y-5 pb-24"
+      className="space-y-5 pb-2 md:pb-8"
     >
       <section>
         <h3 className="text-3xl font-semibold tracking-tight text-[var(--earth)]">{t('sprouts')}</h3>
@@ -2627,7 +2627,7 @@ function HarvestView({ notes, onSelectNote, onStartPlanting }: { notes: SeedNote
   const { featuredLearning, harvests, learningCount, remainingHarvests, totalMinutes } = harvestData;
 
   return (
-    <motion.div key="harvest-view" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="space-y-5 pb-24">
+    <motion.div key="harvest-view" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="space-y-5 pb-2 md:pb-8">
       <section className="overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface-strong),var(--surface-soft))] p-5 shadow-sm sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -2939,7 +2939,7 @@ function FocusView({
 
   if (!focusNote) {
     return (
-      <motion.div key="focus-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-24">
+      <motion.div key="focus-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-2 md:pb-8">
         <div className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-8 text-center">
           <Target className="mx-auto text-[var(--sage)] opacity-40 mb-4" size={44} />
           <p className="font-serif text-3xl text-[var(--earth)]">Nada urgente ahora</p>
@@ -6704,7 +6704,7 @@ export default function App() {
                         onClick={() => {
                           setFilterStage('all');
                           setSelectedNoteId(null);
-                          setView(stat.id as AppView);
+                          navigateToView(isActiveStat ? 'today' : stat.id as AppView);
                         }}
                         className={`rounded-2xl border px-3 py-3 shadow-sm text-left soft-interaction sm:px-4 ${isActiveStat ? 'bg-[var(--surface-strong)] border-[var(--sage)] ring-1 ring-[var(--sage)]/30' : 'bg-[var(--surface-soft)] border-[var(--border)] hover:bg-[var(--surface-strong)]'}`}
                       >
@@ -6816,7 +6816,7 @@ export default function App() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 12 }}
-                  className="space-y-5 pb-24"
+                  className="space-y-5 pb-2 md:pb-8"
                 >
                   <section className="overflow-hidden rounded-[1.8rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
                     <div className="flex items-center gap-4 px-5 py-5">

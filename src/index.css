@@ -142,7 +142,7 @@
 .safe-app-shell {
   --safe-top-space: calc(env(safe-area-inset-top, 0px) + 5rem);
   --safe-top-control: calc(env(safe-area-inset-top, 0px) + 1rem);
-  --safe-bottom-space: calc(env(safe-area-inset-bottom, 0px) + 7rem);
+  --safe-bottom-space: calc(env(safe-area-inset-bottom, 0px) + 5.25rem);
 }
 
 @media (min-width: 768px) {
