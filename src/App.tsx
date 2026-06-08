@@ -2961,7 +2961,7 @@ function FocusView({
         <div className={`absolute inset-0 ${isDay ? 'bg-[linear-gradient(180deg,#f7faf5_0%,#edf4ed_100%)]' : 'bg-[linear-gradient(180deg,#07110d_0%,#122019_100%)]'}`} />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(circle_at_50%_0%,rgba(126,158,116,0.18),transparent_62%)]" />
 
-        <div className="relative z-10 mx-auto flex min-h-[calc(100vh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2.35rem)] w-full max-w-[31rem] flex-col">
+        <div className="relative z-10 mx-auto flex min-h-[calc(100vh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2.35rem)] w-full max-w-[72rem] flex-col">
           <div className="flex items-center justify-between gap-3">
             <button
               onClick={() => requestExit('exit')}
@@ -2983,23 +2983,24 @@ function FocusView({
             </button>
           </div>
 
-          <main className="flex flex-1 flex-col justify-center py-5">
-            <section className="overflow-hidden rounded-[2rem] border border-white/55 bg-[var(--surface-strong)]/82 shadow-[0_28px_90px_rgba(39,53,43,0.16)] ring-1 ring-black/[0.03] backdrop-blur-2xl">
-              <div className="px-5 pb-5 pt-6 text-center">
+          <main className="flex flex-1 flex-col justify-center py-5 md:grid md:grid-cols-[minmax(0,1fr)_minmax(22rem,0.9fr)] md:items-center md:gap-5 md:py-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(24rem,0.95fr)]">
+            <section className="order-1 overflow-hidden rounded-[2rem] border border-white/55 bg-[var(--surface-strong)]/82 shadow-[0_28px_90px_rgba(39,53,43,0.16)] ring-1 ring-black/[0.03] backdrop-blur-2xl md:rounded-[2.4rem]">
+              <div className="px-5 pb-5 pt-6 text-center md:px-7 md:pb-7 md:pt-8">
                 <div className="mx-auto flex w-fit items-center gap-2 rounded-full bg-[var(--bg-app)]/82 px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)]">
                   <Target size={13} className="text-[var(--sage)]" />
                   <span>{active ? 'Respira y sigue' : `Bloque de ${duration} min`}</span>
                 </div>
-                <p className="mt-5 font-mono text-[4.4rem] font-semibold leading-none tracking-tight text-[var(--earth)] tabular-nums sm:text-7xl">{formattedTime}</p>
-                <h2 className="mx-auto mt-5 max-w-sm text-balance text-2xl font-semibold leading-tight tracking-tight text-[var(--earth)]">
+                <p className="mt-5 font-mono text-[4.4rem] font-semibold leading-none tracking-tight text-[var(--earth)] tabular-nums sm:text-7xl md:text-[5.4rem]">{formattedTime}</p>
+                <h2 className="mx-auto mt-5 max-w-sm text-balance text-2xl font-semibold leading-tight tracking-tight text-[var(--earth)] md:text-[1.75rem]">
                   {nextTask?.text || 'Elige un primer paso pequeño'}
                 </h2>
                 <p className="mx-auto mt-2 max-w-sm line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
                   {focusNote.title}
                 </p>
 
-                <div className={`relative mx-auto mt-5 flex h-40 max-w-xs items-end justify-center overflow-hidden rounded-[1.75rem] ${isDay ? 'bg-gradient-to-b from-[#edf8ef] via-[#f7fbf4] to-white' : 'bg-gradient-to-b from-[#122018] via-[#183021] to-[#edf7ea]'}`}>
+                <div className={`relative mx-auto mt-5 flex h-40 max-w-xs items-end justify-center overflow-hidden rounded-[1.75rem] md:mt-7 md:h-[23rem] md:max-w-none md:rounded-[2rem] ${isDay ? 'bg-gradient-to-b from-[#edf8ef] via-[#f7fbf4] to-white' : 'bg-gradient-to-b from-[#122018] via-[#183021] to-[#edf7ea]'}`}>
                   <div className="absolute bottom-8 h-5 w-40 rounded-full bg-green-900/10 blur-md" />
+                  <div className="pointer-events-none absolute inset-x-10 top-8 hidden h-28 rounded-full bg-white/35 blur-3xl md:block" />
                   <motion.div
                     key={`${focusNote.id}-${completedSteps}`}
                     initial={{ scale: 0.9, y: 6, opacity: 0.85 }}
@@ -3009,7 +3010,7 @@ function FocusView({
                       opacity: 1,
                     }}
                     transition={{ duration: 2.8, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
-                    className="relative z-10 origin-bottom"
+                    className="relative z-10 origin-bottom md:scale-[1.18]"
                   >
                     <PlantIllustration
                       stage={focusNote.growthStage}
@@ -3033,7 +3034,7 @@ function FocusView({
                   </AnimatePresence>
                 </div>
 
-                <div className="mx-auto mt-4 h-1.5 max-w-xs overflow-hidden rounded-full bg-[var(--bg-app)]">
+                <div className="mx-auto mt-4 h-1.5 max-w-xs overflow-hidden rounded-full bg-[var(--bg-app)] md:max-w-md">
                   <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${progress}%` }} />
                 </div>
               </div>
@@ -3082,12 +3083,19 @@ function FocusView({
               </div>
             </section>
 
-            <section className="mt-4 overflow-hidden rounded-[1.65rem] border border-[var(--border)] bg-[var(--surface-strong)]/78 shadow-sm backdrop-blur-xl">
-              <div className="px-4 py-3">
+            <section className="order-2 mt-4 overflow-hidden rounded-[1.65rem] border border-[var(--border)] bg-[var(--surface-strong)]/78 shadow-sm backdrop-blur-xl md:mt-0 md:rounded-[2.2rem] md:bg-[var(--surface-strong)]/84 md:shadow-[0_24px_80px_rgba(22,31,25,0.10)]">
+              <div className="border-b border-[var(--border)] px-4 py-4 md:px-6 md:py-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)]">Pasos de enfoque</p>
+                <h3 className="mt-1 line-clamp-2 text-2xl font-semibold tracking-tight text-[var(--earth)] md:text-3xl">{focusNote.title}</h3>
+                <p className="mt-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
+                  {nextTask ? 'Trabaja una acción a la vez. Marca lo que avance y deja lo demás fuera.' : 'Agrega un primer paso pequeño para darle dirección a esta sesión.'}
+                </p>
+              </div>
+              <div className="px-4 py-3 md:px-5 md:py-4">
                 {focusNote.tasks.length === 0 ? (
                   <p className="py-2 text-sm font-medium text-[var(--text-muted)]">Agrega un paso para que enfoque tenga dirección.</p>
                 ) : visibleTasks.map(task => (
-                  <div key={task.id} className={`flex items-center gap-3 border-b border-[var(--border)] py-2.5 last:border-b-0 ${task.completed ? 'opacity-50' : ''}`}>
+                  <div key={task.id} className={`flex items-center gap-3 border-b border-[var(--border)] py-2.5 last:border-b-0 md:py-3.5 ${task.completed ? 'opacity-50' : ''}`}>
                     <button
                       onClick={() => onToggleTask(focusNote.id, task.id)}
                       className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border transition-transform active:scale-90 ${task.completed ? 'border-[var(--sage)] bg-[var(--sage)] text-[var(--on-sage)]' : 'border-[var(--border)] text-transparent'}`}
@@ -3099,7 +3107,7 @@ function FocusView({
                       value={task.text}
                       onChange={(event) => onUpdateTask(focusNote.id, task.id, event.target.value)}
                       readOnly={active}
-                      className={`min-w-0 flex-1 bg-transparent text-[15px] font-medium text-[var(--earth)] outline-none read-only:cursor-default ${task.completed ? 'line-through' : ''}`}
+                      className={`min-w-0 flex-1 bg-transparent text-[15px] font-medium text-[var(--earth)] outline-none read-only:cursor-default md:text-base ${task.completed ? 'line-through' : ''}`}
                       placeholder="Describe este paso"
                     />
                     <button
@@ -3116,7 +3124,7 @@ function FocusView({
                 {hiddenTaskCount > 0 && (
                   <p className="pt-2 text-center text-xs font-semibold text-[var(--text-muted)]">+{hiddenTaskCount} pasos más</p>
                 )}
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3 flex gap-2 md:mt-4">
                   <input
                     value={step}
                     onChange={(event) => setStep(event.target.value)}
@@ -3141,7 +3149,7 @@ function FocusView({
             </section>
 
             {!active && (
-              <details className="mt-3 overflow-hidden rounded-[1.45rem] border border-[var(--border)] bg-[var(--surface-strong)]/60 backdrop-blur-xl">
+              <details className="mt-3 overflow-hidden rounded-[1.45rem] border border-[var(--border)] bg-[var(--surface-strong)]/60 backdrop-blur-xl md:col-start-2">
                 <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-[var(--text-muted)]">
                   Cambiar idea
                   <ChevronDown size={16} />
@@ -3163,7 +3171,7 @@ function FocusView({
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 8 }}
-                  className="mt-3 rounded-[1.45rem] border border-[var(--border)] bg-[var(--surface-strong)]/78 p-4 shadow-sm backdrop-blur-xl"
+                  className="mt-3 rounded-[1.45rem] border border-[var(--border)] bg-[var(--surface-strong)]/78 p-4 shadow-sm backdrop-blur-xl md:col-start-2"
                 >
                   <p className="text-sm font-semibold text-[var(--earth)]">Sesión guardada</p>
                   <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">{sessionSummary.minutes} min · {sessionSummary.steps} pasos · {sessionSummary.growth}% de avance</p>
