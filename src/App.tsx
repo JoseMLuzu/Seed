@@ -2806,6 +2806,13 @@ function FocusView({
   const [sessionSummary, setSessionSummary] = useState<{ minutes: number; steps: number; growth: number } | null>(null);
   const [liveActivityEndTimestamp, setLiveActivityEndTimestamp] = useState<number | null>(null);
   const [confirmExit, setConfirmExit] = useState<'exit' | 'edit' | null>(null);
+  const [focusNotes, setFocusNotes] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('seed-focus-notes') || '{}') as Record<string, string>;
+    } catch {
+      return {};
+    }
+  });
   const nextTask = focusNote?.tasks.find(task => !task.completed);
   const completedSteps = focusNote?.tasks.filter(task => task.completed).length || 0;
   const progress = focusNote?.tasks.length ? Math.round((completedSteps / focusNote.tasks.length) * 100) : 0;
@@ -2814,6 +2821,7 @@ function FocusView({
   const hiddenTaskCount = Math.max(0, (focusNote?.tasks.length || 0) - visibleTasks.length);
   const sessionCompletedSteps = Math.max(0, completedSteps - sessionStartCompleted);
   const focusGrowthProgress = Math.min(100, Math.max(progress, progress + sessionCompletedSteps * 6));
+  const focusNoteMemo = focusNote ? focusNotes[focusNote.id] || '' : '';
   const focusOptions = useMemo(() => focusCandidates.map(note => ({
     value: note.id,
     label: note.title,
@@ -2865,6 +2873,10 @@ function FocusView({
       progress,
     });
   }, [active, focusNote, liveActivityEndTimestamp, nextTask?.text, progress]);
+
+  useEffect(() => {
+    localStorage.setItem('seed-focus-notes', JSON.stringify(focusNotes));
+  }, [focusNotes]);
 
   const startFocus = (minutes: number) => {
     onFocusFeedback?.('open', true);
@@ -3001,8 +3013,8 @@ function FocusView({
               <ChevronLeft size={20} />
             </button>
             <div className="min-w-0 text-center">
-              <p className="truncate text-sm font-semibold text-[var(--earth)]">{active ? 'Enfoque activo' : 'Enfoque'}</p>
-              <p className="text-xs font-medium text-[var(--text-muted)]">{completedSteps}/{focusNote.tasks.length} pasos</p>
+              <p className={`truncate text-sm font-semibold ${deepFocus ? 'text-white/82' : 'text-[var(--earth)]'}`}>{active ? 'Enfoque activo' : 'Enfoque'}</p>
+              <p className={`text-xs font-medium ${deepFocus ? 'text-[#c9e5b8]/58' : 'text-[var(--text-muted)]'}`}>{completedSteps}/{focusNote.tasks.length} pasos</p>
             </div>
             <button
               onClick={() => requestExit('edit')}
@@ -3258,7 +3270,8 @@ function FocusView({
                   <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.58),transparent_68%)]" />
                   <div className="pointer-events-none absolute left-10 top-10 h-28 w-28 rounded-full bg-white/32 blur-3xl" />
                   <div className="pointer-events-none absolute bottom-[-7rem] h-56 w-[36rem] rounded-[50%] bg-[var(--sage)]/16 blur-2xl" />
-                  <div className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ${deepFocus ? 'opacity-100' : 'opacity-45'}`} style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px)', backgroundSize: '4.5rem 4.5rem' }} />
+                  <div className={`pointer-events-none absolute inset-x-16 top-16 h-36 rounded-full bg-[var(--sage)]/10 blur-3xl transition-opacity duration-700 ${deepFocus ? 'opacity-100' : 'opacity-30'}`} />
+                  <div className={`pointer-events-none absolute bottom-10 left-16 h-24 w-64 rounded-full bg-[#c9e5b8]/8 blur-2xl transition-opacity duration-700 ${deepFocus ? 'opacity-90' : 'opacity-20'}`} />
                   <div className={`pointer-events-none absolute -left-24 top-10 h-32 w-[42rem] rotate-[-14deg] bg-white/[0.07] blur-2xl transition-opacity duration-700 ${deepFocus ? 'opacity-100' : 'opacity-0'}`} />
                   <div className={`absolute left-6 top-6 rounded-[1.7rem] border px-5 py-4 shadow-[0_18px_70px_rgba(31,45,35,0.12)] backdrop-blur-2xl transition-all duration-500 ${deepFocus ? 'pointer-events-none translate-y-[-0.35rem] border-white/12 bg-black/24 text-white opacity-0' : 'border-white/70 bg-white/58 text-[var(--earth)] opacity-100'}`}>
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)]">Tiempo</p>
@@ -3379,7 +3392,7 @@ function FocusView({
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 12, scale: 0.98 }}
                         transition={{ type: 'spring', stiffness: 260, damping: 28 }}
-                        className="absolute bottom-6 left-6 max-w-[24rem] rounded-[1.8rem] border border-white/14 bg-black/26 p-4 text-white shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur-2xl"
+                        className="absolute left-6 top-6 max-w-[24rem] rounded-[1.8rem] border border-white/14 bg-black/26 p-4 text-white shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur-2xl"
                       >
                         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--sage)]">Ahora</p>
                         <p className="mt-2 line-clamp-2 text-lg font-semibold leading-tight">{nextTask.text}</p>
@@ -3410,7 +3423,7 @@ function FocusView({
                     <Leaf size={18} />
                   </span>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--text-muted)]">Acción actual</p>
+                    <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${deepFocus ? 'text-[#c9e5b8]/68' : 'text-[var(--text-muted)]'}`}>Acción actual</p>
                     <p className={`mt-1 line-clamp-2 text-lg font-semibold leading-tight transition-colors ${deepFocus ? 'text-white' : 'text-[var(--earth)]'}`}>
                       {nextTask?.text || 'Define el primer movimiento.'}
                     </p>
@@ -3458,7 +3471,7 @@ function FocusView({
               <section className={`min-h-0 overflow-hidden rounded-[2rem] border shadow-[0_24px_80px_rgba(18,31,23,0.10)] backdrop-blur-2xl transition-all duration-700 ${deepFocus ? 'border-white/12 bg-white/[0.055]' : 'border-[var(--border)] bg-[var(--surface-strong)]/84'}`}>
                 <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] px-5 py-4">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)]">Lista viva</p>
+                    <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${deepFocus ? 'text-[#c9e5b8]/62' : 'text-[var(--text-muted)]'}`}>Lista viva</p>
                     <h3 className={`mt-0.5 text-2xl font-semibold tracking-tight transition-colors ${deepFocus ? 'text-white' : 'text-[var(--earth)]'}`}>{deepFocus ? 'Solo este paso' : 'Pasos'}</h3>
                   </div>
                   <span className="rounded-full bg-[var(--bg-app)] px-3 py-1 text-xs font-black text-[var(--sage)] ring-1 ring-[var(--border)]">
@@ -3484,6 +3497,16 @@ function FocusView({
                           </p>
                         </div>
                       </div>
+                      <label className="mt-5 block rounded-[1.35rem] border border-white/10 bg-black/18 p-3">
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#c9e5b8]/62">Nota de enfoque</span>
+                        <textarea
+                          value={focusNoteMemo}
+                          onChange={(event) => setFocusNotes(current => ({ ...current, [focusNote.id]: event.target.value }))}
+                          rows={4}
+                          placeholder="Guarda una idea rápida sin salir del foco..."
+                          className="mt-2 min-h-28 w-full resize-none bg-transparent text-sm font-medium leading-relaxed text-white outline-none placeholder:text-white/32"
+                        />
+                      </label>
                     </div>
                   ) : focusNote.tasks.length === 0 ? (
                     <div className="rounded-[1.45rem] border border-dashed border-[var(--border)] bg-[var(--bg-app)]/72 px-4 py-6 text-center">
