@@ -3299,37 +3299,41 @@ function FocusView({
                         transition={{ type: 'spring', stiffness: 240, damping: 28 }}
                         className="absolute left-1/2 top-[30%] z-30 -translate-x-1/2"
                       >
-                        <div className="mb-4 text-center">
-                          <p className="text-[10px] font-black uppercase tracking-[0.32em] text-white/44">Seed Focus</p>
+                        <div className="mb-5 text-center">
+                          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[var(--sage)]/80">Cultivo profundo</p>
+                          <p className="mt-1 text-xs font-semibold text-white/42">respira, una acción a la vez</p>
                         </div>
-                        <div className="flex items-center justify-center gap-4">
+                        <div className="flex items-center justify-center gap-5">
                           {[
-                            { id: 'minutes', value: focusMinuteLabel, label: 'min' },
-                            { id: 'seconds', value: focusSecondLabel, label: 'sec' },
+                            { id: 'minutes', value: focusMinuteLabel, label: 'minutos' },
+                            { id: 'seconds', value: focusSecondLabel, label: 'segundos' },
                           ].map((part, index) => (
                             <div key={part.id} className="group relative">
-                              <div className="absolute inset-0 translate-y-3 rounded-[1.8rem] bg-black/35 blur-2xl" />
-                              <div className="relative grid h-32 w-44 place-items-center overflow-hidden rounded-[1.65rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.13)_0%,rgba(255,255,255,0.055)_49%,rgba(0,0,0,0.22)_51%,rgba(0,0,0,0.34)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-2xl">
-                                <div className="absolute inset-x-0 top-1/2 h-px bg-black/45" />
-                                <div className="absolute inset-x-0 top-0 h-1/2 bg-white/[0.035]" />
-                                <div className="absolute left-3 top-1/2 h-3 w-1 -translate-y-1/2 rounded-full bg-black/45" />
-                                <div className="absolute right-3 top-1/2 h-3 w-1 -translate-y-1/2 rounded-full bg-black/45" />
+                              <div className="absolute inset-0 translate-y-4 rounded-[2.4rem] bg-[#03100a]/55 blur-3xl" />
+                              <div className="relative grid h-34 w-46 place-items-center overflow-hidden rounded-[2.1rem] border border-[#b8d7a4]/18 bg-[radial-gradient(circle_at_50%_0%,rgba(196,224,172,0.16),transparent_42%),linear-gradient(180deg,rgba(30,45,34,0.88)_0%,rgba(15,28,20,0.92)_100%)] shadow-[inset_0_1px_0_rgba(232,255,218,0.10),0_26px_86px_rgba(0,0,0,0.36)] backdrop-blur-2xl">
+                                <div className="pointer-events-none absolute inset-0 opacity-[0.13]" style={{ backgroundImage: 'radial-gradient(circle at 22% 18%, rgba(255,255,255,0.7) 0 1px, transparent 1.5px), radial-gradient(circle at 75% 64%, rgba(255,255,255,0.45) 0 1px, transparent 1.5px)', backgroundSize: '2.2rem 2.2rem, 2.8rem 2.8rem' }} />
+                                <div className="absolute inset-x-7 top-1/2 h-px bg-gradient-to-r from-transparent via-[#b8d7a4]/20 to-transparent" />
+                                <div className="absolute inset-x-0 top-0 h-1/2 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),transparent)]" />
                                 <AnimatePresence mode="popLayout">
                                   <motion.span
                                     key={`${part.id}-${part.value}`}
-                                    initial={{ y: -18, rotateX: -72, opacity: 0 }}
+                                    initial={{ y: -16, rotateX: -58, opacity: 0 }}
                                     animate={{ y: 0, rotateX: 0, opacity: 1 }}
-                                    exit={{ y: 18, rotateX: 72, opacity: 0 }}
-                                    transition={{ duration: 0.34, ease: 'easeOut' }}
-                                    className="font-mono text-[5.7rem] font-semibold leading-none tracking-normal text-white tabular-nums"
+                                    exit={{ y: 16, rotateX: 58, opacity: 0 }}
+                                    transition={{ duration: 0.38, ease: 'easeOut' }}
+                                    className="font-mono text-[5.65rem] font-semibold leading-none tracking-normal text-[#f7fff1] drop-shadow-[0_8px_20px_rgba(0,0,0,0.24)] tabular-nums"
                                     style={{ perspective: 800 }}
                                   >
                                     {part.value}
                                   </motion.span>
                                 </AnimatePresence>
-                                <span className="absolute bottom-3 text-[10px] font-black uppercase tracking-[0.22em] text-white/34">{part.label}</span>
+                                <span className="absolute bottom-3 text-[9px] font-black uppercase tracking-[0.2em] text-[#c9e5b8]/48">{part.label}</span>
                               </div>
-                              {index === 0 && <div className="absolute -right-6 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--sage)] shadow-[0_0_22px_rgba(158,195,126,0.8)]" />}
+                              {index === 0 && (
+                                <div className="absolute -right-7 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full border border-[#b8d7a4]/18 bg-[#0f1e15]/80 text-[var(--sage)] shadow-[0_0_26px_rgba(158,195,126,0.28)] backdrop-blur-xl">
+                                  <Leaf size={15} />
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
