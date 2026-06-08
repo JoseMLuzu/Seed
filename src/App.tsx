@@ -2983,7 +2983,7 @@ function FocusView({
             </button>
           </div>
 
-          <main className="flex flex-1 flex-col justify-center py-5 md:grid md:grid-cols-[minmax(0,1fr)_minmax(22rem,0.9fr)] md:items-center md:gap-5 md:py-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(24rem,0.95fr)]">
+          <main className="flex flex-1 flex-col justify-center py-5 md:hidden">
             <section className="order-1 overflow-hidden rounded-[2rem] border border-white/55 bg-[var(--surface-strong)]/82 shadow-[0_28px_90px_rgba(39,53,43,0.16)] ring-1 ring-black/[0.03] backdrop-blur-2xl md:rounded-[2.4rem]">
               <div className="px-5 pb-5 pt-6 text-center md:px-7 md:pb-7 md:pt-8">
                 <div className="mx-auto flex w-fit items-center gap-2 rounded-full bg-[var(--bg-app)]/82 px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)]">
@@ -3178,6 +3178,258 @@ function FocusView({
                 </motion.div>
               )}
             </AnimatePresence>
+          </main>
+
+          <main className="hidden flex-1 py-8 md:grid md:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.74fr)] md:items-stretch md:gap-5 lg:grid-cols-[minmax(0,1.12fr)_minmax(24rem,0.72fr)] lg:gap-7">
+            <section className="relative min-h-[38rem] overflow-hidden rounded-[2.8rem] border border-white/55 bg-[linear-gradient(145deg,var(--surface-strong)_0%,var(--surface-soft)_52%,var(--bg-app)_100%)] p-6 shadow-[0_32px_110px_rgba(18,31,23,0.16)] ring-1 ring-black/[0.03] backdrop-blur-2xl lg:p-8">
+              <div className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-[var(--sage)]/12 blur-3xl" />
+              <div className="pointer-events-none absolute -right-20 bottom-10 h-80 w-80 rounded-full bg-[var(--seed-accent)]/10 blur-3xl" />
+              <div className="relative z-10 flex h-full flex-col">
+                <div className="flex items-start justify-between gap-6">
+                  <div className="min-w-0">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-app)]/72 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--text-muted)] shadow-sm backdrop-blur-xl">
+                      <Target size={13} className="text-[var(--sage)]" />
+                      {active ? 'Cultivando ahora' : 'Jardín de enfoque'}
+                    </div>
+                    <h2 className="mt-4 max-w-2xl text-balance text-4xl font-semibold tracking-tight text-[var(--earth)] lg:text-5xl">
+                      {nextTask?.text || 'Elige un paso pequeño y empieza.'}
+                    </h2>
+                    <p className="mt-3 max-w-xl text-sm font-medium leading-relaxed text-[var(--text-muted)]">
+                      {focusNote.title}
+                    </p>
+                  </div>
+                  <div className="shrink-0 rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)]/78 px-4 py-3 text-right shadow-sm backdrop-blur-xl">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--text-muted)]">Avance</p>
+                    <p className="mt-1 font-serif text-3xl font-black text-[var(--earth)]">{progress}%</p>
+                  </div>
+                </div>
+
+                <div className={`relative mt-7 flex min-h-[24rem] flex-1 items-end justify-center overflow-hidden rounded-[2.35rem] border border-white/60 shadow-inner ${isDay ? 'bg-[linear-gradient(180deg,#eaf6ee_0%,#f8fbf5_54%,#ffffff_100%)]' : 'bg-[linear-gradient(180deg,#0d1b14_0%,#172a1d_54%,#eef7ec_100%)]'}`}>
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.58),transparent_68%)]" />
+                  <div className="pointer-events-none absolute left-10 top-10 h-28 w-28 rounded-full bg-white/32 blur-3xl" />
+                  <div className="pointer-events-none absolute bottom-[-7rem] h-56 w-[36rem] rounded-[50%] bg-[var(--sage)]/16 blur-2xl" />
+                  <div className="absolute left-6 top-6 rounded-[1.7rem] border border-white/70 bg-white/58 px-5 py-4 text-[var(--earth)] shadow-[0_18px_70px_rgba(31,45,35,0.12)] backdrop-blur-2xl">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)]">Tiempo</p>
+                    <p className="mt-1 font-mono text-6xl font-semibold leading-none tabular-nums">{formattedTime}</p>
+                  </div>
+                  <div className="absolute right-6 top-6 flex gap-2">
+                    {[5, 10, 25].map(minutes => (
+                      <button
+                        key={minutes}
+                        type="button"
+                        disabled={active}
+                        onClick={() => setFocusDuration(minutes)}
+                        className={`h-10 rounded-full px-4 text-sm font-semibold shadow-sm backdrop-blur-xl transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                          duration === minutes ? 'bg-[var(--earth)] text-white' : 'bg-white/62 text-[var(--text-muted)] hover:bg-white/82'
+                        }`}
+                      >
+                        {minutes}m
+                      </button>
+                    ))}
+                  </div>
+                  <motion.div
+                    key={`desktop-${focusNote.id}-${completedSteps}`}
+                    initial={{ scale: 0.92, y: 14, opacity: 0.88 }}
+                    animate={{
+                      scale: active ? [1.18, 1.23, 1.18] : 1.18,
+                      y: active ? [0, -5, 0] : 0,
+                      opacity: 1,
+                    }}
+                    transition={{ duration: 3.2, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
+                    className="relative z-10 mb-10 origin-bottom"
+                  >
+                    <PlantIllustration
+                      stage={focusNote.growthStage}
+                      progress={focusGrowthProgress}
+                      isGrowth={focusNote.isGrowth || active}
+                      theme={theme}
+                    />
+                  </motion.div>
+                  <AnimatePresence>
+                    {active && sessionCompletedSteps > 0 && (
+                      <motion.div
+                        key={`desktop-session-${sessionCompletedSteps}`}
+                        initial={{ opacity: 0, y: 10, scale: 0.92 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.94 }}
+                        className="absolute bottom-6 right-6 rounded-full border border-white/70 bg-white/76 px-4 py-2 text-sm font-black text-[var(--sage)] shadow-sm backdrop-blur-xl"
+                      >
+                        +{sessionCompletedSteps} cultivo
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <div className="mt-5 grid grid-cols-3 gap-3">
+                  {[
+                    { label: 'Pasos', value: `${completedSteps}/${focusNote.tasks.length}` },
+                    { label: 'Bloque', value: `${duration}m` },
+                    { label: 'Riego', value: wateringDue(focusNote) ? 'Pendiente' : 'Listo' },
+                  ].map(item => (
+                    <div key={item.label} className="rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-strong)]/72 px-4 py-3 shadow-sm backdrop-blur-xl">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">{item.label}</p>
+                      <p className="mt-1 truncate text-lg font-semibold text-[var(--earth)]">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <aside className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-3">
+              <section className="overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)]/84 p-4 shadow-[0_24px_80px_rgba(18,31,23,0.10)] backdrop-blur-2xl">
+                <div className="flex items-start gap-3">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] shadow-sm">
+                    <Leaf size={18} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--text-muted)]">Acción actual</p>
+                    <p className="mt-1 line-clamp-2 text-lg font-semibold leading-tight text-[var(--earth)]">
+                      {nextTask?.text || 'Define el primer movimiento.'}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--bg-app)]">
+                  <motion.div className="h-full rounded-full bg-[var(--sage)]" animate={{ width: `${progress}%` }} />
+                </div>
+                <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
+                  <button
+                    onClick={active ? stopFocus : () => startFocus(duration)}
+                    className="h-12 rounded-full bg-[var(--sage)] px-5 text-sm font-black text-[var(--on-sage)] shadow-sm soft-interaction"
+                  >
+                    {active ? 'Guardar sesión' : 'Entrar en foco'}
+                  </button>
+                  <button
+                    onClick={completeCurrentTask}
+                    disabled={!nextTask}
+                    className="grid h-12 w-12 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)] ring-1 ring-[var(--border)] soft-interaction disabled:opacity-40"
+                    aria-label="Completar paso actual"
+                  >
+                    <CheckCircle2 size={18} />
+                  </button>
+                </div>
+              </section>
+
+              <section className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => onOpenWatering(focusNote.id)}
+                  disabled={active}
+                  className="flex h-14 items-center justify-center gap-2 rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-strong)]/78 text-sm font-semibold text-[var(--text-muted)] shadow-sm backdrop-blur-xl soft-interaction disabled:opacity-45"
+                >
+                  <Droplets size={16} /> Regar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => requestExit('edit')}
+                  className="flex h-14 items-center justify-center gap-2 rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-strong)]/78 text-sm font-semibold text-[var(--text-muted)] shadow-sm backdrop-blur-xl soft-interaction"
+                >
+                  <Settings size={16} /> Editar
+                </button>
+              </section>
+
+              <section className="min-h-0 overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)]/84 shadow-[0_24px_80px_rgba(18,31,23,0.10)] backdrop-blur-2xl">
+                <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] px-5 py-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)]">Lista viva</p>
+                    <h3 className="mt-0.5 text-2xl font-semibold tracking-tight text-[var(--earth)]">Pasos</h3>
+                  </div>
+                  <span className="rounded-full bg-[var(--bg-app)] px-3 py-1 text-xs font-black text-[var(--sage)] ring-1 ring-[var(--border)]">
+                    {completedSteps}/{focusNote.tasks.length}
+                  </span>
+                </div>
+                <div className="max-h-[26rem] min-h-0 overflow-y-auto px-3 py-2 app-scrollbar">
+                  {focusNote.tasks.length === 0 ? (
+                    <div className="rounded-[1.45rem] border border-dashed border-[var(--border)] bg-[var(--bg-app)]/72 px-4 py-6 text-center">
+                      <ListChecks className="mx-auto text-[var(--sage)]/60" size={28} />
+                      <p className="mt-3 text-sm font-semibold text-[var(--earth)]">Todavía no hay pasos</p>
+                      <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">Escribe uno pequeño para empezar.</p>
+                    </div>
+                  ) : focusNote.tasks.map((task, index) => (
+                    <div key={task.id} className={`group flex items-center gap-3 rounded-[1.25rem] px-3 py-3 transition-colors hover:bg-[var(--bg-app)]/72 ${task.completed ? 'opacity-55' : ''}`}>
+                      <button
+                        onClick={() => onToggleTask(focusNote.id, task.id)}
+                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border transition-transform active:scale-90 ${task.completed ? 'border-[var(--sage)] bg-[var(--sage)] text-[var(--on-sage)]' : 'border-[var(--border)] bg-[var(--surface-strong)] text-transparent'}`}
+                        aria-label={task.completed ? 'Marcar paso pendiente' : 'Completar paso'}
+                      >
+                        <CheckCircle2 size={16} />
+                      </button>
+                      <span className="w-5 shrink-0 text-right text-xs font-black text-[var(--text-muted)]">{index + 1}</span>
+                      <input
+                        value={task.text}
+                        onChange={(event) => onUpdateTask(focusNote.id, task.id, event.target.value)}
+                        readOnly={active}
+                        className={`min-w-0 flex-1 bg-transparent text-[15px] font-semibold text-[var(--earth)] outline-none read-only:cursor-default ${task.completed ? 'line-through' : ''}`}
+                        placeholder="Describe este paso"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => onDeleteTask(focusNote.id, task.id)}
+                        disabled={active}
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--text-muted)] opacity-0 transition-all hover:bg-[var(--tone-danger-bg)] hover:text-[var(--tone-danger)] group-hover:opacity-100 disabled:pointer-events-none disabled:opacity-0"
+                        aria-label="Eliminar paso"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <div className="flex gap-2 rounded-[1.65rem] border border-[var(--border)] bg-[var(--surface-strong)]/84 p-2 shadow-sm backdrop-blur-2xl">
+                  <input
+                    value={step}
+                    onChange={(event) => setStep(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        addFocusStep();
+                      }
+                    }}
+                    placeholder="Nuevo paso de enfoque"
+                    className="h-12 min-w-0 flex-1 rounded-[1.2rem] bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--earth)] outline-none"
+                  />
+                  <button
+                    onClick={addFocusStep}
+                    disabled={!step.trim()}
+                    className="h-12 rounded-[1.2rem] bg-[var(--earth)] px-5 text-sm font-black text-white shadow-sm disabled:opacity-45"
+                  >
+                    Añadir
+                  </button>
+                </div>
+
+                {!active && (
+                  <details className="overflow-hidden rounded-[1.65rem] border border-[var(--border)] bg-[var(--surface-strong)]/70 backdrop-blur-xl">
+                    <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-[var(--text-muted)]">
+                      Cambiar idea
+                      <ChevronDown size={16} />
+                    </summary>
+                    <div className="border-t border-[var(--border)] px-4 py-3">
+                      <AppSelect
+                        value={focusNote.id}
+                        onChange={onPickFocus}
+                        ariaLabel="Elegir idea para enfoque"
+                        options={focusOptions}
+                      />
+                    </div>
+                  </details>
+                )}
+
+                <AnimatePresence>
+                  {finished && sessionSummary && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 8 }}
+                      className="rounded-[1.65rem] border border-[var(--border)] bg-[var(--surface-strong)]/78 p-4 shadow-sm backdrop-blur-xl"
+                    >
+                      <p className="text-sm font-semibold text-[var(--earth)]">Sesión guardada</p>
+                      <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">{sessionSummary.minutes} min · {sessionSummary.steps} pasos · {sessionSummary.growth}% de avance</p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </section>
+            </aside>
           </main>
         </div>
       </div>
