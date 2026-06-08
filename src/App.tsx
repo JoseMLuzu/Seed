@@ -2936,7 +2936,9 @@ function FocusView({
     setStep('');
   };
 
-  const formattedTime = `${Math.floor(remaining / 60).toString().padStart(2, '0')}:${(remaining % 60).toString().padStart(2, '0')}`;
+  const focusMinuteLabel = Math.floor(remaining / 60).toString().padStart(2, '0');
+  const focusSecondLabel = (remaining % 60).toString().padStart(2, '0');
+  const formattedTime = `${focusMinuteLabel}:${focusSecondLabel}`;
   const setFocusDuration = (minutes: number) => {
     setDuration(minutes);
     setRemaining(minutes * 60);
@@ -3258,7 +3260,7 @@ function FocusView({
                   <div className="pointer-events-none absolute bottom-[-7rem] h-56 w-[36rem] rounded-[50%] bg-[var(--sage)]/16 blur-2xl" />
                   <div className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ${deepFocus ? 'opacity-100' : 'opacity-45'}`} style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px)', backgroundSize: '4.5rem 4.5rem' }} />
                   <div className={`pointer-events-none absolute -left-24 top-10 h-32 w-[42rem] rotate-[-14deg] bg-white/[0.07] blur-2xl transition-opacity duration-700 ${deepFocus ? 'opacity-100' : 'opacity-0'}`} />
-                  <div className={`absolute left-6 top-6 rounded-[1.7rem] border px-5 py-4 shadow-[0_18px_70px_rgba(31,45,35,0.12)] backdrop-blur-2xl transition-colors ${deepFocus ? 'border-white/12 bg-black/24 text-white' : 'border-white/70 bg-white/58 text-[var(--earth)]'}`}>
+                  <div className={`absolute left-6 top-6 rounded-[1.7rem] border px-5 py-4 shadow-[0_18px_70px_rgba(31,45,35,0.12)] backdrop-blur-2xl transition-all duration-500 ${deepFocus ? 'pointer-events-none translate-y-[-0.35rem] border-white/12 bg-black/24 text-white opacity-0' : 'border-white/70 bg-white/58 text-[var(--earth)] opacity-100'}`}>
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)]">Tiempo</p>
                     <p className="mt-1 font-mono text-6xl font-semibold leading-none tabular-nums">{formattedTime}</p>
                   </div>
@@ -3287,16 +3289,63 @@ function FocusView({
                     animate={deepFocus ? { scale: [1, 1.08, 1], opacity: [0.55, 0.2, 0.55] } : { scale: 1, opacity: 0.35 }}
                     transition={{ duration: 5.2, repeat: deepFocus ? Infinity : 0, ease: 'easeInOut' }}
                   />
+                  <AnimatePresence>
+                    {deepFocus && (
+                      <motion.div
+                        key="seed-flip-clock"
+                        initial={{ opacity: 0, y: 18, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                        transition={{ type: 'spring', stiffness: 240, damping: 28 }}
+                        className="absolute left-1/2 top-[30%] z-30 -translate-x-1/2"
+                      >
+                        <div className="mb-4 text-center">
+                          <p className="text-[10px] font-black uppercase tracking-[0.32em] text-white/44">Seed Focus</p>
+                        </div>
+                        <div className="flex items-center justify-center gap-4">
+                          {[
+                            { id: 'minutes', value: focusMinuteLabel, label: 'min' },
+                            { id: 'seconds', value: focusSecondLabel, label: 'sec' },
+                          ].map((part, index) => (
+                            <div key={part.id} className="group relative">
+                              <div className="absolute inset-0 translate-y-3 rounded-[1.8rem] bg-black/35 blur-2xl" />
+                              <div className="relative grid h-32 w-44 place-items-center overflow-hidden rounded-[1.65rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.13)_0%,rgba(255,255,255,0.055)_49%,rgba(0,0,0,0.22)_51%,rgba(0,0,0,0.34)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-2xl">
+                                <div className="absolute inset-x-0 top-1/2 h-px bg-black/45" />
+                                <div className="absolute inset-x-0 top-0 h-1/2 bg-white/[0.035]" />
+                                <div className="absolute left-3 top-1/2 h-3 w-1 -translate-y-1/2 rounded-full bg-black/45" />
+                                <div className="absolute right-3 top-1/2 h-3 w-1 -translate-y-1/2 rounded-full bg-black/45" />
+                                <AnimatePresence mode="popLayout">
+                                  <motion.span
+                                    key={`${part.id}-${part.value}`}
+                                    initial={{ y: -18, rotateX: -72, opacity: 0 }}
+                                    animate={{ y: 0, rotateX: 0, opacity: 1 }}
+                                    exit={{ y: 18, rotateX: 72, opacity: 0 }}
+                                    transition={{ duration: 0.34, ease: 'easeOut' }}
+                                    className="font-mono text-[5.7rem] font-semibold leading-none tracking-normal text-white tabular-nums"
+                                    style={{ perspective: 800 }}
+                                  >
+                                    {part.value}
+                                  </motion.span>
+                                </AnimatePresence>
+                                <span className="absolute bottom-3 text-[10px] font-black uppercase tracking-[0.22em] text-white/34">{part.label}</span>
+                              </div>
+                              {index === 0 && <div className="absolute -right-6 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[var(--sage)] shadow-[0_0_22px_rgba(158,195,126,0.8)]" />}
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                   <motion.div
                     key={`desktop-${focusNote.id}-${completedSteps}`}
                     initial={{ scale: 0.92, y: 14, opacity: 0.88 }}
                     animate={{
-                      scale: active ? [1.24, 1.31, 1.24] : 1.18,
-                      y: active ? [0, -7, 0] : 0,
+                      scale: active ? [1.06, 1.12, 1.06] : 1.18,
+                      y: active ? [0, -5, 0] : 0,
                       opacity: 1,
                     }}
                     transition={{ duration: 3.2, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
-                    className="relative z-10 mb-10 origin-bottom"
+                    className={`relative z-10 origin-bottom transition-all duration-700 ${deepFocus ? 'mb-4 translate-y-8 opacity-90' : 'mb-10'}`}
                   >
                     <PlantIllustration
                       stage={focusNote.growthStage}
