@@ -5118,7 +5118,7 @@ export default function App() {
 	    setIsAdding(false);
 	    setSelectedNoteId(null);
 	    setRecentlyCreatedNoteId(note.id);
-	    feel(isJournal ? 'harvest' : isSprout ? 'sprout' : 'plant');
+	    feel(isJournal ? 'harvest' : 'plant');
 	    setCelebration(isJournal ? 'Reflexión guardada' : isSprout ? 'Brote creado' : isFirstUserSeed ? 'Tu primera semilla apareció en el jardín' : 'Semilla plantada');
 	    window.setTimeout(() => setRecentlyCreatedNoteId(current => current === note.id ? null : current), 1800);
 	    window.setTimeout(() => setCelebration(null), 1500);
