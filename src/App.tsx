@@ -2967,6 +2967,27 @@ function FocusView({
         <div className={`absolute inset-0 transition-all duration-700 ${deepFocus ? 'bg-[radial-gradient(circle_at_48%_42%,rgba(99,129,89,0.22),transparent_42%),linear-gradient(180deg,#06100c_0%,#0d1a13_58%,#07100c_100%)]' : isDay ? 'bg-[linear-gradient(180deg,#f7faf5_0%,#edf4ed_100%)]' : 'bg-[linear-gradient(180deg,#07110d_0%,#122019_100%)]'}`} />
         <div className={`pointer-events-none absolute inset-x-0 top-0 h-48 transition-opacity duration-700 ${deepFocus ? 'opacity-70 bg-[radial-gradient(circle_at_50%_0%,rgba(183,218,158,0.22),transparent_62%)]' : 'bg-[radial-gradient(circle_at_50%_0%,rgba(126,158,116,0.18),transparent_62%)]'}`} />
         {deepFocus && <div className="pointer-events-none absolute inset-0 bg-black/24 transition-opacity duration-700" />}
+        <AnimatePresence>
+          {deepFocus && (
+            <motion.div
+              key="deep-focus-entry"
+              className="pointer-events-none fixed inset-0 z-50 grid place-items-center"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 1, 0] }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 1.15, ease: 'easeOut' }}
+            >
+              <motion.div
+                initial={{ scale: 0.86, y: 14 }}
+                animate={{ scale: [0.86, 1, 1.04], y: [14, 0, -4] }}
+                transition={{ duration: 1.15, ease: 'easeOut' }}
+                className="grid h-24 w-24 place-items-center rounded-[2rem] border border-white/18 bg-white/[0.08] text-white shadow-[0_28px_90px_rgba(0,0,0,0.38)] backdrop-blur-2xl"
+              >
+                <Leaf size={34} />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="relative z-10 mx-auto flex min-h-[calc(100vh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2.35rem)] w-full max-w-[72rem] flex-col">
           <div className={`flex items-center justify-between gap-3 transition-opacity duration-500 ${deepFocus ? 'opacity-72' : 'opacity-100'}`}>
@@ -3235,6 +3256,8 @@ function FocusView({
                   <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.58),transparent_68%)]" />
                   <div className="pointer-events-none absolute left-10 top-10 h-28 w-28 rounded-full bg-white/32 blur-3xl" />
                   <div className="pointer-events-none absolute bottom-[-7rem] h-56 w-[36rem] rounded-[50%] bg-[var(--sage)]/16 blur-2xl" />
+                  <div className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ${deepFocus ? 'opacity-100' : 'opacity-45'}`} style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px)', backgroundSize: '4.5rem 4.5rem' }} />
+                  <div className={`pointer-events-none absolute -left-24 top-10 h-32 w-[42rem] rotate-[-14deg] bg-white/[0.07] blur-2xl transition-opacity duration-700 ${deepFocus ? 'opacity-100' : 'opacity-0'}`} />
                   <div className={`absolute left-6 top-6 rounded-[1.7rem] border px-5 py-4 shadow-[0_18px_70px_rgba(31,45,35,0.12)] backdrop-blur-2xl transition-colors ${deepFocus ? 'border-white/12 bg-black/24 text-white' : 'border-white/70 bg-white/58 text-[var(--earth)]'}`}>
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)]">Tiempo</p>
                     <p className="mt-1 font-mono text-6xl font-semibold leading-none tabular-nums">{formattedTime}</p>
@@ -3254,6 +3277,16 @@ function FocusView({
                       </button>
                     ))}
                   </div>
+                  <motion.div
+                    className={`pointer-events-none absolute bottom-12 h-52 w-52 rounded-full border transition-opacity duration-700 ${deepFocus ? 'border-[var(--sage)]/32 opacity-100' : 'border-white/38 opacity-60'}`}
+                    animate={deepFocus ? { scale: [1, 1.18, 1], opacity: [0.8, 0.32, 0.8] } : { scale: 1, opacity: 0.55 }}
+                    transition={{ duration: 3.8, repeat: deepFocus ? Infinity : 0, ease: 'easeInOut' }}
+                  />
+                  <motion.div
+                    className={`pointer-events-none absolute bottom-6 h-72 w-72 rounded-full border transition-opacity duration-700 ${deepFocus ? 'border-white/16 opacity-100' : 'border-white/22 opacity-45'}`}
+                    animate={deepFocus ? { scale: [1, 1.08, 1], opacity: [0.55, 0.2, 0.55] } : { scale: 1, opacity: 0.35 }}
+                    transition={{ duration: 5.2, repeat: deepFocus ? Infinity : 0, ease: 'easeInOut' }}
+                  />
                   <motion.div
                     key={`desktop-${focusNote.id}-${completedSteps}`}
                     initial={{ scale: 0.92, y: 14, opacity: 0.88 }}
@@ -3282,6 +3315,21 @@ function FocusView({
                         className="absolute bottom-6 right-6 rounded-full border border-white/70 bg-white/76 px-4 py-2 text-sm font-black text-[var(--sage)] shadow-sm backdrop-blur-xl"
                       >
                         +{sessionCompletedSteps} cultivo
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <AnimatePresence>
+                    {deepFocus && nextTask && (
+                      <motion.div
+                        key="deep-focus-step-card"
+                        initial={{ opacity: 0, y: 18, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                        transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+                        className="absolute bottom-6 left-6 max-w-[24rem] rounded-[1.8rem] border border-white/14 bg-black/26 p-4 text-white shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur-2xl"
+                      >
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--sage)]">Ahora</p>
+                        <p className="mt-2 line-clamp-2 text-lg font-semibold leading-tight">{nextTask.text}</p>
                       </motion.div>
                     )}
                   </AnimatePresence>
