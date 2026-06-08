@@ -26,6 +26,7 @@ const MASTER_VOLUME = 0.55;
 const SOUND_FILES: Partial<Record<SeedSoundKind, string[]>> = {
   pop: ['/sounds/mixkit-long-pop-2358-short.wav'],
   holdPop: ['/sounds/mixkit-long-pop-2358.wav'],
+  plant: ['/sounds/mixkit-hard-pop-click-2364.wav'],
 };
 
 const SOUND_PRESETS: Record<SeedSoundKind, SoundPreset> = {

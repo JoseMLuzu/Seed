@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lazy, Suspense, useRef, useState, useEffect, useLayoutEffect, useMemo, type ReactNode } from 'react';
+import { lazy, Suspense, useRef, useState, useEffect, useLayoutEffect, useMemo, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { DndContext, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -1587,179 +1587,238 @@ function TodayView({
   const [intentionDraft, setIntentionDraft] = useState(dailyIntention);
   const [isEditingIntention, setIsEditingIntention] = useState(!dailyIntention.trim());
   const [intentionOutcome, setIntentionOutcome] = useState<'yes' | 'some' | 'no' | ''>('');
-  const today = new Date();
-  const activeNotes = notes.filter(note => note.growthStage !== 'bloom' && note.growthStage !== 'withered' && !note.paused);
-  const allThirstyNotes = activeNotes
-    .filter(note => wateringDue(note))
-    .sort((a, b) => {
-      const aAge = daysSince(a.lastWateredAt || a.createdAt);
-      const bAge = daysSince(b.lastWateredAt || b.createdAt);
-      const aSeedBoost = a.inbox ? 2 : 0;
-      const bSeedBoost = b.inbox ? 2 : 0;
-      return (priorityWeight(b) + bAge + bSeedBoost) - (priorityWeight(a) + aAge + aSeedBoost);
-    });
-  const firstWatering = allThirstyNotes[0];
-  const nextActions = notes
-    .filter(note => !note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom' && !wateringDue(note))
-    .map(note => ({ note, task: note.tasks.find(task => !task.completed) }))
-    .filter((item): item is { note: SeedNote; task: NonNullable<typeof item.task> } => Boolean(item.task))
-    .sort((a, b) => priorityWeight(b.note) - priorityWeight(a.note))
-    .slice(0, 1);
-  const nextAction = nextActions[0];
-  const inboxNotes = notes
-    .filter(note => note.inbox)
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, 1);
-  const inboxCount = notes.filter(note => note.inbox).length;
-  const sproutCount = notes.filter(note => !note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom').length;
-  const completedToday = notes.filter(note => note.harvestedAt && isToday(note.harvestedAt)).length;
-  const dayClosure = notes.find(note => isDailyClosureForDate(note));
-  const dayAlreadyClosed = Boolean(dayClosure);
-  const plantedToday = notes.filter(note => isToday(note.createdAt)).length;
-  const wateredTodayCount = notes.filter(note => note.lastWateredAt && isToday(note.lastWateredAt)).length;
-  const stepsToday = notes.filter(note =>
-    note.updatedAt &&
-    isToday(note.updatedAt) &&
-    note.tasks.some(task => task.completed)
-  ).length;
-  const activeDaysThisMonth = new Set(notes
-    .flatMap(note => [note.createdAt, note.lastWateredAt, note.harvestedAt].filter((date): date is number => Boolean(date)))
-    .filter(date => isSameMonth(date, today))
-    .map(date => format(date, 'yyyy-MM-dd'))).size;
-  const learnedNotes = notes
-    .filter(note => note.growthStage === 'bloom' && (note.reflection?.trim() || note.takeaway?.trim()))
-    .sort((a, b) => (b.harvestedAt || b.updatedAt || b.createdAt) - (a.harvestedAt || a.updatedAt || a.createdAt));
-  const learningMemory = learnedNotes[0];
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? t('goodMorning') : hour < 19 ? t('goodAfternoon') : t('goodEvening');
-  const firstName = accountName.trim().split(/\s+/)[0] || (appLanguage === 'en' ? 'there' : 'jardinero');
-  const todayWeekday = format(today, 'EEEE', { locale: appDateLocale });
-  const todayDate = formatDayMonth(today);
-  const dailyPhraseSeed = Number(format(today, 'd')) + notes.length + wateringStreak;
-  const motivationalPhrases = appLanguage === 'en'
-    ? [
-        'One small return is enough.',
-        'Keep it light. Keep it alive.',
-        'A seed only needs one next move.',
-        'No rush. Just choose what still matters.',
-        'Good ideas grow quietly.',
-        'Today can be one clear step.',
-      ]
-    : [
-        'Volver un poco también cuenta.',
-        'Cuida una idea, no toda la lista.',
-        'Una semilla solo necesita el siguiente paso.',
-        'Sin prisa. Solo elige lo que sigue vivo.',
-        'Las buenas ideas crecen en silencio.',
-        'Hoy puede ser un paso claro.',
-      ];
-  const motivationalText = motivationalPhrases[dailyPhraseSeed % motivationalPhrases.length];
-  const doneTodayText = wateredToday
-    ? appLanguage === 'en'
-      ? `${wateringStreak}-day streak`
-      : `Racha de ${wateringStreak} día${wateringStreak === 1 ? '' : 's'}`
-    : motivationalText;
-  const primaryMode = firstWatering ? 'water' : nextAction ? 'focus' : inboxCount > 0 ? 'seed' : 'calm';
-  const primaryTitle = firstWatering?.title || nextAction?.note.title || inboxNotes[0]?.title || t('quietGarden');
-  const primaryDetail = firstWatering
-    ? formatReviewAge(firstWatering)
-    : nextAction
-      ? nextAction.task.text
-      : inboxNotes[0]
-        ? t('seedWaiting')
-        : t('captureIdea');
-  const primaryEyebrow = firstWatering
-    ? appLanguage === 'en' ? 'Review gently' : 'Riego amable'
-    : nextAction
-      ? appLanguage === 'en' ? 'One small step' : 'Un paso pequeño'
-      : inboxCount > 0
-        ? appLanguage === 'en' ? 'Decide later, now' : 'Decidir sin presión'
-        : appLanguage === 'en' ? 'Quiet garden' : 'Jardín tranquilo';
-  const PrimaryIcon = firstWatering ? Droplets : nextAction ? Target : inboxCount > 0 ? Sprout : Leaf;
-  const primaryActionLabel = firstWatering
-    ? t('waterNow')
-    : nextAction
-      ? t('focus')
-      : inboxCount > 0
-        ? t('viewSeeds')
-        : appLanguage === 'en' ? 'Plant seed' : 'Plantar semilla';
-  const secondaryActionLabel = firstWatering
-    ? appLanguage === 'en' ? 'Later today' : 'Más tarde'
-    : nextAction
-      ? appLanguage === 'en' ? 'Open sprout' : 'Abrir brote'
-      : inboxCount > 0
-        ? appLanguage === 'en' ? 'Plant another' : 'Plantar otra'
-        : appLanguage === 'en' ? 'View garden' : 'Ver jardín';
-  const primaryAccent =
-    primaryMode === 'water' ? 'text-[var(--sage)]' :
-    primaryMode === 'focus' ? 'text-[var(--seed-accent)]' :
-    primaryMode === 'seed' ? 'text-[var(--tone-seed)]' :
-    'text-[var(--sage)]';
-  const todayPlan = firstWatering
-      ? firstWatering?.inbox
-        ? appLanguage === 'en'
-          ? `Today, decide if "${firstWatering.title}" is still alive.`
-          : `Hoy conviene decidir si "${firstWatering.title}" sigue viva.`
-        : appLanguage === 'en'
-          ? `Today, water ${allThirstyNotes.length} idea${allThirstyNotes.length === 1 ? '' : 's'} before moving forward.`
-          : `Hoy conviene regar ${allThirstyNotes.length} idea${allThirstyNotes.length === 1 ? '' : 's'} antes de avanzar.`
-    : nextAction
+  const todayData = useMemo(() => {
+    const today = new Date();
+    const activeNotes = notes.filter(note => note.growthStage !== 'bloom' && note.growthStage !== 'withered' && !note.paused);
+    const allThirstyNotes = activeNotes
+      .filter(note => wateringDue(note))
+      .sort((a, b) => {
+        const aAge = daysSince(a.lastWateredAt || a.createdAt);
+        const bAge = daysSince(b.lastWateredAt || b.createdAt);
+        const aSeedBoost = a.inbox ? 2 : 0;
+        const bSeedBoost = b.inbox ? 2 : 0;
+        return (priorityWeight(b) + bAge + bSeedBoost) - (priorityWeight(a) + aAge + aSeedBoost);
+      });
+    const firstWatering = allThirstyNotes[0];
+    const nextAction = notes
+      .filter(note => !note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom' && !wateringDue(note))
+      .map(note => ({ note, task: note.tasks.find(task => !task.completed) }))
+      .filter((item): item is { note: SeedNote; task: NonNullable<typeof item.task> } => Boolean(item.task))
+      .sort((a, b) => priorityWeight(b.note) - priorityWeight(a.note))[0];
+    const firstInboxNote = notes
+      .filter(note => note.inbox)
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
+    const inboxCount = notes.filter(note => note.inbox).length;
+    const sproutCount = notes.filter(note => !note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom').length;
+    const harvestCount = notes.filter(note => !note.inbox && note.growthStage === 'bloom').length;
+    const completedToday = notes.filter(note => note.harvestedAt && isToday(note.harvestedAt)).length;
+    const dayClosure = notes.find(note => isDailyClosureForDate(note));
+    const plantedToday = notes.filter(note => isToday(note.createdAt)).length;
+    const wateredTodayCount = notes.filter(note => note.lastWateredAt && isToday(note.lastWateredAt)).length;
+    const stepsToday = notes.filter(note =>
+      note.updatedAt &&
+      isToday(note.updatedAt) &&
+      note.tasks.some(task => task.completed)
+    ).length;
+    const activeDaysThisMonth = new Set(notes
+      .flatMap(note => [note.createdAt, note.lastWateredAt, note.harvestedAt].filter((date): date is number => Boolean(date)))
+      .filter(date => isSameMonth(date, today))
+      .map(date => format(date, 'yyyy-MM-dd'))).size;
+    const learningMemory = notes
+      .filter(note => note.growthStage === 'bloom' && (note.reflection?.trim() || note.takeaway?.trim()))
+      .sort((a, b) => (b.harvestedAt || b.updatedAt || b.createdAt) - (a.harvestedAt || a.updatedAt || a.createdAt))[0];
+    const hour = today.getHours();
+    const greeting = hour < 12 ? t('goodMorning') : hour < 19 ? t('goodAfternoon') : t('goodEvening');
+    const firstName = accountName.trim().split(/\s+/)[0] || (appLanguage === 'en' ? 'there' : 'jardinero');
+    const todayWeekday = format(today, 'EEEE', { locale: appDateLocale });
+    const todayDate = formatDayMonth(today);
+    const dailyPhraseSeed = Number(format(today, 'd')) + notes.length + wateringStreak;
+    const motivationalPhrases = appLanguage === 'en'
+      ? [
+          'One small return is enough.',
+          'Keep it light. Keep it alive.',
+          'A seed only needs one next move.',
+          'No rush. Just choose what still matters.',
+          'Good ideas grow quietly.',
+          'Today can be one clear step.',
+        ]
+      : [
+          'Volver un poco también cuenta.',
+          'Cuida una idea, no toda la lista.',
+          'Una semilla solo necesita el siguiente paso.',
+          'Sin prisa. Solo elige lo que sigue vivo.',
+          'Las buenas ideas crecen en silencio.',
+          'Hoy puede ser un paso claro.',
+        ];
+    const motivationalText = motivationalPhrases[dailyPhraseSeed % motivationalPhrases.length];
+    const doneTodayText = wateredToday
       ? appLanguage === 'en'
-        ? 'Today, finish one small step and keep the day quiet.'
-        : 'Hoy conviene completar un paso pequeño y cerrar el día sin ruido.'
-      : inboxCount > 0
-        ? appLanguage === 'en'
-          ? `Today, decide one of ${inboxCount} waiting seed${inboxCount === 1 ? '' : 's'}.`
-          : `Hoy conviene decidir ${Math.min(inboxCount, 1)} semilla${inboxCount === 1 ? '' : ' de las que esperan'}.`
-        : learningMemory
+        ? `${wateringStreak}-day streak`
+        : `Racha de ${wateringStreak} día${wateringStreak === 1 ? '' : 's'}`
+      : motivationalText;
+    const primaryMode = firstWatering ? 'water' : nextAction ? 'focus' : inboxCount > 0 ? 'seed' : 'calm';
+    const primaryTitle = firstWatering?.title || nextAction?.note.title || firstInboxNote?.title || t('quietGarden');
+    const primaryDetail = firstWatering
+      ? formatReviewAge(firstWatering)
+      : nextAction
+        ? nextAction.task.text
+        : firstInboxNote
+          ? t('seedWaiting')
+          : t('captureIdea');
+    const primaryEyebrow = firstWatering
+      ? appLanguage === 'en' ? 'Review gently' : 'Riego amable'
+      : nextAction
+        ? appLanguage === 'en' ? 'One small step' : 'Un paso pequeño'
+        : inboxCount > 0
+          ? appLanguage === 'en' ? 'Decide later, now' : 'Decidir sin presión'
+          : appLanguage === 'en' ? 'Quiet garden' : 'Jardín tranquilo';
+    const PrimaryIcon = firstWatering ? Droplets : nextAction ? Target : inboxCount > 0 ? Sprout : Leaf;
+    const primaryActionLabel = firstWatering
+      ? t('waterNow')
+      : nextAction
+        ? t('focus')
+        : inboxCount > 0
+          ? t('viewSeeds')
+          : appLanguage === 'en' ? 'Plant seed' : 'Plantar semilla';
+    const secondaryActionLabel = firstWatering
+      ? appLanguage === 'en' ? 'Later today' : 'Más tarde'
+      : nextAction
+        ? appLanguage === 'en' ? 'Open sprout' : 'Abrir brote'
+        : inboxCount > 0
+          ? appLanguage === 'en' ? 'Plant another' : 'Plantar otra'
+          : appLanguage === 'en' ? 'View garden' : 'Ver jardín';
+    const primaryAccent =
+      primaryMode === 'water' ? 'text-[var(--sage)]' :
+      primaryMode === 'focus' ? 'text-[var(--seed-accent)]' :
+      primaryMode === 'seed' ? 'text-[var(--tone-seed)]' :
+      'text-[var(--sage)]';
+    const todayPlan = firstWatering
+        ? firstWatering?.inbox
           ? appLanguage === 'en'
-            ? 'Garden is quiet. Review one lesson or plant something new.'
-            : 'Jardín tranquilo. Puedes revisar un aprendizaje o plantar algo nuevo.'
+            ? `Today, decide if "${firstWatering.title}" is still alive.`
+            : `Hoy conviene decidir si "${firstWatering.title}" sigue viva.`
           : appLanguage === 'en'
-            ? 'Garden is quiet. Capture an idea or rest without guilt.'
-            : 'Jardín tranquilo. Captura una idea o descansa sin culpa.';
-  const contextualPhrase = firstWatering
-    ? appLanguage === 'en'
-      ? 'Before adding more, return to what may still be alive.'
-      : 'Antes de sumar más, vuelve a lo que todavía puede seguir vivo.'
-    : nextAction
-      ? appLanguage === 'en'
-        ? 'A small step keeps the sprout awake.'
-        : 'Un paso pequeño mantiene el brote despierto.'
-      : inboxCount > 0
+            ? `Today, water ${allThirstyNotes.length} idea${allThirstyNotes.length === 1 ? '' : 's'} before moving forward.`
+            : `Hoy conviene regar ${allThirstyNotes.length} idea${allThirstyNotes.length === 1 ? '' : 's'} antes de avanzar.`
+      : nextAction
         ? appLanguage === 'en'
-          ? 'Choose one seed. The rest can wait.'
-          : 'Elige una semilla. Las demás pueden esperar.'
-        : appLanguage === 'en'
-          ? 'Your garden is quiet. That is also progress.'
-          : 'Tu jardín está tranquilo. Eso también es avance.';
-  const gardenMood = firstWatering
-    ? {
-        label: appLanguage === 'en' ? 'Garden asks for water' : 'El jardín pide agua',
-        detail: appLanguage === 'en' ? `${allThirstyNotes.length} idea${allThirstyNotes.length === 1 ? '' : 's'} waiting` : `${allThirstyNotes.length} idea${allThirstyNotes.length === 1 ? '' : 's'} esperando`,
-        icon: Droplets,
-        tone: 'text-[var(--sage)]',
-      }
-    : nextAction
+          ? 'Today, finish one small step and keep the day quiet.'
+          : 'Hoy conviene completar un paso pequeño y cerrar el día sin ruido.'
+        : inboxCount > 0
+          ? appLanguage === 'en'
+            ? `Today, decide one of ${inboxCount} waiting seed${inboxCount === 1 ? '' : 's'}.`
+            : `Hoy conviene decidir ${Math.min(inboxCount, 1)} semilla${inboxCount === 1 ? '' : ' de las que esperan'}.`
+          : learningMemory
+            ? appLanguage === 'en'
+              ? 'Garden is quiet. Review one lesson or plant something new.'
+              : 'Jardín tranquilo. Puedes revisar un aprendizaje o plantar algo nuevo.'
+            : appLanguage === 'en'
+              ? 'Garden is quiet. Capture an idea or rest without guilt.'
+              : 'Jardín tranquilo. Captura una idea o descansa sin culpa.';
+    const contextualPhrase = firstWatering
+      ? appLanguage === 'en'
+        ? 'Before adding more, return to what may still be alive.'
+        : 'Antes de sumar más, vuelve a lo que todavía puede seguir vivo.'
+      : nextAction
+        ? appLanguage === 'en'
+          ? 'A small step keeps the sprout awake.'
+          : 'Un paso pequeño mantiene el brote despierto.'
+        : inboxCount > 0
+          ? appLanguage === 'en'
+            ? 'Choose one seed. The rest can wait.'
+            : 'Elige una semilla. Las demás pueden esperar.'
+          : appLanguage === 'en'
+            ? 'Your garden is quiet. That is also progress.'
+            : 'Tu jardín está tranquilo. Eso también es avance.';
+    const gardenMood = firstWatering
       ? {
-          label: appLanguage === 'en' ? 'Garden is growing' : 'El jardín está creciendo',
-          detail: appLanguage === 'en' ? 'One next step is ready' : 'Hay un siguiente paso listo',
-          icon: Sprout,
-          tone: 'text-[var(--tone-sprout)]',
+          label: appLanguage === 'en' ? 'Garden asks for water' : 'El jardín pide agua',
+          detail: appLanguage === 'en' ? `${allThirstyNotes.length} idea${allThirstyNotes.length === 1 ? '' : 's'} waiting` : `${allThirstyNotes.length} idea${allThirstyNotes.length === 1 ? '' : 's'} esperando`,
+          icon: Droplets,
+          tone: 'text-[var(--sage)]',
         }
-      : inboxCount > 0
+      : nextAction
         ? {
-            label: appLanguage === 'en' ? 'Garden is collecting seeds' : 'El jardín junta semillas',
-            detail: appLanguage === 'en' ? `${inboxCount} to decide` : `${inboxCount} por decidir`,
-            icon: Leaf,
-            tone: 'text-[var(--tone-seed)]',
+            label: appLanguage === 'en' ? 'Garden is growing' : 'El jardín está creciendo',
+            detail: appLanguage === 'en' ? 'One next step is ready' : 'Hay un siguiente paso listo',
+            icon: Sprout,
+            tone: 'text-[var(--tone-sprout)]',
           }
-        : {
-            label: appLanguage === 'en' ? 'Garden feels calm' : 'El jardín se siente tranquilo',
-            detail: appLanguage === 'en' ? 'Nothing urgent today' : 'Nada urgente por hoy',
-            icon: CheckCircle2,
-            tone: 'text-[var(--sage)]',
-          };
+        : inboxCount > 0
+          ? {
+              label: appLanguage === 'en' ? 'Garden is collecting seeds' : 'El jardín junta semillas',
+              detail: appLanguage === 'en' ? `${inboxCount} to decide` : `${inboxCount} por decidir`,
+              icon: Leaf,
+              tone: 'text-[var(--tone-seed)]',
+            }
+          : {
+              label: appLanguage === 'en' ? 'Garden feels calm' : 'El jardín se siente tranquilo',
+              detail: appLanguage === 'en' ? 'Nothing urgent today' : 'Nada urgente por hoy',
+              icon: CheckCircle2,
+              tone: 'text-[var(--sage)]',
+            };
+
+    return {
+      activeDaysThisMonth,
+      allThirstyNotes,
+      completedToday,
+      contextualPhrase,
+      dayAlreadyClosed: Boolean(dayClosure),
+      doneTodayText,
+      firstWatering,
+      gardenMood,
+      greeting,
+      harvestCount,
+      inboxCount,
+      learningMemory,
+      nextAction,
+      plantedToday,
+      PrimaryIcon,
+      primaryAccent,
+      primaryActionLabel,
+      primaryDetail,
+      primaryEyebrow,
+      primaryTitle,
+      secondaryActionLabel,
+      sproutCount,
+      stepsToday,
+      todayDate,
+      todayPlan,
+      todayWeekday,
+      wateredTodayCount,
+      firstName,
+    };
+  }, [accountName, notes, wateredToday, wateringStreak]);
+  const {
+    activeDaysThisMonth,
+    allThirstyNotes,
+    completedToday,
+    contextualPhrase,
+    dayAlreadyClosed,
+    doneTodayText,
+    firstWatering,
+    gardenMood,
+    greeting,
+    harvestCount,
+    inboxCount,
+    learningMemory,
+    nextAction,
+    plantedToday,
+    PrimaryIcon,
+    primaryAccent,
+    primaryActionLabel,
+    primaryDetail,
+    primaryEyebrow,
+    primaryTitle,
+    secondaryActionLabel,
+    sproutCount,
+    stepsToday,
+    todayDate,
+    todayPlan,
+    todayWeekday,
+    wateredTodayCount,
+    firstName,
+  } = todayData;
   const GardenMoodIcon = gardenMood.icon;
   const todayRoutes = [
     {
@@ -1780,7 +1839,7 @@ function TodayView({
     },
     {
       label: appLanguage === 'en' ? 'Harvests' : 'Cosechas',
-      value: notes.filter(note => !note.inbox && note.growthStage === 'bloom').length,
+      value: harvestCount,
       detail: completedToday > 0 ? (appLanguage === 'en' ? 'today' : 'hoy') : (appLanguage === 'en' ? 'saved' : 'guardados'),
       icon: Archive,
       onClick: () => onNavigate('harvest'),
@@ -2297,7 +2356,7 @@ function InboxView({
   recentlyCreatedNoteId: string | null;
   onStartPlanting: () => void;
 }) {
-  const inboxNotes = notes.filter(note => note.inbox);
+  const inboxNotes = useMemo(() => notes.filter(note => note.inbox), [notes]);
 
   return (
     <motion.div
@@ -2399,12 +2458,15 @@ function ProjectsView({
   onStartSprout: () => void;
   getProgress: (note: SeedNote) => number;
 }) {
-  const activeProjects = notes.filter(note => !note.inbox && note.isGrowth && note.growthStage !== 'bloom');
-  const sortedProjects = [...activeProjects].sort((a, b) => {
-    const aScore = (wateringDue(a) ? 10 : 0) + daysSince(a.lastWateredAt || a.createdAt);
-    const bScore = (wateringDue(b) ? 10 : 0) + daysSince(b.lastWateredAt || b.createdAt);
-    return bScore - aScore;
-  });
+  const sortedProjects = useMemo(() => {
+    return notes
+      .filter(note => !note.inbox && note.isGrowth && note.growthStage !== 'bloom')
+      .sort((a, b) => {
+        const aScore = (wateringDue(a) ? 10 : 0) + daysSince(a.lastWateredAt || a.createdAt);
+        const bScore = (wateringDue(b) ? 10 : 0) + daysSince(b.lastWateredAt || b.createdAt);
+        return bScore - aScore;
+      });
+  }, [notes]);
   const recommended = sortedProjects.find(note => note.tasks.some(task => !task.completed)) || sortedProjects[0];
   const recommendedTask = recommended?.tasks.find(task => !task.completed);
 
@@ -2522,13 +2584,17 @@ function ProjectsView({
 }
 
 function HarvestView({ notes, onSelectNote, onStartPlanting }: { notes: SeedNote[]; onSelectNote: (id: string) => void; onStartPlanting: () => void }) {
-  const harvests = notes
-    .filter(note => note.growthStage === 'bloom')
-    .sort((a, b) => (b.harvestedAt || b.createdAt) - (a.harvestedAt || a.createdAt));
-  const totalMinutes = harvests.reduce((sum, note) => sum + (note.focusedMinutes || 0), 0);
-  const learningCount = harvests.filter(note => note.reflection?.trim() || note.takeaway?.trim()).length;
-  const featuredLearning = harvests.find(note => note.reflection?.trim() || note.takeaway?.trim()) || harvests[0];
-  const remainingHarvests = featuredLearning ? harvests.filter(note => note.id !== featuredLearning.id) : harvests;
+  const harvestData = useMemo(() => {
+    const harvests = notes
+      .filter(note => note.growthStage === 'bloom')
+      .sort((a, b) => (b.harvestedAt || b.createdAt) - (a.harvestedAt || a.createdAt));
+    const totalMinutes = harvests.reduce((sum, note) => sum + (note.focusedMinutes || 0), 0);
+    const learningCount = harvests.filter(note => note.reflection?.trim() || note.takeaway?.trim()).length;
+    const featuredLearning = harvests.find(note => note.reflection?.trim() || note.takeaway?.trim()) || harvests[0];
+    const remainingHarvests = featuredLearning ? harvests.filter(note => note.id !== featuredLearning.id) : harvests;
+    return { featuredLearning, harvests, learningCount, remainingHarvests, totalMinutes };
+  }, [notes]);
+  const { featuredLearning, harvests, learningCount, remainingHarvests, totalMinutes } = harvestData;
 
   return (
     <motion.div key="harvest-view" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="space-y-5 pb-24">
@@ -4315,11 +4381,15 @@ export default function App() {
   const wateredToday = wateringRitual.lastDate === todayKey;
   const accountInitials = getAccountInitials(account.name, account.email);
   const profileStats = useMemo(() => {
-    const totalFocus = notes.reduce((sum, note) => sum + (note.focusedMinutes || 0), 0);
-    const seeds = notes.filter(note => note.inbox).length;
-    const harvests = notes.filter(note => !note.inbox && note.growthStage === 'bloom').length;
-    const active = notes.filter(note => !note.inbox && note.isGrowth && note.growthStage !== 'bloom' && !note.paused).length;
-    const needsWater = notes.filter(note => !note.inbox && wateringDue(note) && note.growthStage !== 'bloom' && !note.paused).length;
+    const stats = notes.reduce((total, note) => {
+      total.totalFocus += note.focusedMinutes || 0;
+      if (note.inbox) total.seeds += 1;
+      if (!note.inbox && note.growthStage === 'bloom') total.harvests += 1;
+      if (!note.inbox && note.isGrowth && note.growthStage !== 'bloom' && !note.paused) total.active += 1;
+      if (!note.inbox && !note.paused && note.growthStage !== 'bloom' && wateringDue(note)) total.needsWater += 1;
+      return total;
+    }, { totalFocus: 0, seeds: 0, harvests: 0, active: 0, needsWater: 0 });
+    const { totalFocus, seeds, harvests, active, needsWater } = stats;
     const season = harvests >= 5
       ? 'Temporada de cosecha'
       : active >= 4
@@ -4406,7 +4476,37 @@ export default function App() {
 
   useEffect(() => {
     if (!notesLoaded) return;
-    saveNotesToDb(notes);
+    let cancelled = false;
+    let flushed = false;
+    const browserWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    const persist = () => {
+      if (cancelled || flushed) return;
+      flushed = true;
+      void saveNotesToDb(notes);
+    };
+    const idleId = browserWindow.requestIdleCallback
+      ? browserWindow.requestIdleCallback(persist, { timeout: 900 })
+      : window.setTimeout(persist, 240);
+    const flushIfHidden = () => {
+      if (document.visibilityState === 'hidden') persist();
+    };
+
+    document.addEventListener('visibilitychange', flushIfHidden);
+    window.addEventListener('pagehide', persist);
+
+    return () => {
+      cancelled = true;
+      if (browserWindow.cancelIdleCallback && browserWindow.requestIdleCallback) {
+        browserWindow.cancelIdleCallback(idleId);
+      } else {
+        window.clearTimeout(idleId);
+      }
+      document.removeEventListener('visibilitychange', flushIfHidden);
+      window.removeEventListener('pagehide', persist);
+    };
   }, [notes, notesLoaded]);
 
   const blurQuickEntryFocus = () => {
@@ -5058,7 +5158,7 @@ export default function App() {
   const deleteNote = (id: string) => {
     const note = notes.find(n => n.id === id);
     if (!window.confirm(`Eliminar "${note?.title || 'esta semilla'}"? Esta acción no se puede deshacer.`)) return;
-    setNotes(notes.filter(n => n.id !== id));
+    setNotes(current => current.filter(n => n.id !== id));
     if (selectedNoteId === id) setSelectedNoteId(null);
     if (session?.user) {
       deleteNoteFromSupabase(id, session.user).catch(error => {
@@ -5068,7 +5168,7 @@ export default function App() {
   };
 
   const updateNote = (id: string, updates: Partial<SeedNote>) => {
-    setNotes(notes.map(n => n.id === id ? touchNote({ ...n, ...updates }) : n));
+    setNotes(current => current.map(n => n.id === id ? touchNote({ ...n, ...updates }) : n));
   };
 
   const recordWateringRitual = () => {
@@ -5089,7 +5189,7 @@ export default function App() {
   };
 
   const growNote = (id: string, firstStep?: string) => {
-    setNotes(notes.map(n => {
+    setNotes(current => current.map(n => {
       if (n.id === id && !n.isGrowth) {
         const seedType = SEED_TYPES.find(type => type.id === (n.seedType || 'idea')) || SEED_TYPES[0];
         const taskText = firstStep?.trim() || seedType.task;
@@ -5133,7 +5233,7 @@ export default function App() {
   };
 
   const waterNote = (id: string, note = 'Riego rápido: sigue viva') => {
-    setNotes(notes.map(n => n.id === id ? touchNote(waterSeedNote(n, note)) : n));
+    setNotes(current => current.map(n => n.id === id ? touchNote(waterSeedNote(n, note)) : n));
     recordWateringRitual();
     markRecentlyWatered(id);
     feel('water');
@@ -5144,7 +5244,7 @@ export default function App() {
   };
 
   const skipWateringToday = (id: string) => {
-    setNotes(notes.map(n => n.id === id ? touchNote({
+    setNotes(current => current.map(n => n.id === id ? touchNote({
       ...n,
       lastWateredAt: Date.now(),
       lastWateringNote: appLanguage === 'en' ? 'Later today: still worth keeping.' : 'Más tarde: sigue valiendo la pena.',
@@ -5224,7 +5324,7 @@ export default function App() {
 
   const harvestFromWatering = (id: string) => {
     const completedNote = notes.find(n => n.id === id);
-    setNotes(notes.map(n => n.id === id ? touchNote({
+    setNotes(current => current.map(n => n.id === id ? touchNote({
       ...n,
       inbox: false,
       paused: false,
@@ -5251,7 +5351,7 @@ export default function App() {
 
   const completeQuickSeed = (id: string) => {
     const completedNote = notes.find(n => n.id === id);
-    setNotes(notes.map(n => n.id === id ? touchNote({
+    setNotes(current => current.map(n => n.id === id ? touchNote({
       ...n,
       inbox: false,
       paused: false,
@@ -5268,13 +5368,13 @@ export default function App() {
   };
 
   const saveInboxForLater = (id: string) => {
-    setNotes(notes.map(n => n.id === id ? touchNote({ ...n, inbox: false, paused: true, lastWateredAt: Date.now() }) : n));
+    setNotes(current => current.map(n => n.id === id ? touchNote({ ...n, inbox: false, paused: true, lastWateredAt: Date.now() }) : n));
   };
 
   const addTinyStep = (id: string, text?: string) => {
     const taskText = (text || wateringNote).trim() || 'Dedicar 2 minutos a destrabar esta idea';
     const previousNote = notes.find(note => note.id === id);
-    setNotes(notes.map(n => {
+    setNotes(current => current.map(n => {
       if (n.id !== id) return n;
       return touchNote({
         ...n,
@@ -5298,11 +5398,11 @@ export default function App() {
   };
 
   const togglePauseNote = (id: string) => {
-    setNotes(notes.map(n => n.id === id ? touchNote({ ...n, paused: !n.paused }) : n));
+    setNotes(current => current.map(n => n.id === id ? touchNote({ ...n, paused: !n.paused }) : n));
   };
 
   const logFocusMinutes = (id: string, minutes: number) => {
-    setNotes(notes.map(n => n.id === id ? touchNote(addFocusMinutes(n, minutes)) : n));
+    setNotes(current => current.map(n => n.id === id ? touchNote(addFocusMinutes(n, minutes)) : n));
   };
 
   const showSeedNotification = async (body: string) => {
@@ -5333,7 +5433,7 @@ export default function App() {
   };
 
   const addTask = (noteId: string) => {
-    setNotes(notes.map(n => {
+    setNotes(current => current.map(n => {
       if (n.id === noteId) {
         return touchNote({ 
           ...n, 
@@ -5345,7 +5445,7 @@ export default function App() {
   };
 
   const updateTask = (noteId: string, taskId: string, text: string) => {
-    setNotes(notes.map(n => {
+    setNotes(current => current.map(n => {
       if (n.id === noteId) {
         return touchNote({
           ...n,
@@ -5357,7 +5457,7 @@ export default function App() {
   };
 
   const deleteTask = (noteId: string, taskId: string) => {
-    setNotes(notes.map(n => {
+    setNotes(current => current.map(n => {
       if (n.id !== noteId) return n;
 
       const tasks = n.tasks.filter(task => task.id !== taskId);
@@ -5381,28 +5481,33 @@ export default function App() {
   };
 
   const toggleTask = (noteId: string, taskId: string) => {
-    setNotes(notes.map(n => {
+    const noteBeforeToggle = notes.find(note => note.id === noteId);
+    const taskBeforeToggle = noteBeforeToggle?.tasks.find(task => task.id === taskId);
+    const toggledPreview = noteBeforeToggle ? toggleTaskForNote(noteBeforeToggle, taskId) : null;
+    const completedStep = Boolean(taskBeforeToggle && !taskBeforeToggle.completed);
+    const harvestedNoteId = noteBeforeToggle?.growthStage !== 'bloom' && toggledPreview?.growthStage === 'bloom'
+      ? toggledPreview.id
+      : null;
+    setNotes(current => current.map(n => {
       if (n.id === noteId) {
-        const currentTask = n.tasks.find(t => t.id === taskId);
-        const wasBloom = n.growthStage === 'bloom';
-        if (currentTask && !currentTask.completed) {
-          feel('step');
-          setCelebration('Paso completado');
-          window.setTimeout(() => setCelebration(null), 1500);
-        }
-        const updated = toggleTaskForNote(n, taskId);
-        if (!wasBloom && updated.growthStage === 'bloom') {
-          feel('harvest');
-          window.setTimeout(() => setHarvestNoteId(updated.id), 500);
-        }
-        return touchNote(updated);
+        return touchNote(toggleTaskForNote(n, taskId));
       }
       return n;
     }));
+    if (harvestedNoteId) {
+      feel('harvest');
+      window.setTimeout(() => setHarvestNoteId(harvestedNoteId), 500);
+      return;
+    }
+    if (completedStep) {
+      feel('step');
+      setCelebration('Paso completado');
+      window.setTimeout(() => setCelebration(null), 1500);
+    }
   };
 
   const toggleConnection = (fromId: string, toId: string) => {
-    setNotes(notes.map(n => {
+    setNotes(current => current.map(n => {
       if (n.id === fromId) {
         const connections = n.connections || [];
         const exists = connections.includes(toId);
@@ -5488,11 +5593,11 @@ export default function App() {
     return counts;
   }, [notes]);
 
-  const getProgress = (note: SeedNote) => {
+  const getProgress = useCallback((note: SeedNote) => {
     if (!note.tasks.length) return 0;
     const completed = note.tasks.filter(t => t.completed).length;
     return Math.round((completed / note.tasks.length) * 100);
-  };
+  }, []);
 	  const selectedProgress = selectedNote ? getProgress(selectedNote) : 0;
 	  const selectedCompletedSteps = selectedNote?.tasks.filter(task => task.completed).length || 0;
 	  const selectedReviewDays = selectedNote ? daysSince(selectedNote.lastWateredAt || selectedNote.createdAt) : 0;
