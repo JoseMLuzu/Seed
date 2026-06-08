@@ -185,6 +185,24 @@
     --on-earth: #ffffff;
     --on-accent: #111111;
     --border: rgba(60, 60, 67, 0.12);
+    --tone-seed: #8a6a3e;
+    --tone-seed-bg: color-mix(in srgb, var(--seed) 13%, var(--surface-strong));
+    --tone-seed-border: color-mix(in srgb, var(--seed) 24%, var(--border));
+    --tone-sprout: #4f715b;
+    --tone-sprout-bg: color-mix(in srgb, var(--sage) 12%, var(--surface-strong));
+    --tone-sprout-border: color-mix(in srgb, var(--sage) 24%, var(--border));
+    --tone-harvest: #5b765f;
+    --tone-harvest-bg: color-mix(in srgb, var(--sage) 10%, var(--surface-strong));
+    --tone-harvest-border: color-mix(in srgb, var(--sage) 20%, var(--border));
+    --tone-water: #527075;
+    --tone-water-bg: color-mix(in srgb, #6aa9c7 12%, var(--surface-strong));
+    --tone-water-border: color-mix(in srgb, #6aa9c7 22%, var(--border));
+    --tone-warning: #8a6a3e;
+    --tone-warning-bg: color-mix(in srgb, #d49a3a 14%, var(--surface-strong));
+    --tone-warning-border: color-mix(in srgb, #d49a3a 24%, var(--border));
+    --tone-danger: #b34a46;
+    --tone-danger-bg: color-mix(in srgb, #d44c48 10%, var(--surface-strong));
+    --tone-danger-border: color-mix(in srgb, #d44c48 22%, var(--border));
   }
 
   html,
@@ -225,6 +243,12 @@
     --on-earth: #0b1d14;
     --on-accent: #1d1408;
     --border: rgba(194, 216, 203, 0.16);
+    --tone-seed: #e7c27c;
+    --tone-sprout: #c2e5ac;
+    --tone-harvest: #d5efbd;
+    --tone-water: #9fd7e7;
+    --tone-warning: #f0c06d;
+    --tone-danger: #ff9d95;
   }
 
   [data-theme="bloom"] {
@@ -277,6 +301,12 @@
     --on-earth: #090f1a;
     --on-accent: #120d1f;
     --border: rgba(174, 187, 208, 0.16);
+    --tone-seed: #dbc0ff;
+    --tone-sprout: #b8d7ff;
+    --tone-harvest: #c8e3bb;
+    --tone-water: #a8ddff;
+    --tone-warning: #f4c979;
+    --tone-danger: #ff9c9c;
   }
 
   [data-theme="jungle"] {
@@ -303,6 +333,12 @@
     --on-earth: #14200b;
     --on-accent: #211506;
     --border: rgba(255, 244, 180, 0.18);
+    --tone-seed: #ffd27c;
+    --tone-sprout: #d8ff8e;
+    --tone-harvest: #e4ffb4;
+    --tone-water: #9ff5df;
+    --tone-warning: #ffd27c;
+    --tone-danger: #ffaaa0;
   }
 
   [data-theme="alien"] {
@@ -329,6 +365,12 @@
     --on-earth: #160d2b;
     --on-accent: #13071a;
     --border: rgba(212, 108, 255, 0.18);
+    --tone-seed: #e2a7ff;
+    --tone-sprout: #a7ffd7;
+    --tone-harvest: #d7ffc4;
+    --tone-water: #9ee7ff;
+    --tone-warning: #ffe083;
+    --tone-danger: #ff9bca;
   }
 
   [data-theme="desert"] {

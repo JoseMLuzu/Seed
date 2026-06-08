@@ -1,6 +1,7 @@
 import UIKit
 import Capacitor
 import ActivityKit
+import WidgetKit
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -66,11 +67,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     private func dispatchSeedUrlToWebView(_ url: URL) {
+        let action = url.absoluteString.lowercased().contains("today") ? "today" : "new-seed"
         let escapedUrl = url.absoluteString
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
         let script = """
-        localStorage.setItem('seed-pending-action', 'new-seed');
+        localStorage.setItem('seed-pending-action', '\(action)');
         window.dispatchEvent(new CustomEvent('seed:native-url', { detail: { url: '\(escapedUrl)' } }));
         """
 
@@ -90,6 +92,7 @@ class SeedBridgeViewController: CAPBridgeViewController {
         super.capacitorDidLoad()
 
         configureSeedWebView()
+        bridge?.registerPluginInstance(SeedWidgetDataPlugin())
         if #available(iOS 16.1, *) {
             bridge?.registerPluginInstance(SeedLiveActivityPlugin())
         }
@@ -102,6 +105,53 @@ class SeedBridgeViewController: CAPBridgeViewController {
         webView?.scrollView.contentInsetAdjustmentBehavior = .never
         webView?.backgroundColor = appBackground
         webView?.scrollView.backgroundColor = appBackground
+    }
+}
+
+@objc(SeedWidgetDataPlugin)
+public class SeedWidgetDataPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "SeedWidgetDataPlugin"
+    public let jsName = "SeedWidgetData"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "update", returnType: CAPPluginReturnPromise)
+    ]
+
+    private let suiteName = "group.seedapp.com.ec"
+    private let summaryKey = "seed-widget-summary"
+
+    @objc func update(_ call: CAPPluginCall) {
+        let payload: [String: Any] = [
+            "title": call.getString("title") ?? "Planta una semilla",
+            "subtitle": call.getString("subtitle") ?? "Una cosa clara para hoy",
+            "action": call.getString("action") ?? "Abrir",
+            "metric": call.getString("metric") ?? "0",
+            "seeds": call.getInt("seeds") ?? 0,
+            "sprouts": call.getInt("sprouts") ?? 0,
+            "harvests": call.getInt("harvests") ?? 0,
+            "watering": call.getInt("watering") ?? 0,
+            "streak": call.getInt("streak") ?? 0,
+            "updatedAt": call.getDouble("updatedAt") ?? Date().timeIntervalSince1970 * 1000
+        ]
+
+        do {
+            let data = try JSONSerialization.data(withJSONObject: payload, options: [])
+            guard let json = String(data: data, encoding: .utf8) else {
+                call.reject("No se pudo preparar el resumen del widget.")
+                return
+            }
+
+            let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+            defaults.set(json, forKey: summaryKey)
+            defaults.synchronize()
+
+            if #available(iOS 14.0, *) {
+                WidgetCenter.shared.reloadTimelines(ofKind: "SeedTodayWidget")
+            }
+
+            call.resolve()
+        } catch {
+            call.reject("No se pudo actualizar el widget.", nil, error)
+        }
     }
 }
 

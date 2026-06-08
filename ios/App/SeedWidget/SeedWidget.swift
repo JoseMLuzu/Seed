@@ -17,21 +17,63 @@ struct SeedFocusActivityAttributes: ActivityAttributes {
 
 struct SeedWidgetEntry: TimelineEntry {
     let date: Date
+    let summary: SeedWidgetSummary
+}
+
+struct SeedWidgetSummary: Codable {
+    var title: String
+    var subtitle: String
+    var action: String
+    var metric: String
+    var seeds: Int
+    var sprouts: Int
+    var harvests: Int
+    var watering: Int
+    var streak: Int
+    var updatedAt: Double
+
+    static let placeholder = SeedWidgetSummary(
+        title: "Planta una semilla",
+        subtitle: "Una cosa clara para hoy",
+        action: "Plantar",
+        metric: "0",
+        seeds: 0,
+        sprouts: 0,
+        harvests: 0,
+        watering: 0,
+        streak: 0,
+        updatedAt: Date().timeIntervalSince1970 * 1000
+    )
 }
 
 struct SeedWidgetProvider: TimelineProvider {
+    private let suiteName = "group.seedapp.com.ec"
+    private let summaryKey = "seed-widget-summary"
+
     func placeholder(in context: Context) -> SeedWidgetEntry {
-        SeedWidgetEntry(date: Date())
+        SeedWidgetEntry(date: Date(), summary: .placeholder)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (SeedWidgetEntry) -> Void) {
-        completion(SeedWidgetEntry(date: Date()))
+        completion(SeedWidgetEntry(date: Date(), summary: readSummary()))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<SeedWidgetEntry>) -> Void) {
-        let entry = SeedWidgetEntry(date: Date())
-        let nextUpdate = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date()
+        let entry = SeedWidgetEntry(date: Date(), summary: readSummary())
+        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date()
         completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
+    }
+
+    private func readSummary() -> SeedWidgetSummary {
+        let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        guard
+            let json = defaults.string(forKey: summaryKey),
+            let data = json.data(using: .utf8),
+            let summary = try? JSONDecoder().decode(SeedWidgetSummary.self, from: data)
+        else {
+            return .placeholder
+        }
+        return summary
     }
 }
 
@@ -40,9 +82,10 @@ struct SeedWidgetView: View {
     let entry: SeedWidgetEntry
 
     private let seedURL = URL(string: "seed://new-seed")!
+    private let todayURL = URL(string: "seed://today")!
 
     var body: some View {
-        Link(destination: seedURL) {
+        Link(destination: family == .systemSmall ? seedURL : todayURL) {
             switch family {
             case .systemSmall:
                 smallWidget
@@ -50,7 +93,7 @@ struct SeedWidgetView: View {
                 mediumWidget
             }
         }
-        .widgetURL(seedURL)
+        .widgetURL(family == .systemSmall ? seedURL : todayURL)
     }
 
     private var smallWidget: some View {
@@ -59,11 +102,15 @@ struct SeedWidgetView: View {
             VStack(alignment: .leading, spacing: 10) {
                 seedMark
                 Spacer(minLength: 0)
-                Text("Planta una semilla")
+                Text(entry.summary.action)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.29, green: 0.45, blue: 0.33))
+                    .textCase(.uppercase)
+                Text(entry.summary.title)
                     .font(.system(size: 18, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color(red: 0.14, green: 0.18, blue: 0.14))
                     .lineLimit(2)
-                Text("Captura ahora. Decide despues.")
+                Text(entry.summary.subtitle)
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(Color(red: 0.34, green: 0.39, blue: 0.34))
                     .lineLimit(2)
@@ -85,13 +132,20 @@ struct SeedWidgetView: View {
                     Text("Seeds Hoy")
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundStyle(Color(red: 0.29, green: 0.45, blue: 0.33))
-                    Text("Una idea puede empezar con una frase.")
+                    Text(entry.summary.title)
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
                         .foregroundStyle(Color(red: 0.14, green: 0.18, blue: 0.14))
                         .lineLimit(2)
-                    Text("Toca para plantar una nueva semilla.")
+                    Text(entry.summary.subtitle)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(Color(red: 0.34, green: 0.39, blue: 0.34))
+                        .lineLimit(1)
+                    HStack(spacing: 8) {
+                        metricPill("\(entry.summary.watering)", "Riego")
+                        metricPill("\(entry.summary.sprouts)", "Brotes")
+                        metricPill("\(entry.summary.harvests)", "Cosechas")
+                    }
+                    .padding(.top, 2)
                 }
                 Spacer(minLength: 0)
             }
@@ -112,6 +166,20 @@ struct SeedWidgetView: View {
                 .foregroundStyle(Color(red: 0.29, green: 0.45, blue: 0.33))
         }
         .frame(width: 52, height: 52)
+    }
+
+    private func metricPill(_ value: String, _ label: String) -> some View {
+        HStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+            Text(label)
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(red: 0.34, green: 0.39, blue: 0.34))
+        }
+        .foregroundStyle(Color(red: 0.14, green: 0.18, blue: 0.14))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color.white.opacity(0.58), in: Capsule())
     }
 
     private var background: some View {
