@@ -6433,6 +6433,7 @@ export default function App() {
     if (createMenuTimerRef.current) window.clearTimeout(createMenuTimerRef.current);
     createMenuTimerRef.current = window.setTimeout(() => {
       createMenuLongPressRef.current = true;
+      createMenuTimerRef.current = null;
       playMicroSound('holdPop', true);
       setShowCreateMenu(true);
     }, 420);
@@ -9542,15 +9543,21 @@ export default function App() {
 	              onPointerUp={clearCreateMenuPress}
 	              onPointerCancel={clearCreateMenuPress}
 	              onPointerLeave={clearCreateMenuPress}
+	              onContextMenu={(event) => {
+	                event.preventDefault();
+	                clearCreateMenuPress();
+	                createMenuLongPressRef.current = false;
+	                playMicroSound('holdPop', true);
+	                setShowCreateMenu(true);
+	              }}
 	              onClick={() => {
 	                clearCreateMenuPress();
-	                if (showCreateMenu) {
-	                  setShowCreateMenu(false);
+	                if (createMenuLongPressRef.current) {
 	                  createMenuLongPressRef.current = false;
 	                  return;
 	                }
-	                if (createMenuLongPressRef.current) {
-	                  createMenuLongPressRef.current = false;
+	                if (showCreateMenu) {
+	                  setShowCreateMenu(false);
 	                  return;
 	                }
 	                startPlanting();
