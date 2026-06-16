@@ -2913,21 +2913,21 @@ export default function Garden3D({
 	            <button
 	              type="button"
 	              onClick={() => onSelectNote(selectedNote.id)}
-	              className="rounded-xl bg-[var(--earth)] px-2 py-2.5 text-[9px] font-black uppercase tracking-[0.12em] text-[var(--on-earth)] sm:rounded-2xl sm:px-3 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+	              className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[var(--earth)] px-2 text-[9px] font-black uppercase leading-none tracking-[0.12em] text-[var(--on-earth)] sm:min-h-11 sm:rounded-2xl sm:px-3 sm:text-[10px] sm:tracking-[0.16em]"
 	            >
 	              Abrir
             </button>
             <button
 	              type="button"
 	              onClick={() => onReviewNote?.(selectedNote.id)}
-	              className="rounded-xl bg-[var(--sage)] px-2 py-2.5 text-[9px] font-black uppercase tracking-[0.12em] text-[var(--on-sage)] sm:rounded-2xl sm:px-3 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+	              className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[var(--sage)] px-2 text-[9px] font-black uppercase leading-none tracking-[0.12em] text-[var(--on-sage)] sm:min-h-11 sm:rounded-2xl sm:px-3 sm:text-[10px] sm:tracking-[0.16em]"
 	            >
 	              Revisar
             </button>
             <button
 	              type="button"
 	              onClick={() => onFocusNote?.(selectedNote.id)}
-	              className="rounded-xl bg-[var(--accent)] px-2 py-2.5 text-[9px] font-black uppercase tracking-[0.12em] text-[var(--on-accent)] sm:rounded-2xl sm:px-3 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+	              className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[var(--accent)] px-2 text-[9px] font-black uppercase leading-none tracking-[0.12em] text-[var(--on-accent)] sm:min-h-11 sm:rounded-2xl sm:px-3 sm:text-[10px] sm:tracking-[0.16em]"
 	            >
               Enfocar
             </button>

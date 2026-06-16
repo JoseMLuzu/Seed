@@ -104,6 +104,7 @@ const IDEA_CARD_WRAPPER = `${IDEA_CARD_RADIUS} bg-[var(--surface-strong)]`;
 const IDEA_CARD_SURFACE = `group relative overflow-hidden ${IDEA_CARD_RADIUS} bg-[var(--surface-strong)] shadow-sm ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--surface-hover)]`;
 const IDEA_CARD_ROW = 'flex min-h-[4.45rem] w-full items-start gap-3 px-4 py-3 text-left';
 const IDEA_ICON_TILE = 'relative grid h-10 w-10 shrink-0 place-items-center rounded-[1rem] ring-1';
+const IDEA_ACTION_PILL = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-semibold leading-none soft-interaction';
 
 function detectDeviceLanguage(): AppLanguage {
   const languages = typeof navigator !== 'undefined'
@@ -2491,13 +2492,13 @@ function ProjectsView({
             <div className="grid grid-cols-2 gap-2 md:w-56">
               <button
                 onClick={() => onFocusNote(recommended.id)}
-                className="rounded-full bg-[var(--sage)] px-4 py-3 text-sm font-semibold text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
+                className="inline-flex h-11 items-center justify-center rounded-full bg-[var(--sage)] px-4 text-sm font-semibold leading-none text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
               >
                 Enfocar
               </button>
               <button
                 onClick={() => recommendedTask ? onToggleTask(recommended.id, recommendedTask.id) : onSelectNote(recommended.id)}
-                className="rounded-full bg-[var(--bg-app)] px-4 py-3 text-sm font-semibold text-[var(--sage)] active:translate-y-px soft-interaction"
+                className="inline-flex h-11 items-center justify-center rounded-full bg-[var(--bg-app)] px-4 text-sm font-semibold leading-none text-[var(--sage)] active:translate-y-px soft-interaction"
               >
                 {recommendedTask ? 'Hecho' : 'Editar'}
               </button>
@@ -2553,13 +2554,13 @@ function ProjectsView({
                 <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${progress}%` }} />
               </div>
               <div className="grid grid-cols-3 gap-2 px-4 py-3">
-                <button onClick={(event) => { event.stopPropagation(); onFocusNote(note.id); }} className="h-9 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold text-[var(--on-sage)] soft-interaction">
+                <button onClick={(event) => { event.stopPropagation(); onFocusNote(note.id); }} className={`${IDEA_ACTION_PILL} bg-[var(--sage)] text-[var(--on-sage)]`}>
                   Foco
                 </button>
-                <button onClick={(event) => { event.stopPropagation(); nextTask ? onToggleTask(note.id, nextTask.id) : onSelectNote(note.id); }} className="h-9 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)] soft-interaction">
+                <button onClick={(event) => { event.stopPropagation(); nextTask ? onToggleTask(note.id, nextTask.id) : onSelectNote(note.id); }} className={`${IDEA_ACTION_PILL} bg-[var(--bg-app)] text-[var(--sage)]`}>
                   {nextTask ? 'Hecho' : 'Editar'}
                 </button>
-                <button onClick={(event) => { event.stopPropagation(); needsWater ? onOpenWatering(note.id) : onSelectNote(note.id); }} className={`h-9 rounded-full px-3 text-xs font-semibold soft-interaction ${needsWater ? 'bg-[var(--tone-water-bg)] text-[var(--tone-water)] ring-1 ring-[var(--tone-water-border)]' : 'bg-[var(--bg-app)] text-[var(--text-muted)]'}`}>
+                <button onClick={(event) => { event.stopPropagation(); needsWater ? onOpenWatering(note.id) : onSelectNote(note.id); }} className={`${IDEA_ACTION_PILL} ${needsWater ? 'bg-[var(--tone-water-bg)] text-[var(--tone-water)] ring-1 ring-[var(--tone-water-border)]' : 'bg-[var(--bg-app)] text-[var(--text-muted)]'}`}>
                   {needsWater ? 'Regar' : 'Ver'}
                 </button>
               </div>
@@ -7405,7 +7406,7 @@ export default function App() {
                                 event.stopPropagation();
                                 runCardAction(note, guidance.kind);
                               }}
-	                              className={`grid h-10 min-w-10 place-items-center rounded-full px-2 text-xs font-semibold shadow-sm soft-interaction active:translate-y-px ${guidance.actionTone}`}
+	                              className={`inline-flex h-10 min-w-10 items-center justify-center rounded-full px-2 text-xs font-semibold leading-none shadow-sm soft-interaction active:translate-y-px ${guidance.actionTone}`}
                               title={guidance.title}
                               aria-label={guidance.action}
                             >
