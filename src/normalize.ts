@@ -65,6 +65,7 @@ export function normalizeNote(value: unknown): SeedNote | null {
     priority: priority && VALID_PRIORITIES.has(priority) ? priority : 'normal',
     reflection: asString(raw.reflection),
     takeaway: asString(raw.takeaway),
+    focusNote: asString(raw.focusNote),
     focusedMinutes: Math.max(0, asNumber(raw.focusedMinutes) || 0),
     harvestedAt: asNumber(raw.harvestedAt),
   };

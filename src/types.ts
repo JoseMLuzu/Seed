@@ -33,6 +33,7 @@ export interface SeedNote {
   priority?: 'light' | 'normal' | 'important';
   reflection?: string;
   takeaway?: string;
+  focusNote?: string;
   focusedMinutes?: number;
   harvestedAt?: number;
 }

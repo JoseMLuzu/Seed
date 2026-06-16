@@ -63,13 +63,15 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { Theme, SeedNote, Planet } from './types';
-import { addFocusMinutes, DAY_MS, daysSince, toggleTaskForNote, wateringDue, waterNote as waterSeedNote } from './seedLogic';
+import { addFocusMinutes, createDailyClosureNote, DAY_MS, daysSince, isDailyClosureForDate, toggleTaskForNote, wateringDue, waterNote as waterSeedNote } from './seedLogic';
 import { loadNotesFromDb, migrateLocalNotesToDb, saveNotesToDb } from './storage';
 import { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';
 import { deleteNoteFromSupabase, deletePlanetFromSupabase, pushGardenToSupabase, syncGardenWithSupabase } from './supabaseSync';
 import { normalizeNote, normalizeNotes } from './normalize';
 import { playSeedSound, preloadSeedSounds, unlockSeedAudio, type SeedSoundKind } from './sound';
+import { getStoredBoolean, getStoredItem, getStoredNumber, removeStoredItem, setStoredItem } from './appStorage';
+import { migrateFocusNotesIntoSeeds, normalizeFocusNoteMap } from './focusNotes';
 
 const Garden3D = lazy(() => import('./components/Garden3D'));
 
@@ -79,6 +81,12 @@ type AccountProfile = {
   role: string;
   purpose?: string;
   mantra?: string;
+};
+
+type SupabaseRealtimePayload = {
+  eventType?: 'INSERT' | 'UPDATE' | 'DELETE' | string;
+  old?: Record<string, unknown> | null;
+  new?: Record<string, unknown> | null;
 };
 
 type AppView = 'today' | 'inbox' | 'projects' | 'focus' | 'garden' | 'profile' | 'harvest' | 'calendar' | '3D';
@@ -231,43 +239,6 @@ function dateInputToEndOfDay(value: string) {
 
 function timestampToDateInput(value: number) {
   return format(new Date(value), 'yyyy-MM-dd');
-}
-
-function getStoredItem(key: string) {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function setStoredItem(key: string, value: string) {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Storage can be unavailable in private contexts; app state should still work in memory.
-  }
-}
-
-function removeStoredItem(key: string) {
-  try {
-    localStorage.removeItem(key);
-  } catch {
-    // Ignore unavailable storage.
-  }
-}
-
-function getStoredNumber(key: string, fallback: number, min = -Infinity, max = Infinity) {
-  const value = Number(getStoredItem(key));
-  if (!Number.isFinite(value)) return fallback;
-  return Math.min(max, Math.max(min, value));
-}
-
-function getStoredBoolean(key: string, fallback: boolean) {
-  const value = getStoredItem(key);
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  return fallback;
 }
 
 const THEMES: { id: Theme; label: string; icon: string }[] = [
@@ -810,19 +781,6 @@ function formatReviewAge(note: SeedNote) {
   if (!Number.isFinite(days) || days <= 0) return appLanguage === 'en' ? 'reviewed today' : 'revisada hoy';
   if (appLanguage === 'en') return `${days} day${days === 1 ? '' : 's'} without review`;
   return `${days} día${days === 1 ? '' : 's'} sin revisión`;
-}
-
-const DAILY_CLOSURE_TAG = 'daily-closure';
-
-function isDailyClosureForDate(note: SeedNote, date = Date.now()) {
-  const noteDate = note.harvestedAt || note.createdAt;
-  const legacyDailyClosure = note.title === 'Cierre del día' || note.title === 'Today closure';
-  return (
-    note.seedType === 'learning' &&
-    note.growthStage === 'bloom' &&
-    format(noteDate, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd') &&
-    (note.tags?.includes(DAILY_CLOSURE_TAG) || legacyDailyClosure)
-  );
 }
 
 const STAGE_META: Record<SeedNote['growthStage'], { label: string; shortLabel: string; color: string; bg: string; aura: string }> = {
@@ -2772,6 +2730,7 @@ function FocusView({
   onDeleteTask,
   onLogFocus,
   onPickFocus,
+  onUpdateFocusMemo,
   onFocusFeedback,
   onExit,
 }: {
@@ -2786,6 +2745,7 @@ function FocusView({
   onDeleteTask: (noteId: string, taskId: string) => void;
   onLogFocus: (id: string, minutes: number) => void;
   onPickFocus: (id: string) => void;
+  onUpdateFocusMemo: (noteId: string, value: string) => void;
   onFocusFeedback?: (kind: 'open' | SeedSoundKind, force?: boolean) => void;
   onExit: () => void;
 }) {
@@ -2806,13 +2766,6 @@ function FocusView({
   const [sessionSummary, setSessionSummary] = useState<{ minutes: number; steps: number; growth: number } | null>(null);
   const [liveActivityEndTimestamp, setLiveActivityEndTimestamp] = useState<number | null>(null);
   const [confirmExit, setConfirmExit] = useState<'exit' | 'edit' | null>(null);
-  const [focusNotes, setFocusNotes] = useState<Record<string, string>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('seed-focus-notes') || '{}') as Record<string, string>;
-    } catch {
-      return {};
-    }
-  });
   const nextTask = focusNote?.tasks.find(task => !task.completed);
   const completedSteps = focusNote?.tasks.filter(task => task.completed).length || 0;
   const progress = focusNote?.tasks.length ? Math.round((completedSteps / focusNote.tasks.length) * 100) : 0;
@@ -2821,7 +2774,7 @@ function FocusView({
   const hiddenTaskCount = Math.max(0, (focusNote?.tasks.length || 0) - visibleTasks.length);
   const sessionCompletedSteps = Math.max(0, completedSteps - sessionStartCompleted);
   const focusGrowthProgress = Math.min(100, Math.max(progress, progress + sessionCompletedSteps * 6));
-  const focusNoteMemo = focusNote ? focusNotes[focusNote.id] || '' : '';
+  const focusNoteMemo = focusNote?.focusNote || '';
   const focusOptions = useMemo(() => focusCandidates.map(note => ({
     value: note.id,
     label: note.title,
@@ -2873,10 +2826,6 @@ function FocusView({
       progress,
     });
   }, [active, focusNote, liveActivityEndTimestamp, nextTask?.text, progress]);
-
-  useEffect(() => {
-    localStorage.setItem('seed-focus-notes', JSON.stringify(focusNotes));
-  }, [focusNotes]);
 
   const startFocus = (minutes: number) => {
     onFocusFeedback?.('open', true);
@@ -3501,7 +3450,7 @@ function FocusView({
                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#c9e5b8]/62">Nota de enfoque</span>
                         <textarea
                           value={focusNoteMemo}
-                          onChange={(event) => setFocusNotes(current => ({ ...current, [focusNote.id]: event.target.value }))}
+                          onChange={(event) => onUpdateFocusMemo(focusNote.id, event.target.value)}
                           rows={4}
                           placeholder="Guarda una idea rápida sin salir del foco..."
                           className="mt-2 min-h-28 w-full resize-none bg-transparent text-sm font-medium leading-relaxed text-white outline-none placeholder:text-white/32"
@@ -4925,7 +4874,21 @@ export default function App() {
     migrateLocalNotesToDb()
       .then(loadNotesFromDb)
       .then(loadedNotes => {
-        if (!cancelled) setNotes(loadedNotes);
+        if (!cancelled) {
+          let rawLegacyFocusNotes: unknown = {};
+          try {
+            rawLegacyFocusNotes = JSON.parse(getStoredItem('seed-focus-notes') || '{}');
+          } catch {
+            rawLegacyFocusNotes = {};
+          }
+          const legacyFocusNotes = normalizeFocusNoteMap(rawLegacyFocusNotes);
+          const migratedNotes = migrateFocusNotesIntoSeeds(loadedNotes, legacyFocusNotes);
+          setNotes(migratedNotes);
+          if (migratedNotes !== loadedNotes) removeStoredItem('seed-focus-notes');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setNotes([]);
       })
       .finally(() => {
         if (!cancelled) setNotesLoaded(true);
@@ -5358,25 +5321,26 @@ export default function App() {
     const userId = session.user.id;
     const markRemoteApplyDone = () => window.setTimeout(() => { applyingRemoteSyncRef.current = false; }, 0);
 
-    const handleNotePayload = (payload: any) => {
+    const handleNotePayload = (payload: SupabaseRealtimePayload) => {
       applyingRemoteSyncRef.current = true;
       if (payload.eventType === 'DELETE') {
-        const deletedId = payload.old?.id;
+        const deletedId = typeof payload.old?.id === 'string' ? payload.old.id : undefined;
         if (deletedId) setNotes(current => current.filter(note => note.id !== deletedId));
         markRemoteApplyDone();
         return;
       }
 
       const row = payload.new;
-      if (!row?.data?.id) {
+      const rowData = row?.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : null;
+      if (!rowData?.id) {
         markRemoteApplyDone();
         return;
       }
 
       const incoming = normalizeNote({
-        ...row.data,
-        id: row.data?.id || row.id,
-        planetId: row.data?.planetId || row.planet_id || DEFAULT_PLANET_ID,
+        ...rowData,
+        id: rowData.id || row?.id,
+        planetId: rowData.planetId || row?.planet_id || DEFAULT_PLANET_ID,
       });
 
       if (!incoming) {
@@ -5393,17 +5357,17 @@ export default function App() {
       markRemoteApplyDone();
     };
 
-    const handlePlanetPayload = (payload: any) => {
+    const handlePlanetPayload = (payload: SupabaseRealtimePayload) => {
       applyingRemoteSyncRef.current = true;
       if (payload.eventType === 'DELETE') {
-        const deletedId = payload.old?.id;
+        const deletedId = typeof payload.old?.id === 'string' ? payload.old.id : undefined;
         if (deletedId) setPlanets(current => current.filter(planet => planet.id !== deletedId));
         markRemoteApplyDone();
         return;
       }
 
       const row = payload.new;
-      if (!row?.id) {
+      if (typeof row?.id !== 'string' || typeof row.name !== 'string') {
         markRemoteApplyDone();
         return;
       }
@@ -5411,9 +5375,9 @@ export default function App() {
       const incoming: Planet = {
         id: row.id,
         name: row.name,
-        description: row.description || '',
-        theme: row.theme,
-        createdAt: row.created_at_ms || Date.now(),
+        description: typeof row.description === 'string' ? row.description : '',
+        theme: THEME_IDS.has(row.theme as Theme) ? row.theme as Theme : 'earth',
+        createdAt: typeof row.created_at_ms === 'number' ? row.created_at_ms : Date.now(),
       };
 
       setPlanets(current => {
@@ -5631,6 +5595,10 @@ export default function App() {
     setNotes(current => current.map(n => n.id === id ? touchNote({ ...n, ...updates }) : n));
   };
 
+  const updateFocusMemo = (id: string, focusNote: string) => {
+    setNotes(current => current.map(n => n.id === id ? touchNote({ ...n, focusNote }) : n));
+  };
+
   const recordWateringRitual = () => {
     const currentDay = format(Date.now(), 'yyyy-MM-dd');
     const yesterday = format(Date.now() - DAY_MS, 'yyyy-MM-dd');
@@ -5721,60 +5689,21 @@ export default function App() {
       return;
     }
 
-    const cleanedReflection = reflection.trim();
-    const cleanedIntention = intention.trim();
-    const outcomeText = intentionOutcome === 'yes'
-      ? appLanguage === 'en' ? 'Intention moved: yes' : 'Intención lograda: sí'
-      : intentionOutcome === 'some'
-        ? appLanguage === 'en' ? 'Intention moved: a little' : 'Intención lograda: un poco'
-        : intentionOutcome === 'no'
-          ? appLanguage === 'en' ? 'Intention moved: not today' : 'Intención lograda: no hoy'
-          : '';
-    const todayNotes = notes.filter(note => isToday(note.createdAt));
-    const todayWatered = notes.filter(note => note.lastWateredAt && isToday(note.lastWateredAt));
-    const todayHarvests = notes.filter(note => note.harvestedAt && isToday(note.harvestedAt));
-    const todaySteps = notes.filter(note =>
-      note.updatedAt &&
-      isToday(note.updatedAt) &&
-      note.tasks.some(task => task.completed)
-    );
-    const summary = appLanguage === 'en'
-      ? `${todayNotes.length} planted · ${todayWatered.length} watered · ${todaySteps.length} moved · ${todayHarvests.length} harvested`
-      : `${todayNotes.length} plantadas · ${todayWatered.length} riegos · ${todaySteps.length} avances · ${todayHarvests.length} cosechas`;
-    const content = [
-      cleanedIntention
-        ? appLanguage === 'en'
-          ? `Intention: ${cleanedIntention}`
-          : `Intención: ${cleanedIntention}`
-        : null,
-      outcomeText || null,
-      summary,
-      cleanedReflection,
-    ].filter(Boolean).join('\n\n');
-
-    const note: SeedNote = {
+    const now = Date.now();
+    const note = createDailyClosureNote({
       id: crypto.randomUUID(),
-      title: appLanguage === 'en' ? 'Today closure' : 'Cierre del día',
-      content,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      tags: [DAILY_CLOSURE_TAG],
-      isGrowth: false,
-      tasks: [],
-      growthStage: 'bloom',
-      lastWateredAt: Date.now(),
-      wateringIntervalDays: defaultWateringInterval,
-      inbox: false,
-      seedType: 'learning',
-      priority: 'normal',
-      reflection: cleanedReflection || content,
-      takeaway: outcomeText || cleanedIntention || summary,
-      harvestedAt: Date.now(),
+      notes,
+      reflection,
+      intention,
+      intentionOutcome,
+      defaultWateringInterval,
       planetId: activePlanetId,
-    };
+      language: appLanguage,
+      now,
+    });
 
     setNotes(current => {
-      if (current.some(existing => isDailyClosureForDate(existing))) return current;
+      if (current.some(existing => isDailyClosureForDate(existing, now))) return current;
       return [touchNote(note), ...current];
     });
     setCelebration(appLanguage === 'en' ? 'Day closed' : 'Día cerrado');
@@ -6072,7 +6001,8 @@ export default function App() {
       const tasks = note.tasks.length ? `\n\n${note.tasks.map(task => `- [${task.completed ? 'x' : ' '}] ${task.text}`).join('\n')}` : '';
       const reflection = note.reflection ? `\n\nReflexión: ${note.reflection}` : '';
       const takeaway = note.takeaway ? `\n\nMe dejó: ${note.takeaway}` : '';
-      return `# ${note.title}\n\nEstado: ${status}\nTipo: ${note.seedType || 'idea'}\n\n${note.content}${tasks}${reflection}${takeaway}`;
+      const focusNote = note.focusNote ? `\n\nNota de enfoque: ${note.focusNote}` : '';
+      return `# ${note.title}\n\nEstado: ${status}\nTipo: ${note.seedType || 'idea'}\n\n${note.content}${tasks}${reflection}${takeaway}${focusNote}`;
     }).join('\n\n---\n\n');
     const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -7239,6 +7169,7 @@ export default function App() {
                   onDeleteTask={deleteTask}
                   onLogFocus={logFocusMinutes}
                   onPickFocus={setFocusNoteId}
+                  onUpdateFocusMemo={updateFocusMemo}
                   onFocusFeedback={feel}
                   onExit={() => setView('today')}
                 />
