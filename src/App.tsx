@@ -7600,14 +7600,14 @@ export default function App() {
 	                            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-current opacity-35" />
 	                          </div>
 
-	                          <div className="min-w-0 flex-1">
+	                          <div className="min-w-0 flex-1 rounded-[0.95rem] bg-transparent">
 	                            <div className="flex min-w-0 items-center justify-between gap-2">
-	                              <h3 className={`min-w-0 truncate text-[15px] font-semibold leading-tight transition-colors ${selectedNoteId === note.id ? 'text-[var(--sage)]' : note.growthStage === 'withered' ? 'text-[var(--text-muted)]' : 'text-[var(--earth)]'}`}>{note.title}</h3>
+	                              <h3 className={`min-w-0 truncate text-[15px] font-semibold leading-tight ${selectedNoteId === note.id ? 'text-[var(--sage)]' : note.growthStage === 'withered' ? 'text-[var(--text-muted)]' : 'text-[var(--earth)]'}`}>{note.title}</h3>
 	                              <span className="shrink-0 text-[11px] font-semibold text-[var(--text-muted)]">
 	                                {note.isGrowth ? `${progress}%` : stageMeta.shortLabel}
 	                              </span>
 	                            </div>
-                            <p className="mt-1 line-clamp-1 text-sm leading-relaxed text-[var(--text-muted)]">
+                            <p className="mt-1 line-clamp-1 bg-transparent text-sm leading-relaxed text-[var(--text-muted)]">
                               {nextTask?.text || note.content}
                             </p>
 
