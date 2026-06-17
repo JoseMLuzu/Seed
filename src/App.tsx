@@ -327,25 +327,25 @@ const ONBOARDING_STEPS = [
     icon: Leaf,
     eyebrow: 'Captura',
     title: 'Planta',
-    text: 'Guarda una idea en una línea. Sin categoría, fecha ni proyecto.',
-    action: 'Captura ahora. Decide después.',
+    text: 'Guarda una idea en una línea. Sin categoría, fecha ni presión.',
+    action: 'Captura ahora. Seed la cuida.',
     detail: 'El semillero existe para ideas incompletas.',
   },
   {
-    icon: Droplets,
-    eyebrow: 'Riega',
-    title: 'Vuelve',
-    text: 'Seed te muestra una cosa viva: regar, avanzar o decidir.',
-    action: 'Una acción clara.',
-    detail: 'No hace falta ordenar toda tu vida.',
+    icon: Archive,
+    eyebrow: 'Decide',
+    title: 'Elige',
+    text: 'Hoy te muestra una cosa: regar, darle un paso o guardarla en el Cobertizo.',
+    action: 'Una decisión pequeña.',
+    detail: 'Lo que no es para hoy puede descansar sin molestar.',
   },
   {
-    icon: CheckCircle2,
-    eyebrow: 'Cosecha',
-    title: 'Recuerda',
-    text: 'Lo terminado deja una huella visual y, si quieres, una lección breve.',
+    icon: Droplets,
+    eyebrow: 'Cultiva',
+    title: 'Avanza',
+    text: 'Un brote solo pide el siguiente paso. Al cerrar, deja una huella en tu jardín.',
     action: 'Tu progreso se vuelve visible.',
-    detail: 'El jardín crece porque tú avanzaste.',
+    detail: 'Cosecha cuando algo terminó o te dejó una lección.',
   },
 ];
 
@@ -1597,9 +1597,17 @@ function TodayView({
     const firstInboxNote = notes
       .filter(note => note.inbox)
       .sort((a, b) => b.createdAt - a.createdAt)[0];
+    const shedReview = notes
+      .filter(note => !note.inbox && note.paused && note.growthStage !== 'bloom')
+      .sort((a, b) => {
+        const aRest = daysSince(a.lastWateredAt || a.updatedAt || a.createdAt);
+        const bRest = daysSince(b.lastWateredAt || b.updatedAt || b.createdAt);
+        return bRest - aRest;
+      })[0];
     const inboxCount = notes.filter(note => note.inbox).length;
     const sproutCount = notes.filter(note => !note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom').length;
     const harvestCount = notes.filter(note => !note.inbox && note.growthStage === 'bloom').length;
+    const shedCount = notes.filter(note => !note.inbox && note.paused && note.growthStage !== 'bloom').length;
     const completedToday = notes.filter(note => note.harvestedAt && isToday(note.harvestedAt)).length;
     const dayClosure = notes.find(note => isDailyClosureForDate(note));
     const plantedToday = notes.filter(note => isToday(note.createdAt)).length;
@@ -1645,14 +1653,18 @@ function TodayView({
         ? `${wateringStreak}-day streak`
         : `Racha de ${wateringStreak} día${wateringStreak === 1 ? '' : 's'}`
       : motivationalText;
-    const primaryMode = firstWatering ? 'water' : nextAction ? 'focus' : inboxCount > 0 ? 'seed' : 'calm';
-    const primaryTitle = firstWatering?.title || nextAction?.note.title || firstInboxNote?.title || t('quietGarden');
+    const primaryMode = firstWatering ? 'water' : nextAction ? 'focus' : inboxCount > 0 ? 'seed' : shedReview ? 'shed' : 'calm';
+    const primaryTitle = firstWatering?.title || nextAction?.note.title || firstInboxNote?.title || shedReview?.title || t('quietGarden');
     const primaryDetail = firstWatering
       ? formatReviewAge(firstWatering)
       : nextAction
         ? nextAction.task.text
         : firstInboxNote
           ? t('seedWaiting')
+          : shedReview
+            ? appLanguage === 'en'
+              ? `Resting ${daysSince(shedReview.lastWateredAt || shedReview.updatedAt || shedReview.createdAt)} days in the shed`
+              : `${daysSince(shedReview.lastWateredAt || shedReview.updatedAt || shedReview.createdAt)} días descansando en el Cobertizo`
           : t('captureIdea');
     const primaryEyebrow = firstWatering
       ? appLanguage === 'en' ? 'Review gently' : 'Riego amable'
@@ -1660,14 +1672,18 @@ function TodayView({
         ? appLanguage === 'en' ? 'One small step' : 'Un paso pequeño'
         : inboxCount > 0
           ? appLanguage === 'en' ? 'Decide later, now' : 'Decidir sin presión'
+          : shedReview
+            ? appLanguage === 'en' ? 'Maybe someday' : 'Algún día'
           : appLanguage === 'en' ? 'Quiet garden' : 'Jardín tranquilo';
-    const PrimaryIcon = firstWatering ? Droplets : nextAction ? Target : inboxCount > 0 ? Sprout : Leaf;
+    const PrimaryIcon = firstWatering ? Droplets : nextAction ? Target : inboxCount > 0 ? Sprout : shedReview ? Archive : Leaf;
     const primaryActionLabel = firstWatering
       ? t('waterNow')
       : nextAction
         ? t('focus')
         : inboxCount > 0
           ? t('viewSeeds')
+          : shedReview
+            ? appLanguage === 'en' ? 'Review shed' : 'Revisar cobertizo'
           : appLanguage === 'en' ? 'Plant seed' : 'Plantar semilla';
     const secondaryActionLabel = firstWatering
       ? appLanguage === 'en' ? 'Later today' : 'Más tarde'
@@ -1675,11 +1691,14 @@ function TodayView({
         ? appLanguage === 'en' ? 'Open sprout' : 'Abrir brote'
         : inboxCount > 0
           ? appLanguage === 'en' ? 'Plant another' : 'Plantar otra'
+          : shedReview
+            ? appLanguage === 'en' ? 'View idea' : 'Ver idea'
           : appLanguage === 'en' ? 'View garden' : 'Ver jardín';
     const primaryAccent =
       primaryMode === 'water' ? 'text-[var(--sage)]' :
       primaryMode === 'focus' ? 'text-[var(--seed-accent)]' :
       primaryMode === 'seed' ? 'text-[var(--tone-seed)]' :
+      primaryMode === 'shed' ? 'text-[var(--tone-warning)]' :
       'text-[var(--sage)]';
     const todayPlan = firstWatering
         ? firstWatering?.inbox
@@ -1697,6 +1716,10 @@ function TodayView({
           ? appLanguage === 'en'
             ? `Today, decide one of ${inboxCount} waiting seed${inboxCount === 1 ? '' : 's'}.`
             : `Hoy conviene decidir ${Math.min(inboxCount, 1)} semilla${inboxCount === 1 ? '' : ' de las que esperan'}.`
+          : shedReview
+            ? appLanguage === 'en'
+              ? 'Today, visit the shed and bring back only what still matters.'
+              : 'Hoy puedes visitar el Cobertizo y traer solo lo que siga importando.'
           : learningMemory
             ? appLanguage === 'en'
               ? 'Garden is quiet. Review one lesson or plant something new.'
@@ -1716,6 +1739,10 @@ function TodayView({
           ? appLanguage === 'en'
             ? 'Choose one seed. The rest can wait.'
             : 'Elige una semilla. Las demás pueden esperar.'
+          : shedReview
+            ? appLanguage === 'en'
+              ? 'Someday ideas are useful when they can return without guilt.'
+              : 'Las ideas de algún día sirven cuando pueden volver sin culpa.'
           : appLanguage === 'en'
             ? 'Your garden is quiet. That is also progress.'
             : 'Tu jardín está tranquilo. Eso también es avance.';
@@ -1733,16 +1760,23 @@ function TodayView({
             icon: Sprout,
             tone: 'text-[var(--tone-sprout)]',
           }
-        : inboxCount > 0
-          ? {
-              label: appLanguage === 'en' ? 'Garden is collecting seeds' : 'El jardín junta semillas',
-              detail: appLanguage === 'en' ? `${inboxCount} to decide` : `${inboxCount} por decidir`,
-              icon: Leaf,
-              tone: 'text-[var(--tone-seed)]',
-            }
-          : {
-              label: appLanguage === 'en' ? 'Garden feels calm' : 'El jardín se siente tranquilo',
-              detail: appLanguage === 'en' ? 'Nothing urgent today' : 'Nada urgente por hoy',
+          : inboxCount > 0
+            ? {
+                label: appLanguage === 'en' ? 'Garden is collecting seeds' : 'El jardín junta semillas',
+                detail: appLanguage === 'en' ? `${inboxCount} to decide` : `${inboxCount} por decidir`,
+                icon: Leaf,
+                tone: 'text-[var(--tone-seed)]',
+              }
+            : shedReview
+              ? {
+                  label: appLanguage === 'en' ? 'Shed has a quiet idea' : 'El Cobertizo guarda una idea',
+                  detail: appLanguage === 'en' ? `${shedCount} resting` : `${shedCount} descansando`,
+                  icon: Archive,
+                  tone: 'text-[var(--tone-warning)]',
+                }
+            : {
+                label: appLanguage === 'en' ? 'Garden feels calm' : 'El jardín se siente tranquilo',
+                detail: appLanguage === 'en' ? 'Nothing urgent today' : 'Nada urgente por hoy',
               icon: CheckCircle2,
               tone: 'text-[var(--sage)]',
             };
@@ -1769,6 +1803,8 @@ function TodayView({
       primaryEyebrow,
       primaryTitle,
       secondaryActionLabel,
+      shedCount,
+      shedReview,
       sproutCount,
       stepsToday,
       todayDate,
@@ -1800,6 +1836,8 @@ function TodayView({
     primaryEyebrow,
     primaryTitle,
     secondaryActionLabel,
+    shedCount,
+    shedReview,
     sproutCount,
     stepsToday,
     todayDate,
@@ -1833,6 +1871,14 @@ function TodayView({
       icon: Archive,
       onClick: () => onNavigate('harvest'),
       tone: 'text-[var(--tone-harvest)]',
+    },
+    {
+      label: appLanguage === 'en' ? 'Shed' : 'Cobertizo',
+      value: shedCount,
+      detail: shedCount > 0 ? (appLanguage === 'en' ? 'resting' : 'descanso') : (appLanguage === 'en' ? 'empty' : 'limpio'),
+      icon: Archive,
+      onClick: () => onNavigate('shed'),
+      tone: 'text-[var(--tone-warning)]',
     },
   ];
   const todayModules = [
@@ -1893,6 +1939,10 @@ function TodayView({
       onNavigate('inbox');
       return;
     }
+    if (shedReview) {
+      onNavigate('shed');
+      return;
+    }
     onStartPlanting();
   };
   const secondaryClick = () => {
@@ -1906,6 +1956,10 @@ function TodayView({
     }
     if (inboxCount > 0) {
       onStartPlanting();
+      return;
+    }
+    if (shedReview) {
+      onSelectNote(shedReview.id);
       return;
     }
     onNavigate('garden');
@@ -2127,7 +2181,7 @@ function TodayView({
             className="space-y-3"
           >
             {todayWidgets.includes('summary') && (
-              <section className="grid grid-cols-3 gap-1.5 rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-strong)] p-1.5 shadow-sm">
+              <section className="grid grid-cols-4 gap-1.5 rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-strong)] p-1.5 shadow-sm">
                 {todayRoutes.map(item => (
                   <button
                     key={item.label}
@@ -2742,11 +2796,13 @@ function ShedView({
   notes,
   onSelectNote,
   onRestore,
+  onSprout,
   onDelete,
 }: {
   notes: SeedNote[];
   onSelectNote: (id: string) => void;
   onRestore: (id: string) => void;
+  onSprout: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
   const shedNotes = useMemo(() => notes
@@ -2779,7 +2835,9 @@ function ShedView({
         />
       ) : (
         <section className="space-y-3">
-          {shedNotes.map(note => (
+          {shedNotes.map(note => {
+            const restingDays = Math.max(0, daysSince(note.lastWateredAt || note.updatedAt || note.createdAt));
+            return (
             <GestureNoteSurface
               key={note.id}
               onPress={() => onSelectNote(note.id)}
@@ -2805,11 +2863,18 @@ function ShedView({
                 >
                   <span className="block truncate text-base font-semibold leading-tight tracking-tight text-[var(--earth)]">{note.title}</span>
                   <span className="mt-1 block line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{note.content || 'Guardada para volver cuando tenga sentido.'}</span>
-                  <span className="mt-2 inline-flex h-7 items-center rounded-full bg-[var(--bg-app)] px-2.5 text-[11px] font-semibold leading-none text-[var(--text-muted)]">
-                    Guardada {formatShortDate(note.updatedAt || note.lastWateredAt || note.createdAt)}
+                  <span className="mt-2 inline-flex h-7 items-center rounded-full bg-[var(--bg-app)] px-2.5 text-[11px] font-semibold leading-none text-[var(--text-muted)] ring-1 ring-[var(--border)]">
+                    {restingDays === 0 ? 'Guardada hoy' : `${restingDays} día${restingDays === 1 ? '' : 's'} descansando`}
                   </span>
                 </button>
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex shrink-0 items-center gap-1.5 max-sm:hidden">
+                  <button
+                    type="button"
+                    onClick={(event) => { event.stopPropagation(); onSprout(note.id); }}
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold leading-none text-[var(--sage)] ring-1 ring-[var(--border)] soft-interaction"
+                  >
+                    <Sprout size={13} /> Darle paso
+                  </button>
                   <button
                     type="button"
                     onClick={(event) => { event.stopPropagation(); onRestore(note.id); }}
@@ -2828,7 +2893,8 @@ function ShedView({
                 </div>
               </div>
             </GestureNoteSurface>
-          ))}
+            );
+          })}
         </section>
       )}
     </motion.div>
@@ -7250,7 +7316,7 @@ export default function App() {
                   >
                     <Pause size={18} className="mt-0.5 shrink-0 text-[var(--tone-warning)]" />
                     <p className="text-sm text-[var(--tone-warning)]">
-                      Tienes {growingNotes.length} brotes activos. Para avanzar mejor, pausa algunos o usa Enfoque.
+                      Tienes {growingNotes.length} brotes activos. Para avanzar mejor, guarda algunos en Cobertizo o usa Enfoque.
                     </p>
                   </motion.div>
                 )}
@@ -7323,6 +7389,7 @@ export default function App() {
                   notes={planetNotes}
                   onSelectNote={setSelectedNoteId}
                   onRestore={restoreFromShed}
+                  onSprout={openSproutPrompt}
                   onDelete={deleteNote}
                 />
               ) : view === 'focus' ? (
@@ -7587,7 +7654,7 @@ export default function App() {
                               {guidance.kind === 'water' ? <Droplets size={14} /> :
                                guidance.kind === 'focus' ? <Target size={14} /> :
                                guidance.kind === 'grow' ? <Sprout size={14} /> :
-                               guidance.kind === 'pause' ? <Pause size={14} /> :
+                               guidance.kind === 'pause' ? (note.paused ? <Leaf size={14} /> : <Archive size={14} />) :
                                <ArrowRight size={14} />}
                             </button>
                             <ChevronRight size={16} className="hidden text-[var(--text-muted)] sm:block" />
@@ -8994,7 +9061,7 @@ export default function App() {
                             <div className="min-w-0">
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--seed-accent)]">Primer recorrido</p>
                               <h2 className="mt-1 text-2xl font-black tracking-tight text-[var(--earth)] sm:text-3xl">
-                                Planta. Riega. Cosecha.
+                                Planta. Decide. Cultiva.
                               </h2>
                             </div>
                             <button
