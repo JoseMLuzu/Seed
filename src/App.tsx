@@ -89,7 +89,7 @@ type SupabaseRealtimePayload = {
   new?: Record<string, unknown> | null;
 };
 
-type AppView = 'today' | 'inbox' | 'projects' | 'focus' | 'garden' | 'profile' | 'harvest' | 'calendar' | '3D';
+type AppView = 'today' | 'inbox' | 'projects' | 'focus' | 'garden' | 'shed' | 'profile' | 'harvest' | 'calendar' | '3D';
 type AppLanguage = 'es' | 'en';
 type CreateMode = 'seed' | 'sprout' | 'journal';
 type TodayWidgetId = 'summary' | 'watering' | 'path' | 'learning';
@@ -821,10 +821,10 @@ function getIdeaGuidance(note: SeedNote) {
 
   if (note.paused) {
     return {
-      label: 'Pausada',
-      title: 'Fuera de tu ruta',
-      detail: 'No te distrae por ahora. Reactívala cuando vuelva a importar.',
-      action: 'Reactivar',
+      label: 'Cobertizo',
+      title: 'Guardada para después',
+      detail: 'No te distrae por ahora. Tráela al jardín cuando vuelva a importar.',
+      action: 'Traer al jardín',
       tone: 'bg-[var(--tone-warning-bg)] text-[var(--tone-warning)] border-[var(--tone-warning-border)]',
       actionTone: 'bg-[var(--earth)] text-[var(--on-earth)]',
       kind: 'pause' as const,
@@ -934,7 +934,7 @@ function GestureNoteSurface({
   onSwipeLeft,
   onLongPress,
   rightLabel = 'Regar',
-  leftLabel = 'Pausar',
+  leftLabel = 'Cobertizo',
   rightIcon: RightIcon = Droplets,
   leftIcon: LeftIcon = Pause,
   rightTone = 'bg-[var(--tone-water)] text-[var(--on-sage)]',
@@ -2388,7 +2388,7 @@ function InboxView({
               rightLabel="Brote"
               rightIcon={Sprout}
               rightTone="bg-[var(--tone-sprout)] text-[var(--on-sage)]"
-              leftLabel="Luego"
+              leftLabel="Cobertizo"
               leftIcon={Archive}
               leftTone="bg-[var(--tone-warning)] text-[var(--on-sage)]"
               wrapperClassName={IDEA_CARD_WRAPPER}
@@ -2551,8 +2551,8 @@ function ProjectsView({
               onSwipeLeft={() => onTogglePause(note.id)}
               onLongPress={() => onShowActions(note.id)}
               rightLabel="Regar"
-              leftLabel={note.paused ? 'Reanudar' : 'Pausar'}
-              leftIcon={Pause}
+              leftLabel="Cobertizo"
+              leftIcon={Archive}
               wrapperClassName={IDEA_CARD_WRAPPER}
               className={IDEA_CARD_SURFACE}
             >
@@ -2733,6 +2733,103 @@ function HarvestView({ notes, onSelectNote, onStartPlanting }: { notes: SeedNote
             })}
           </section>
         </>
+      )}
+    </motion.div>
+  );
+}
+
+function ShedView({
+  notes,
+  onSelectNote,
+  onRestore,
+  onDelete,
+}: {
+  notes: SeedNote[];
+  onSelectNote: (id: string) => void;
+  onRestore: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const shedNotes = useMemo(() => notes
+    .filter(note => !note.inbox && note.paused && note.growthStage !== 'bloom')
+    .sort((a, b) => noteUpdatedAt(b) - noteUpdatedAt(a)), [notes]);
+
+  return (
+    <motion.div key="shed-view" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="space-y-5 pb-2 md:pb-8">
+      <section className="overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface-strong),var(--surface-soft))] p-5 shadow-sm sm:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Algún día</p>
+            <h3 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--earth)]">Cobertizo</h3>
+            <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-[var(--text-muted)]">
+              Ideas guardadas sin presión. No aparecen en Hoy ni piden riego hasta que decidas traerlas de vuelta.
+            </p>
+          </div>
+          <span className="hidden h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)] shadow-sm sm:grid">
+            <Archive size={20} />
+          </span>
+        </div>
+      </section>
+
+      {shedNotes.length === 0 ? (
+        <EmptyStatePanel
+          icon={Archive}
+          eyebrow="Cobertizo limpio"
+          title="No hay ideas descansando"
+          detail="Cuando algo no sea para hoy pero tampoco quieras soltarlo, guárdalo aquí."
+        />
+      ) : (
+        <section className="space-y-3">
+          {shedNotes.map(note => (
+            <GestureNoteSurface
+              key={note.id}
+              onPress={() => onSelectNote(note.id)}
+              onSwipeRight={() => onRestore(note.id)}
+              onSwipeLeft={() => onDelete(note.id)}
+              rightLabel="Volver"
+              rightIcon={Leaf}
+              rightTone="bg-[var(--sage)] text-[var(--on-sage)]"
+              leftLabel="Soltar"
+              leftIcon={Trash2}
+              leftTone="bg-[var(--tone-danger)] text-white"
+              wrapperClassName={IDEA_CARD_WRAPPER}
+              className={`${IDEA_CARD_SURFACE} p-4`}
+            >
+              <div className="flex items-start gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[1.1rem] bg-[var(--bg-app)] text-[var(--sage)] shadow-sm ring-1 ring-[var(--border)]">
+                  <Archive size={17} />
+                </span>
+                <button
+                  type="button"
+                  onClick={(event) => { event.stopPropagation(); onSelectNote(note.id); }}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <span className="block truncate text-base font-semibold leading-tight tracking-tight text-[var(--earth)]">{note.title}</span>
+                  <span className="mt-1 block line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{note.content || 'Guardada para volver cuando tenga sentido.'}</span>
+                  <span className="mt-2 inline-flex h-7 items-center rounded-full bg-[var(--bg-app)] px-2.5 text-[11px] font-semibold leading-none text-[var(--text-muted)]">
+                    Guardada {formatShortDate(note.updatedAt || note.lastWateredAt || note.createdAt)}
+                  </span>
+                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={(event) => { event.stopPropagation(); onRestore(note.id); }}
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold leading-none text-[var(--on-sage)] shadow-sm soft-interaction"
+                  >
+                    <Leaf size={13} /> Volver
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => { event.stopPropagation(); onSelectNote(note.id); }}
+                    className="grid h-8 w-8 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)] hover:text-[var(--sage)]"
+                    aria-label="Abrir idea"
+                  >
+                    <ChevronRight size={15} />
+                  </button>
+                </div>
+              </div>
+            </GestureNoteSurface>
+          ))}
+        </section>
       )}
     </motion.div>
   );
@@ -5701,6 +5798,32 @@ export default function App() {
     window.setTimeout(() => setCelebration(null), 1500);
   };
 
+  const moveNoteToShed = (id: string) => {
+    setNotes(current => current.map(n => n.id === id ? touchNote({
+      ...n,
+      paused: true,
+      inbox: false,
+      lastWateredAt: Date.now(),
+      lastWateringNote: appLanguage === 'en' ? 'Saved in the shed for later.' : 'Guardada en el cobertizo para después.',
+    }) : n));
+    recordWateringRitual();
+    markRecentlyWatered(id);
+    setWateringNoteId(null);
+    setCelebration(appLanguage === 'en' ? 'Saved in the shed' : 'Guardada en el cobertizo');
+    window.setTimeout(() => setCelebration(null), 1500);
+  };
+
+  const restoreFromShed = (id: string) => {
+    setNotes(current => current.map(n => n.id === id ? touchNote({
+      ...n,
+      paused: false,
+      lastWateredAt: Date.now(),
+      lastWateringNote: appLanguage === 'en' ? 'Returned to the garden.' : 'Vuelta al jardín.',
+    }) : n));
+    setCelebration(appLanguage === 'en' ? 'Back in the garden' : 'Vuelta al jardín');
+    window.setTimeout(() => setCelebration(null), 1500);
+  };
+
   const closeDayWithReflection = (reflection: string, intention: string, intentionOutcome: 'yes' | 'some' | 'no' | '' = '') => {
     if (notes.some(note => isDailyClosureForDate(note))) {
       setCelebration(appLanguage === 'en' ? 'Day already closed' : 'El día ya está cerrado');
@@ -5777,7 +5900,15 @@ export default function App() {
   };
 
   const saveInboxForLater = (id: string) => {
-    setNotes(current => current.map(n => n.id === id ? touchNote({ ...n, inbox: false, paused: true, lastWateredAt: Date.now() }) : n));
+    setNotes(current => current.map(n => n.id === id ? touchNote({
+      ...n,
+      inbox: false,
+      paused: true,
+      lastWateredAt: Date.now(),
+      lastWateringNote: appLanguage === 'en' ? 'Saved in the shed for later.' : 'Guardada en el cobertizo para después.',
+    }) : n));
+    setCelebration(appLanguage === 'en' ? 'Saved in the shed' : 'Guardada en el cobertizo');
+    window.setTimeout(() => setCelebration(null), 1500);
   };
 
   const addTinyStep = (id: string, text?: string) => {
@@ -5942,7 +6073,7 @@ export default function App() {
     return planetNotes.filter(n => {
       if (n.inbox) return false;
       const matchesSpecialSearch =
-        normalizedSearch === 'pausadas' ? Boolean(n.paused) :
+        normalizedSearch === 'pausadas' || normalizedSearch === 'cobertizo' ? Boolean(n.paused) :
         normalizedSearch === 'riego' ? !n.paused && n.growthStage !== 'bloom' && wateringDue(n) :
         normalizedSearch === 'activas' ? !n.paused && n.growthStage !== 'bloom' :
         false;
@@ -5958,7 +6089,13 @@ export default function App() {
 
   const projectNotes = useMemo(() => {
     return planetNotes
-      .filter(note => !note.inbox && note.isGrowth && note.growthStage !== 'bloom')
+      .filter(note => !note.inbox && !note.paused && note.isGrowth && note.growthStage !== 'bloom')
+      .sort((a, b) => noteUpdatedAt(b) - noteUpdatedAt(a));
+  }, [planetNotes]);
+
+  const shedNotes = useMemo(() => {
+    return planetNotes
+      .filter(note => !note.inbox && note.paused && note.growthStage !== 'bloom')
       .sort((a, b) => noteUpdatedAt(b) - noteUpdatedAt(a));
   }, [planetNotes]);
 
@@ -5986,11 +6123,12 @@ export default function App() {
         else stats.flowers += 1;
       }
       if (note.isGrowth && !note.paused && note.growthStage !== 'bloom') stats.active += 1;
+      if (note.paused && note.growthStage !== 'bloom') stats.shed += 1;
       if (note.growthStage === 'seed') stats.plantedSeeds += 1;
       if (note.growthStage === 'sprout') stats.visualSprouts += 1;
       if (!note.paused && note.growthStage !== 'bloom' && wateringDue(note)) stats.watering += 1;
       return stats;
-    }, { total: 0, completed: 0, active: 0, seeds: 0, plantedSeeds: 0, visualSprouts: 0, watering: 0, flowers: 0, trees: 0 });
+    }, { total: 0, completed: 0, active: 0, seeds: 0, shed: 0, plantedSeeds: 0, visualSprouts: 0, watering: 0, flowers: 0, trees: 0 });
   }, [planetNotes]);
 
   const planetNoteCounts = useMemo(() => {
@@ -6017,7 +6155,7 @@ export default function App() {
 
   const exportGarden = () => {
     const markdown = planetNotes.map(note => {
-      const status = note.inbox ? 'Semillero' : note.paused ? 'Pausada' : STAGE_META[note.growthStage].label;
+    const status = note.inbox ? 'Semillero' : note.paused ? 'Cobertizo' : STAGE_META[note.growthStage].label;
       const tasks = note.tasks.length ? `\n\n${note.tasks.map(task => `- [${task.completed ? 'x' : ' '}] ${task.text}`).join('\n')}` : '';
       const reflection = note.reflection ? `\n\nReflexión: ${note.reflection}` : '';
       const takeaway = note.takeaway ? `\n\nMe dejó: ${note.takeaway}` : '';
@@ -6347,7 +6485,8 @@ export default function App() {
     }
 
     if (action === 'pause') {
-      togglePauseNote(note.id);
+      if (note.paused) restoreFromShed(note.id);
+      else moveNoteToShed(note.id);
       return;
     }
 
@@ -6504,7 +6643,8 @@ export default function App() {
       return;
     }
     if (action === 'pause') {
-      togglePauseNote(noteId);
+      if (quickActionsNote.paused) restoreFromShed(noteId);
+      else moveNoteToShed(noteId);
       return;
     }
     if (action === 'harvest') {
@@ -6968,6 +7108,7 @@ export default function App() {
 	                    { id: 'today', label: t('today'), detail: 'Una decisión clara', icon: Droplets },
 	                    { id: 'inbox', label: t('seeds'), detail: 'Ideas sin presión', icon: Sprout },
 	                    { id: 'projects', label: t('sprouts'), detail: 'Siguiente paso', icon: Target },
+	                    { id: 'shed', label: 'Cobertizo', detail: 'Algún día', icon: Archive },
 	                    { id: 'garden', label: t('garden'), detail: 'Recompensa visual', icon: LayoutGrid },
 	                    { id: '3D', label: t('planet'), detail: 'Mundo vivo', icon: Box },
 	                    { id: 'calendar', label: t('path'), detail: 'Ritmo y memoria', icon: CalendarIcon },
@@ -7069,11 +7210,12 @@ export default function App() {
                     <p className="mt-2 line-clamp-2 text-xs italic text-[var(--text-muted)]">{activePlanet.description || 'Cada nota es el comienzo de algo grande.'}</p>
                   </div>
                 </motion.div>
-                <div className="mt-5 grid grid-cols-3 gap-2 sm:mt-6 sm:gap-3">
+                <div className="mt-5 grid grid-cols-2 gap-2 sm:mt-6 sm:grid-cols-4 sm:gap-3">
                   {[
                     { id: 'inbox', label: t('seeds'), value: gardenStats.seeds, tone: 'bg-[var(--tone-seed-bg)] text-[var(--tone-seed)]' },
                     { id: 'projects', label: t('sprouts'), value: gardenStats.active, tone: 'bg-[var(--tone-sprout-bg)] text-[var(--tone-sprout)]' },
                     { id: 'harvest', label: appLanguage === 'en' ? 'Harvests' : 'Cosechas', value: gardenStats.completed, tone: 'bg-[var(--tone-harvest-bg)] text-[var(--tone-harvest)]' },
+                    { id: 'shed', label: 'Cobertizo', value: gardenStats.shed, tone: 'bg-[var(--bg-app)] text-[var(--sage)]' },
                   ].map((stat) => {
                     const isActiveStat = view === stat.id;
                     return (
@@ -7171,10 +7313,17 @@ export default function App() {
                   onFocusNote={openFocusMode}
                   onToggleTask={toggleTask}
                   onOpenWatering={openWatering}
-                  onTogglePause={togglePauseNote}
+                  onTogglePause={moveNoteToShed}
                   onShowActions={setQuickActionsNoteId}
                   onStartSprout={() => openCreateOption('sprout')}
                   getProgress={getProgress}
+                />
+              ) : view === 'shed' ? (
+                <ShedView
+                  notes={planetNotes}
+                  onSelectNote={setSelectedNoteId}
+                  onRestore={restoreFromShed}
+                  onDelete={deleteNote}
                 />
               ) : view === 'focus' ? (
                 <FocusView
@@ -7232,6 +7381,7 @@ export default function App() {
                       { icon: Settings, title: t('settings'), detail: appLanguage === 'en' ? 'Account, theme, watering and reminders' : 'Cuenta, tema, riego y recordatorios', onClick: () => setShowSettings(true) },
                       { icon: CalendarIcon, title: t('path'), detail: appLanguage === 'en' ? 'Review activity by day' : 'Revisa actividad por día', onClick: openCalendarToday },
                       { icon: Box, title: t('planet'), detail: appLanguage === 'en' ? 'Open the 3D garden when you need it' : 'Abre el jardín 3D cuando lo necesites', onClick: () => setView('3D') },
+                      { icon: Archive, title: 'Cobertizo', detail: `${gardenStats.shed} idea${gardenStats.shed === 1 ? '' : 's'} guardada${gardenStats.shed === 1 ? '' : 's'} para después`, onClick: () => setView('shed') },
                       { icon: Archive, title: 'Lo aprendido', detail: `${profileStats.harvests} cierre${profileStats.harvests === 1 ? '' : 's'} de idea${profileStats.harvests === 1 ? '' : 's'}`, onClick: () => setView('harvest') },
                     ].map((item, index) => (
                       <button
@@ -7300,6 +7450,7 @@ export default function App() {
                     {[
                       { id: 'all', label: 'Todo el jardín', count: gardenStats.total },
                       { id: 'water', label: 'Por regar', count: gardenStats.watering },
+                      { id: 'shed', label: 'Cobertizo', count: gardenStats.shed },
                       { id: 'seed', label: appLanguage === 'en' ? 'Seed stage' : 'Etapa semilla', count: gardenStats.plantedSeeds },
                       { id: 'sprout', label: appLanguage === 'en' ? 'Sprout stage' : 'Etapa brote', count: gardenStats.visualSprouts },
                       { id: 'bloom', label: appLanguage === 'en' ? 'Harvests' : 'Cosechas', count: gardenStats.completed },
@@ -7307,6 +7458,7 @@ export default function App() {
                       const isActive =
                         item.id === 'all' ? !search.trim() && filterStage === 'all' :
                         item.id === 'water' ? search.trim().toLowerCase() === 'riego' :
+                        item.id === 'shed' ? search.trim().toLowerCase() === 'cobertizo' :
                         filterStage === item.id && search.trim().toLowerCase() !== 'riego';
 
                       return (
@@ -7320,6 +7472,9 @@ export default function App() {
                               setFilterStage('all');
                             } else if (item.id === 'water') {
                               setSearch('riego');
+                              setFilterStage('all');
+                            } else if (item.id === 'shed') {
+                              setSearch('cobertizo');
                               setFilterStage('all');
                             } else {
                               setSearch('');
@@ -7360,11 +7515,11 @@ export default function App() {
                         key={note.id}
                         onPress={() => setSelectedNoteId(note.id)}
                         onSwipeRight={() => openWatering(note.id)}
-                        onSwipeLeft={() => togglePauseNote(note.id)}
+                        onSwipeLeft={() => note.paused ? restoreFromShed(note.id) : moveNoteToShed(note.id)}
                         onLongPress={() => setQuickActionsNoteId(note.id)}
                         rightLabel="Regar"
-                        leftLabel={note.paused ? 'Reanudar' : 'Pausar'}
-                        leftIcon={Pause}
+                        leftLabel={note.paused ? 'Volver' : 'Cobertizo'}
+                        leftIcon={note.paused ? Leaf : Archive}
                         wrapperClassName={IDEA_CARD_WRAPPER}
 	                        className={`${IDEA_CARD_SURFACE} min-h-[5.25rem] cursor-pointer px-4 py-3 ${
 	                          selectedNoteId === note.id 
@@ -7581,7 +7736,7 @@ export default function App() {
 	              <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-strong)]/82 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.9rem)] backdrop-blur-2xl md:pt-4">
 	                <div className="min-w-0">
 	                  <p className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-	                    {selectedNote.inbox ? 'Semillero' : selectedNote.paused ? 'Pausada' : STAGE_META[selectedNote.growthStage].label}
+	                    {selectedNote.inbox ? 'Semillero' : selectedNote.paused ? 'Cobertizo' : STAGE_META[selectedNote.growthStage].label}
 	                  </p>
 	                  <p className="mt-0.5 truncate text-sm font-semibold text-[var(--earth)]">{activePlanet.name}</p>
 	                </div>
@@ -7599,7 +7754,7 @@ export default function App() {
 	                        <div className="flex min-w-0 flex-wrap gap-2">
 	                          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold ${STAGE_META[selectedNote.growthStage].bg} ${STAGE_META[selectedNote.growthStage].color}`}>
 	                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
-	                            {selectedNote.paused ? 'Pausada' : STAGE_META[selectedNote.growthStage].shortLabel}
+	                            {selectedNote.paused ? 'Cobertizo' : STAGE_META[selectedNote.growthStage].shortLabel}
 	                          </span>
 	                        </div>
 	                        <span className="shrink-0 rounded-full bg-[var(--bg-app)] px-3 py-1.5 text-[11px] font-semibold text-[var(--text-muted)]">
@@ -7939,8 +8094,8 @@ export default function App() {
                      <button onClick={() => openWatering(selectedNote.id)} className="flex h-9 items-center justify-center gap-2 rounded-full bg-[var(--bg-app)] px-4 text-xs font-semibold text-[var(--sage)]">
                        <Droplets size={14} /> Regar
                      </button>
-                     <button onClick={() => togglePauseNote(selectedNote.id)} className="flex h-9 items-center justify-center gap-2 rounded-full bg-[var(--bg-app)] px-4 text-xs font-semibold text-[var(--sage)]">
-                       <Pause size={14} /> {selectedNote.paused ? 'Reactivar' : 'Pausar'}
+                     <button onClick={() => selectedNote.paused ? restoreFromShed(selectedNote.id) : moveNoteToShed(selectedNote.id)} className="flex h-9 items-center justify-center gap-2 rounded-full bg-[var(--bg-app)] px-4 text-xs font-semibold text-[var(--sage)]">
+                       {selectedNote.paused ? <Leaf size={14} /> : <Archive size={14} />} {selectedNote.paused ? 'Volver' : 'Cobertizo'}
                      </button>
                    </div>
                  )}
@@ -8013,12 +8168,12 @@ export default function App() {
                   {quickActionsNote.inbox ? (
                     <button onClick={() => runQuickAction('later')} className="flex min-h-12 items-center gap-3 rounded-2xl bg-[var(--tone-warning-bg)] px-4 text-left text-sm font-semibold text-[var(--tone-warning)] ring-1 ring-[var(--tone-warning-border)]">
                       <span className="grid h-8 w-8 place-items-center rounded-xl bg-[var(--surface-strong)]/80"><Archive size={16} /></span>
-                      Guardar para luego
+                      Guardar en Cobertizo
                     </button>
                   ) : (
                     <button onClick={() => runQuickAction('pause')} className="flex min-h-12 items-center gap-3 rounded-2xl bg-[var(--tone-warning-bg)] px-4 text-left text-sm font-semibold text-[var(--tone-warning)] ring-1 ring-[var(--tone-warning-border)]">
-                      <span className="grid h-8 w-8 place-items-center rounded-xl bg-[var(--surface-strong)]/80"><Pause size={16} /></span>
-                      {quickActionsNote.paused ? 'Reanudar' : 'Pausar'}
+                      <span className="grid h-8 w-8 place-items-center rounded-xl bg-[var(--surface-strong)]/80">{quickActionsNote.paused ? <Leaf size={16} /> : <Archive size={16} />}</span>
+                      {quickActionsNote.paused ? 'Traer al jardín' : 'Guardar en Cobertizo'}
                     </button>
                   )}
                   <button onClick={() => runQuickAction('harvest')} className="flex min-h-12 items-center gap-3 rounded-2xl bg-[var(--tone-harvest-bg)] px-4 text-left text-sm font-semibold text-[var(--tone-harvest)] ring-1 ring-[var(--tone-harvest-border)]">
@@ -8124,8 +8279,8 @@ export default function App() {
                 >
                   <div className="mb-5 flex items-start justify-between gap-4">
 	                    <div>
-	                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Riego inteligente</p>
-	                      <h3 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--earth)]">¿Sigue viva?</h3>
+	                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--seed-accent)]">Revisión amable</p>
+	                      <h3 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--earth)]">¿Qué necesita esta idea?</h3>
                         <p className="mt-1 text-sm font-medium text-[var(--text-muted)]">{reviewAge}</p>
 	                    </div>
                     <button onClick={() => setWateringNoteId(null)} className="p-2 rounded-full hover:bg-[var(--bg-app)] transition-colors">
@@ -8136,7 +8291,7 @@ export default function App() {
                   <div className="mb-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] p-4">
                     <p className="font-semibold text-[var(--earth)]">{note.title}</p>
                     <p className="mt-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
-	                      Regar no significa trabajar. Solo decide qué merece esta idea hoy.
+	                      Decide si vuelve al jardín, si merece un paso o si descansa en el Cobertizo.
                     </p>
                     {nextTask && (
                       <p className="mt-3 rounded-2xl bg-[var(--surface-strong)] px-3 py-2 text-xs font-semibold leading-relaxed text-[var(--sage)]">
@@ -8158,7 +8313,7 @@ export default function App() {
 	                      onClick={() => waterNote(note.id, wateringNote.trim() || 'Riego rápido: sigue viva')}
 	                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 py-3 text-sm font-semibold text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
 	                    >
-	                      <Droplets size={17} /> Sí, regar
+	                      <Droplets size={17} /> Sigue viva
 	                    </button>
 	                    <button
 	                      onClick={() => {
@@ -8167,15 +8322,15 @@ export default function App() {
 	                      }}
 	                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--bg-app)] px-4 py-3 text-sm font-semibold text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
 	                    >
-	                      <Sprout size={17} /> Convertir en brote
+	                      <Sprout size={17} /> Darle un paso
 	                    </button>
-	                    <div className="grid grid-cols-3 gap-2">
-	                      <button
-	                        onClick={() => { togglePauseNote(note.id); recordWateringRitual(); markRecentlyWatered(note.id); setWateringNoteId(null); }}
-	                        className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--text-muted)] transition-colors hover:text-[var(--sage)]"
-	                      >
-	                        <Pause size={13} /> Pausar
-	                      </button>
+	                    <button
+	                      onClick={() => moveNoteToShed(note.id)}
+	                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--tone-warning-bg)] px-4 py-3 text-sm font-semibold text-[var(--tone-warning)] ring-1 ring-[var(--tone-warning-border)] transition-colors hover:bg-[var(--surface-hover)]"
+	                    >
+	                      <Archive size={17} /> Guardar en Cobertizo
+	                    </button>
+	                    <div className="grid grid-cols-2 gap-2 pt-1">
 	                      <button
 	                        onClick={() => harvestFromWatering(note.id)}
 	                        className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-[var(--tone-harvest-bg)] px-3 text-xs font-semibold text-[var(--tone-harvest)] ring-1 ring-[var(--tone-harvest-border)] transition-colors hover:bg-[var(--surface-hover)]"
