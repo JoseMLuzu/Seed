@@ -23,6 +23,7 @@ import {
 import { es } from 'date-fns/locale';
 import { enUS } from 'date-fns/locale';
 import { startFocusLiveActivity, stopFocusLiveActivity, updateFocusLiveActivity } from './native/liveActivity';
+import { clearSeedNotifications, requestSeedNotificationPermission, scheduleSeedReminders } from './native/notifications';
 import { updateSeedWidget } from './native/widget';
 import { 
   Plus, 
@@ -5611,7 +5612,17 @@ export default function App() {
   }, [planets, notes, notesLoaded, session?.user?.id]);
 
   useEffect(() => {
-    if (!notesLoaded || !notificationsEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+    if (!notesLoaded) return;
+    if (!notificationsEnabled) {
+      clearSeedNotifications();
+      return;
+    }
+
+    scheduleSeedReminders({ notes, reminderHour, language: appLanguage }).catch(error => {
+      console.warn('Seed native reminders could not be scheduled.', error);
+    });
+
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
     const dueNotes = notes.filter(note => !note.inbox && !note.paused && note.growthStage !== 'bloom' && wateringDue(note));
     if (dueNotes.length === 0) return;
 
@@ -5629,7 +5640,7 @@ export default function App() {
     }, delay);
 
     return () => window.clearTimeout(timeout);
-  }, [notes, notesLoaded, notificationsEnabled, reminderHour]);
+  }, [appLanguage, notes, notesLoaded, notificationsEnabled, reminderHour]);
 
   // Check for withered seeds periodically
   useEffect(() => {
@@ -6072,6 +6083,22 @@ export default function App() {
   };
 
   const enableNotifications = async () => {
+    const nativePermission = await requestSeedNotificationPermission();
+    if (nativePermission === 'granted') {
+      setNotificationsEnabled(true);
+      setCelebration(appLanguage === 'en' ? 'Reminders enabled' : 'Recordatorios activados');
+      window.setTimeout(() => setCelebration(null), 1500);
+      await scheduleSeedReminders({ notes, reminderHour, language: appLanguage });
+      return;
+    }
+
+    if (nativePermission === 'denied') {
+      setNotificationsEnabled(false);
+      setCelebration(appLanguage === 'en' ? 'Enable notifications in Settings' : 'Activa notificaciones en Ajustes');
+      window.setTimeout(() => setCelebration(null), 1800);
+      return;
+    }
+
     if (!('Notification' in window)) return;
     const permission = Notification.permission === 'default'
       ? await Notification.requestPermission()
@@ -9001,7 +9028,14 @@ export default function App() {
                             </div>
                             <AppSwitch
                               checked={notificationsEnabled}
-                              onChange={(checked) => checked ? enableNotifications() : setNotificationsEnabled(false)}
+                              onChange={(checked) => {
+                                if (checked) {
+                                  enableNotifications();
+                                  return;
+                                }
+                                setNotificationsEnabled(false);
+                                clearSeedNotifications();
+                              }}
                               ariaLabel={notificationsEnabled ? 'Desactivar recordatorios' : 'Activar recordatorios'}
                             />
                           </div>
