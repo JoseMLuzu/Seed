@@ -5875,13 +5875,14 @@ export default function App() {
     window.setTimeout(() => setCelebration(null), 1500);
   };
 
-  const moveNoteToShed = (id: string) => {
+  const moveNoteToShed = (id: string, observation?: string) => {
+    const cleanObservation = observation?.trim();
     setNotes(current => current.map(n => n.id === id ? touchNote({
       ...n,
       paused: true,
       inbox: false,
       lastWateredAt: Date.now(),
-      lastWateringNote: appLanguage === 'en' ? 'Saved in the shed for later.' : 'Guardada en el cobertizo para después.',
+      lastWateringNote: cleanObservation || (appLanguage === 'en' ? 'Saved in the shed for later.' : 'Guardada en el cobertizo para después.'),
     }) : n));
     recordWateringRitual();
     markRecentlyWatered(id);
@@ -8371,7 +8372,7 @@ export default function App() {
                   <div className="mb-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] p-4">
                     <p className="font-semibold text-[var(--earth)]">{note.title}</p>
                     <p className="mt-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
-	                      Vuelve a mirarla con calma. Si todavía tiene energía, conviértela en un paso pequeño; si ya cumplió su ciclo, ciérrala como cosecha.
+	                      Vuelve a mirarla con calma. Puedes mantenerla viva, darle un siguiente paso o guardarla para después. Cosecha solo si ya cumplió su ciclo.
                     </p>
                     {nextTask && (
                       <p className="mt-3 rounded-2xl bg-[var(--surface-strong)] px-3 py-2 text-xs font-semibold leading-relaxed text-[var(--sage)]">
@@ -8398,6 +8399,12 @@ export default function App() {
 
 	                  <div className="mt-5 grid grid-cols-1 gap-2">
 	                    <button
+	                      onClick={() => waterNote(note.id, wateringNote.trim() || 'Riego rápido: sigue viva')}
+	                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 py-3 text-sm font-semibold text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
+	                    >
+	                      <Droplets size={17} /> Sigue viva
+	                    </button>
+	                    <button
 	                      onClick={() => {
                           saveWateringObservation(note.id, 'Revisión: merece un siguiente paso.');
 	                        setWateringNoteId(null);
@@ -8409,11 +8416,29 @@ export default function App() {
 	                      <Sprout size={17} /> Darle un paso
 	                    </button>
 	                    <button
-	                      onClick={() => harvestFromWatering(note.id)}
-	                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--tone-harvest-bg)] px-4 py-3 text-sm font-semibold text-[var(--tone-harvest)] ring-1 ring-[var(--tone-harvest-border)] transition-colors hover:bg-[var(--surface-hover)] active:translate-y-px soft-interaction"
+	                      onClick={() => moveNoteToShed(note.id, wateringNote)}
+	                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--tone-warning-bg)] px-4 py-3 text-sm font-semibold text-[var(--tone-warning)] ring-1 ring-[var(--tone-warning-border)] transition-colors hover:bg-[var(--surface-hover)]"
 	                    >
-	                      <CheckCircle2 size={17} /> Cosechar
+	                      <Archive size={17} /> Guardar en Cobertizo
 	                    </button>
+	                    <div className="grid grid-cols-2 gap-2 pt-1">
+	                      <button
+	                        onClick={() => harvestFromWatering(note.id)}
+	                        className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-[var(--tone-harvest-bg)] px-3 text-xs font-semibold text-[var(--tone-harvest)] ring-1 ring-[var(--tone-harvest-border)] transition-colors hover:bg-[var(--surface-hover)]"
+	                      >
+	                        <CheckCircle2 size={13} /> Cosechar
+	                      </button>
+	                      <button
+	                        onClick={() => {
+	                          setWateringNoteId(null);
+	                          setWateringNote('');
+	                          deleteNote(note.id);
+	                        }}
+	                        className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-[var(--tone-danger-bg)] px-3 text-xs font-semibold text-[var(--tone-danger)] ring-1 ring-[var(--tone-danger-border)] transition-colors hover:opacity-85"
+	                      >
+	                        <Trash2 size={13} /> Soltar
+	                      </button>
+	                    </div>
 	                  </div>
                 </motion.div>
               </motion.div>
