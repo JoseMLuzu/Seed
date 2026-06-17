@@ -9866,12 +9866,7 @@ export default function App() {
 	              initial={{ scale: 0 }}
 	              animate={{ scale: 1, rotate: showCreateMenu ? 45 : 0 }}
 	              onPointerDown={startCreateMenuPress}
-	              onPointerUp={() => {
-	                clearCreateMenuPress();
-	                if (createMenuLongPressRef.current && showCreateMenu) {
-	                  playMicroSound('closePop', true);
-	                }
-	              }}
+	              onPointerUp={clearCreateMenuPress}
 	              onPointerCancel={clearCreateMenuPress}
 	              onPointerLeave={clearCreateMenuPress}
 	              onContextMenu={(event) => {
