@@ -6671,6 +6671,12 @@ export default function App() {
       createMenuTimerRef.current = null;
     }
   };
+  const closeCreateMenu = (withSound = true) => {
+    clearCreateMenuPress();
+    createMenuLongPressRef.current = false;
+    if (withSound) playMicroSound('closePop', true);
+    setShowCreateMenu(false);
+  };
   const createDraftTodo = (text = '', completed = false): DraftTodo => ({
     id: crypto.randomUUID(),
     text,
@@ -9806,7 +9812,7 @@ export default function App() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0, transition: { duration: 0.12 } }}
-                    onClick={() => setShowCreateMenu(false)}
+                    onClick={() => closeCreateMenu(true)}
                   />
                   <motion.div
                     initial={{ opacity: 0, y: 24, scale: 0.78, rotate: -2 }}
@@ -9860,7 +9866,12 @@ export default function App() {
 	              initial={{ scale: 0 }}
 	              animate={{ scale: 1, rotate: showCreateMenu ? 45 : 0 }}
 	              onPointerDown={startCreateMenuPress}
-	              onPointerUp={clearCreateMenuPress}
+	              onPointerUp={() => {
+	                clearCreateMenuPress();
+	                if (createMenuLongPressRef.current && showCreateMenu) {
+	                  playMicroSound('closePop', true);
+	                }
+	              }}
 	              onPointerCancel={clearCreateMenuPress}
 	              onPointerLeave={clearCreateMenuPress}
 	              onContextMenu={(event) => {
@@ -9877,7 +9888,7 @@ export default function App() {
 	                  return;
 	                }
 	                if (showCreateMenu) {
-	                  setShowCreateMenu(false);
+	                  closeCreateMenu(true);
 	                  return;
 	                }
 	                startPlanting();

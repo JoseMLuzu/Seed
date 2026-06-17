@@ -1,6 +1,6 @@
 import { Howl, Howler } from 'howler';
 
-export type SeedSoundKind = 'pop' | 'holdPop' | 'plant' | 'water' | 'sprout' | 'step' | 'harvest';
+export type SeedSoundKind = 'pop' | 'holdPop' | 'closePop' | 'plant' | 'water' | 'sprout' | 'step' | 'harvest';
 
 type ToneLayer = {
   frequency: number;
@@ -26,6 +26,7 @@ const MASTER_VOLUME = 0.55;
 const SOUND_FILES: Partial<Record<SeedSoundKind, string[]>> = {
   pop: ['/sounds/mixkit-long-pop-2358-short.wav'],
   holdPop: ['/sounds/mixkit-long-pop-2358.wav'],
+  closePop: ['/sounds/mixkit-long-pop-2358-out.mp3'],
   plant: ['/sounds/mixkit-hard-pop-click-2364.wav'],
   step: ['/sounds/mixkit-message-pop-alert-2354.mp3'],
   water: ['/sounds/water.wav'],
@@ -45,6 +46,14 @@ const SOUND_PRESETS: Record<SeedSoundKind, SoundPreset> = {
     volume: 0.64,
     layers: [
       { frequency: 260, start: 0, duration: 0.12, gain: 0.18, glideTo: 460 },
+    ],
+  },
+  closePop: {
+    duration: 0.28,
+    volume: 0.62,
+    layers: [
+      { frequency: 430, start: 0, duration: 0.12, gain: 0.16, glideTo: 260 },
+      { frequency: 720, start: 0.04, duration: 0.1, gain: 0.08, glideTo: 520 },
     ],
   },
   plant: {
