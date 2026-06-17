@@ -2392,31 +2392,50 @@ function InboxView({
               leftIcon={Archive}
               leftTone="bg-[var(--tone-warning)] text-[var(--on-sage)]"
               wrapperClassName={IDEA_CARD_WRAPPER}
-              className={`${IDEA_CARD_SURFACE} ${recentlyCreatedNoteId === note.id ? 'bg-[var(--sage)]/10' : ''}`}
+              className={`${IDEA_CARD_SURFACE} p-4 ${recentlyCreatedNoteId === note.id ? 'bg-[var(--sage)]/10 ring-[var(--sage)]/30' : ''}`}
             >
-              <button onClick={(event) => { event.stopPropagation(); onSelectNote(note.id); }} className={IDEA_CARD_ROW}>
-                <span className={`${IDEA_ICON_TILE} bg-[var(--tone-seed-bg)] text-[var(--tone-seed)] ring-[var(--tone-seed-border)]`}>
-                  <Sprout size={15} />
+              <button
+                onClick={(event) => { event.stopPropagation(); onSelectNote(note.id); }}
+                className="flex w-full items-start gap-3 text-left"
+              >
+                <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-[1.1rem] bg-[var(--tone-seed-bg)] text-[var(--tone-seed)] shadow-sm ring-1 ring-[var(--tone-seed-border)]">
+                  <Sprout size={16} strokeWidth={2.2} />
+                  <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-current opacity-45" />
                 </span>
-                  <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-[var(--earth)]">{note.title}</span>
-                  <span className="mt-0.5 block line-clamp-2 text-sm leading-relaxed text-[var(--text-muted)]">{cardDescription}</span>
-                  <span className="mt-1 block text-[11px] font-medium text-[var(--text-muted)]">
-                    {appLanguage === 'en' ? 'Created' : 'Creada'} {formatShortDate(note.createdAt)}
-                  </span>
+                <span className="min-w-0 flex-1 pt-0.5">
+                  <span className="block truncate text-base font-semibold leading-tight tracking-tight text-[var(--earth)]">{note.title}</span>
+                  <span className="mt-1 block line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{cardDescription}</span>
                 </span>
-                <ChevronRight size={16} className="shrink-0 text-[var(--text-muted)]" />
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--text-muted)] transition-colors group-hover:bg-[var(--bg-app)] group-hover:text-[var(--sage)]">
+                  <ChevronRight size={16} />
+                </span>
               </button>
-              <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-2 px-4 pb-3 pl-[4rem]">
-                <button onClick={(event) => { event.stopPropagation(); onComplete(note.id); }} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold text-[var(--on-sage)] active:translate-y-px soft-interaction">
-                  <CheckCircle2 size={13} /> {t('done')}
-                </button>
-                <button onClick={(event) => { event.stopPropagation(); onCultivate(note.id); }} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)] active:translate-y-px soft-interaction hover:bg-[var(--surface-hover)]">
-                  <Sprout size={13} /> {t('project')}
-                </button>
-                <button onClick={(event) => { event.stopPropagation(); onShowActions(note.id); }} className="grid h-9 w-9 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)] hover:text-[var(--sage)]" aria-label="Más opciones">
+
+              <div className="mt-3 flex items-center justify-between gap-3 pl-14">
+                <span className="inline-flex h-7 min-w-0 items-center rounded-full bg-[var(--bg-app)] px-2.5 text-[11px] font-semibold leading-none text-[var(--text-muted)]">
+                  {appLanguage === 'en' ? 'Created' : 'Creada'} {formatShortDate(note.createdAt)}
+                </span>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    onClick={(event) => { event.stopPropagation(); onComplete(note.id); }}
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold leading-none text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
+                  >
+                    <CheckCircle2 size={13} /> {t('done')}
+                  </button>
+                  <button
+                    onClick={(event) => { event.stopPropagation(); onCultivate(note.id); }}
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold leading-none text-[var(--sage)] ring-1 ring-[var(--border)] active:translate-y-px soft-interaction hover:bg-[var(--surface-hover)]"
+                  >
+                    <Sprout size={13} /> {t('project')}
+                  </button>
+                  <button
+                    onClick={(event) => { event.stopPropagation(); onShowActions(note.id); }}
+                    className="grid h-8 w-8 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)] hover:text-[var(--sage)]"
+                    aria-label="Más opciones"
+                  >
                   <MoreHorizontal size={15} />
-                </button>
+                  </button>
+                </div>
               </div>
             </GestureNoteSurface>
           );
