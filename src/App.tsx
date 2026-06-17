@@ -4907,7 +4907,7 @@ export default function App() {
   const [wateringNoteId, setWateringNoteId] = useState<string | null>(null);
   const [wateringNote, setWateringNote] = useState('');
   const [sproutPromptNoteId, setSproutPromptNoteId] = useState<string | null>(null);
-  const [sproutFirstStep, setSproutFirstStep] = useState('');
+  const [sproutPromptTodos, setSproutPromptTodos] = useState<DraftTodo[]>([]);
   const [focusNoteId, setFocusNoteId] = useState<string | null>(null);
   const [celebration, setCelebration] = useState<string | null>(null);
   const [flowerReward, setFlowerReward] = useState<{ id: string; title: string } | null>(null);
@@ -5819,18 +5819,49 @@ export default function App() {
   };
 
   const openSproutPrompt = (id: string) => {
+    const firstTodo = createDraftTodo();
     setSproutPromptNoteId(id);
-    setSproutFirstStep('');
+    setSproutPromptTodos([firstTodo]);
+    focusProjectTodoInput(firstTodo.id);
   };
 
   const confirmSproutPrompt = () => {
     if (!sproutPromptNoteId) return;
     const note = notes.find(n => n.id === sproutPromptNoteId);
-    const firstStep = sproutFirstStep || 'Dar el primer paso de 5 minutos';
+    const cleanTodos = sproutPromptTodos
+      .map(todo => ({ ...todo, text: todo.text.trim() }))
+      .filter(todo => todo.text);
+    const fallbackStep = 'Dar el primer paso de 5 minutos';
+    const tasksToAdd = cleanTodos.length > 0
+      ? cleanTodos.map(todo => ({ id: crypto.randomUUID(), text: todo.text, completed: todo.completed }))
+      : [{ id: crypto.randomUUID(), text: fallbackStep, completed: false }];
     if (note?.isGrowth) {
-      addTinyStep(sproutPromptNoteId, firstStep);
+      setNotes(current => current.map(n => n.id === sproutPromptNoteId ? touchNote({
+        ...n,
+        inbox: false,
+        paused: false,
+        isGrowth: true,
+        growthStage: n.growthStage === 'seed' ? 'sprout' : n.growthStage,
+        lastWateredAt: Date.now(),
+        lastWateringNote: `Próximos pasos: ${tasksToAdd.map(task => task.text).join(', ')}`,
+        tasks: [...n.tasks, ...tasksToAdd],
+      }) : n));
+      recordWateringRitual();
+      markRecentlyWatered(sproutPromptNoteId);
+      feel('step');
+      setCelebration(tasksToAdd.length > 1 ? 'Pasos agregados' : 'Paso agregado');
+      window.setTimeout(() => setCelebration(null), 1500);
+      openFocusMode(sproutPromptNoteId);
     } else {
-      growNote(sproutPromptNoteId, firstStep);
+      setNotes(current => current.map(n => n.id === sproutPromptNoteId ? touchNote({
+        ...n,
+        inbox: false,
+        paused: false,
+        isGrowth: true,
+        growthStage: 'sprout',
+        lastWateredAt: Date.now(),
+        tasks: tasksToAdd,
+      }) : n));
       feel('sprout');
       setCelebration('Semilla convertida en brote');
       window.setTimeout(() => setCelebration(null), 1500);
@@ -5840,7 +5871,7 @@ export default function App() {
       setView('projects');
     }
     setSproutPromptNoteId(null);
-    setSproutFirstStep('');
+    setSproutPromptTodos([]);
   };
 
   const waterNote = (id: string, note = 'Riego rápido: sigue viva') => {
@@ -6673,6 +6704,38 @@ export default function App() {
     const newIndex = projectTodos.findIndex(todo => todo.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
     setProjectTodosAndContent(arrayMove(projectTodos, oldIndex, newIndex));
+  };
+  const updateSproutPromptTodo = (id: string, text: string) => {
+    setSproutPromptTodos(current => current.map(todo => todo.id === id ? { ...todo, text } : todo));
+  };
+  const toggleSproutPromptTodo = (id: string) => {
+    setSproutPromptTodos(current => current.map(todo => todo.id === id ? { ...todo, completed: !todo.completed } : todo));
+  };
+  const addSproutPromptTodoAfter = (id?: string) => {
+    const nextTodo = createDraftTodo();
+    setSproutPromptTodos(current => {
+      if (!id) return [...current, nextTodo];
+      const index = current.findIndex(todo => todo.id === id);
+      const nextTodos = [...current];
+      nextTodos.splice(index >= 0 ? index + 1 : nextTodos.length, 0, nextTodo);
+      return nextTodos;
+    });
+    focusProjectTodoInput(nextTodo.id);
+  };
+  const removeSproutPromptTodo = (id: string) => {
+    setSproutPromptTodos(current => {
+      const nextTodos = current.filter(todo => todo.id !== id);
+      return nextTodos.length > 0 ? nextTodos : [createDraftTodo()];
+    });
+  };
+  const handleSproutPromptTodoDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    setSproutPromptTodos(current => {
+      const oldIndex = current.findIndex(todo => todo.id === active.id);
+      const newIndex = current.findIndex(todo => todo.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return current;
+      return arrayMove(current, oldIndex, newIndex);
+    });
   };
   const openCreateOption = (option: 'seed' | 'sprout' | 'journal' | 'garden') => {
     setShowCreateMenu(false);
@@ -8295,7 +8358,8 @@ export default function App() {
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--seed-accent)]">Semilla a brote</p>
-                      <h3 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--earth)]">¿Cuál es el primer paso de 5 minutos?</h3>
+                      <h3 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--earth)]">Define sus primeros pasos</h3>
+                      <p className="mt-1 text-sm font-medium text-[var(--text-muted)]">Empieza con uno. Si hace falta, agrega más con Enter.</p>
                     </div>
                     <button onClick={() => setSproutPromptNoteId(null)} className="grid h-9 w-9 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)]" aria-label="Cerrar">
                       <X size={18} />
@@ -8307,18 +8371,42 @@ export default function App() {
                     <p className="mt-1 line-clamp-2 text-sm text-[var(--text-muted)]">{note.content}</p>
                   </div>
 
-                  <textarea
-                    autoFocus
-                    value={sproutFirstStep}
-                    onChange={(event) => setSproutFirstStep(event.target.value)}
-                    rows={3}
-                    placeholder="Ej. Escribir 3 ideas, abrir el archivo, mandar un mensaje..."
-                    className="mt-4 w-full resize-none rounded-2xl bg-[var(--bg-app)] p-4 text-sm font-medium outline-none focus:ring-0"
-                  />
+                  <div data-project-todo-list className="mt-4 max-h-64 overflow-y-auto rounded-[1.35rem] bg-[var(--bg-app)]/65 p-2 app-scrollbar">
+                    <DndContext sensors={projectTodoSensors} collisionDetection={closestCenter} onDragEnd={handleSproutPromptTodoDragEnd}>
+                      <SortableContext items={sproutPromptTodos.map(todo => todo.id)} strategy={verticalListSortingStrategy}>
+                        <div className="grid gap-1.5">
+                          {sproutPromptTodos.map((todo, index) => (
+                            <ProjectTodoDraftRow
+                              key={todo.id}
+                              todo={todo}
+                              index={index}
+                              total={sproutPromptTodos.length}
+                              appLanguage={appLanguage}
+                              onToggle={toggleSproutPromptTodo}
+                              onChange={updateSproutPromptTodo}
+                              onEnter={addSproutPromptTodoAfter}
+                              onRemove={removeSproutPromptTodo}
+                              onFocus={() => undefined}
+                            />
+                          ))}
+                        </div>
+                      </SortableContext>
+                    </DndContext>
+                    <button
+                      type="button"
+                      onClick={() => addSproutPromptTodoAfter()}
+                      className="mt-2 flex h-10 w-full items-center justify-center rounded-2xl text-sm font-semibold text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
+                    >
+                      Agregar paso
+                    </button>
+                  </div>
 
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <button
-                      onClick={() => setSproutPromptNoteId(null)}
+                      onClick={() => {
+                        setSproutPromptNoteId(null);
+                        setSproutPromptTodos([]);
+                      }}
                       className="h-11 rounded-full bg-[var(--bg-app)] text-sm font-semibold text-[var(--text-muted)]"
                     >
                       Ahora no
