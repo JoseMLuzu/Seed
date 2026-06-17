@@ -5854,6 +5854,17 @@ export default function App() {
     setWateringNote('');
   };
 
+  const saveWateringObservation = (id: string, fallback: string) => {
+    const cleanNote = wateringNote.trim();
+    setNotes(current => current.map(n => n.id === id ? touchNote({
+      ...n,
+      lastWateredAt: Date.now(),
+      lastWateringNote: cleanNote || fallback,
+    }) : n));
+    recordWateringRitual();
+    markRecentlyWatered(id);
+  };
+
   const skipWateringToday = (id: string) => {
     setNotes(current => current.map(n => n.id === id ? touchNote({
       ...n,
@@ -5922,6 +5933,7 @@ export default function App() {
 
   const harvestFromWatering = (id: string) => {
     const completedNote = notes.find(n => n.id === id);
+    const cleanObservation = wateringNote.trim();
     setNotes(current => current.map(n => n.id === id ? touchNote({
       ...n,
       inbox: false,
@@ -5929,6 +5941,7 @@ export default function App() {
       growthStage: 'bloom',
       harvestedAt: n.harvestedAt || Date.now(),
       lastWateredAt: Date.now(),
+      lastWateringNote: cleanObservation || n.lastWateringNote,
     }) : n));
     recordWateringRitual();
     markRecentlyWatered(id);
@@ -8358,7 +8371,7 @@ export default function App() {
                   <div className="mb-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] p-4">
                     <p className="font-semibold text-[var(--earth)]">{note.title}</p>
                     <p className="mt-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
-	                      Decide si vuelve al jardín, si merece un paso o si descansa en el Cobertizo.
+	                      Vuelve a mirarla con calma. Si todavía tiene energía, conviértela en un paso pequeño; si ya cumplió su ciclo, ciérrala como cosecha.
                     </p>
                     {nextTask && (
                       <p className="mt-3 rounded-2xl bg-[var(--surface-strong)] px-3 py-2 text-xs font-semibold leading-relaxed text-[var(--sage)]">
@@ -8367,53 +8380,40 @@ export default function App() {
                     )}
                   </div>
 
-                  <textarea
-                    value={wateringNote}
-                    onChange={(event) => setWateringNote(event.target.value)}
-                    rows={3}
-                    className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] p-4 text-base font-medium leading-relaxed text-[var(--earth)] outline-none transition-all placeholder:text-[var(--text-muted)]/65 focus:bg-[var(--surface-strong)] focus:ring-0 sm:text-sm"
-	                    placeholder="Opcional: qué viste al volver?"
-	                  />
+                  <label className="block">
+                    <span className="mb-2 block px-1 text-[10px] font-black uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                      Nota de revisión
+                    </span>
+                    <textarea
+                      value={wateringNote}
+                      onChange={(event) => setWateringNote(event.target.value)}
+                      rows={3}
+                      className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] p-4 text-base font-medium leading-relaxed text-[var(--earth)] outline-none transition-all placeholder:text-[var(--text-muted)]/65 focus:bg-[var(--surface-strong)] focus:ring-0 sm:text-sm"
+                      placeholder="Opcional: qué cambió, qué entendiste o qué queda vivo..."
+                    />
+                    <span className="mt-2 block px-1 text-xs font-medium leading-relaxed text-[var(--text-muted)]">
+                      Se guarda como la última revisión de esta idea.
+                    </span>
+                  </label>
 
 	                  <div className="mt-5 grid grid-cols-1 gap-2">
 	                    <button
-	                      onClick={() => waterNote(note.id, wateringNote.trim() || 'Riego rápido: sigue viva')}
-	                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 py-3 text-sm font-semibold text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
-	                    >
-	                      <Droplets size={17} /> Sigue viva
-	                    </button>
-	                    <button
 	                      onClick={() => {
+                          saveWateringObservation(note.id, 'Revisión: merece un siguiente paso.');
 	                        setWateringNoteId(null);
+                          setWateringNote('');
 	                        openSproutPrompt(note.id);
 	                      }}
-	                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--bg-app)] px-4 py-3 text-sm font-semibold text-[var(--sage)] transition-colors hover:bg-[var(--surface-strong)]"
+	                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--sage)] px-4 py-3 text-sm font-semibold text-[var(--on-sage)] shadow-lg shadow-[var(--sage)]/20 active:translate-y-px soft-interaction"
 	                    >
 	                      <Sprout size={17} /> Darle un paso
 	                    </button>
 	                    <button
-	                      onClick={() => moveNoteToShed(note.id)}
-	                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--tone-warning-bg)] px-4 py-3 text-sm font-semibold text-[var(--tone-warning)] ring-1 ring-[var(--tone-warning-border)] transition-colors hover:bg-[var(--surface-hover)]"
+	                      onClick={() => harvestFromWatering(note.id)}
+	                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--tone-harvest-bg)] px-4 py-3 text-sm font-semibold text-[var(--tone-harvest)] ring-1 ring-[var(--tone-harvest-border)] transition-colors hover:bg-[var(--surface-hover)] active:translate-y-px soft-interaction"
 	                    >
-	                      <Archive size={17} /> Guardar en Cobertizo
+	                      <CheckCircle2 size={17} /> Cosechar
 	                    </button>
-	                    <div className="grid grid-cols-2 gap-2 pt-1">
-	                      <button
-	                        onClick={() => harvestFromWatering(note.id)}
-	                        className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-[var(--tone-harvest-bg)] px-3 text-xs font-semibold text-[var(--tone-harvest)] ring-1 ring-[var(--tone-harvest-border)] transition-colors hover:bg-[var(--surface-hover)]"
-	                      >
-	                        <CheckCircle2 size={13} /> Cosechar
-	                      </button>
-	                      <button
-	                        onClick={() => {
-	                          setWateringNoteId(null);
-	                          deleteNote(note.id);
-	                        }}
-	                        className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-[var(--tone-danger-bg)] px-3 text-xs font-semibold text-[var(--tone-danger)] ring-1 ring-[var(--tone-danger-border)] transition-colors hover:opacity-85"
-	                      >
-	                        <Trash2 size={13} /> Soltar
-	                      </button>
-	                    </div>
 	                  </div>
                 </motion.div>
               </motion.div>
