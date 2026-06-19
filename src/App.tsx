@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lazy, Suspense, useRef, useState, useEffect, useLayoutEffect, useMemo, useCallback, type ReactNode } from 'react';
+import { lazy, memo, Suspense, useRef, useState, useEffect, useLayoutEffect, useMemo, useCallback, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { DndContext, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -106,6 +106,10 @@ const IDEA_CARD_SURFACE = `group relative overflow-hidden ${IDEA_CARD_RADIUS} bg
 const IDEA_CARD_ROW = 'flex min-h-[4.45rem] w-full items-start gap-3 px-4 py-3 text-left';
 const IDEA_ICON_TILE = 'relative grid h-10 w-10 shrink-0 place-items-center rounded-[1rem] ring-1';
 const IDEA_ACTION_PILL = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-semibold leading-none soft-interaction';
+const MOBILE_LIST_INITIAL = 28;
+const MOBILE_LIST_BATCH = 24;
+const DESKTOP_LIST_INITIAL = 80;
+const DESKTOP_LIST_BATCH = 60;
 
 function detectDeviceLanguage(): AppLanguage {
   const languages = typeof navigator !== 'undefined'
@@ -242,6 +246,61 @@ function dateInputToEndOfDay(value: string) {
 function timestampToDateInput(value: number) {
   return format(new Date(value), 'yyyy-MM-dd');
 }
+
+function useIsMobileViewport() {
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(max-width: 767px)').matches;
+  });
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 767px)');
+    const updateViewport = () => setIsMobile(mediaQuery.matches);
+    updateViewport();
+    mediaQuery.addEventListener('change', updateViewport);
+    return () => mediaQuery.removeEventListener('change', updateViewport);
+  }, []);
+
+  return isMobile;
+}
+
+function useProgressiveList<T>(items: T[], resetKey: string | number) {
+  const isMobile = useIsMobileViewport();
+  const initialLimit = isMobile ? MOBILE_LIST_INITIAL : DESKTOP_LIST_INITIAL;
+  const batchSize = isMobile ? MOBILE_LIST_BATCH : DESKTOP_LIST_BATCH;
+  const [limit, setLimit] = useState(initialLimit);
+
+  useEffect(() => {
+    setLimit(initialLimit);
+  }, [initialLimit, resetKey]);
+
+  const visibleItems = useMemo(() => items.slice(0, limit), [items, limit]);
+  const hasMore = limit < items.length;
+  const remaining = Math.max(0, items.length - limit);
+  const showMore = useCallback(() => {
+    setLimit(currentLimit => Math.min(items.length, currentLimit + batchSize));
+  }, [batchSize, items.length]);
+
+  return { visibleItems, hasMore, remaining, showMore };
+}
+
+const ProgressiveListMoreButton = memo(function ProgressiveListMoreButton({
+  remaining,
+  onClick,
+}: {
+  remaining: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-3 flex h-11 w-full items-center justify-center rounded-[1.25rem] border border-[var(--border)] bg-[var(--surface-strong)] text-sm font-semibold text-[var(--sage)] shadow-sm soft-interaction"
+    >
+      {appLanguage === 'en' ? `Show ${remaining} more` : `Ver ${remaining} más`}
+    </button>
+  );
+});
 
 const THEMES: { id: Theme; label: string; icon: string }[] = [
   { id: 'earth', label: 'Pradera', icon: '🌾' },
@@ -955,6 +1014,7 @@ function GestureNoteSurface({
   rightTone?: string;
   leftTone?: string;
 }) {
+  const isMobileViewport = typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
   const longPressTimerRef = useRef<number | null>(null);
   const longPressFiredRef = useRef(false);
   const swipedRef = useRef(false);
@@ -978,6 +1038,19 @@ function GestureNoteSurface({
       onLongPress();
     }, 520);
   };
+
+  if (!isMobileViewport) {
+    return (
+      <div className={`relative overflow-hidden bg-[var(--surface-strong)] ${wrapperClassName}`}>
+        <div
+          onClick={() => onPress?.()}
+          className={`relative z-10 ${className}`}
+        >
+          {children}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`relative overflow-hidden bg-[var(--surface-strong)] ${wrapperClassName}`}>
@@ -1605,26 +1678,53 @@ function TodayView({
         const bRest = daysSince(b.lastWateredAt || b.updatedAt || b.createdAt);
         return bRest - aRest;
       })[0];
-    const inboxCount = notes.filter(note => note.inbox).length;
-    const sproutCount = notes.filter(note => !note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom').length;
-    const harvestCount = notes.filter(note => !note.inbox && note.growthStage === 'bloom').length;
-    const shedCount = notes.filter(note => !note.inbox && note.paused && note.growthStage !== 'bloom').length;
-    const completedToday = notes.filter(note => note.harvestedAt && isToday(note.harvestedAt)).length;
-    const dayClosure = notes.find(note => isDailyClosureForDate(note));
-    const plantedToday = notes.filter(note => isToday(note.createdAt)).length;
-    const wateredTodayCount = notes.filter(note => note.lastWateredAt && isToday(note.lastWateredAt)).length;
-    const stepsToday = notes.filter(note =>
-      note.updatedAt &&
-      isToday(note.updatedAt) &&
-      note.tasks.some(task => task.completed)
-    ).length;
-    const activeDaysThisMonth = new Set(notes
-      .flatMap(note => [note.createdAt, note.lastWateredAt, note.harvestedAt].filter((date): date is number => Boolean(date)))
-      .filter(date => isSameMonth(date, today))
-      .map(date => format(date, 'yyyy-MM-dd'))).size;
-    const learningMemory = notes
-      .filter(note => note.growthStage === 'bloom' && (note.reflection?.trim() || note.takeaway?.trim()))
-      .sort((a, b) => (b.harvestedAt || b.updatedAt || b.createdAt) - (a.harvestedAt || a.updatedAt || a.createdAt))[0];
+    const todaySummary = notes.reduce((summary, note) => {
+      if (note.inbox) summary.inboxCount += 1;
+      if (!note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom') summary.sproutCount += 1;
+      if (!note.inbox && note.growthStage === 'bloom') summary.harvestCount += 1;
+      if (!note.inbox && note.paused && note.growthStage !== 'bloom') summary.shedCount += 1;
+      if (note.harvestedAt && isToday(note.harvestedAt)) summary.completedToday += 1;
+      if (isToday(note.createdAt)) summary.plantedToday += 1;
+      if (note.lastWateredAt && isToday(note.lastWateredAt)) summary.wateredTodayCount += 1;
+      if (note.updatedAt && isToday(note.updatedAt) && note.tasks.some(task => task.completed)) summary.stepsToday += 1;
+      if (!summary.dayClosure && isDailyClosureForDate(note)) summary.dayClosure = note;
+      if (note.growthStage === 'bloom' && (note.reflection?.trim() || note.takeaway?.trim())) {
+        const noteMemoryDate = note.harvestedAt || note.updatedAt || note.createdAt;
+        const currentMemoryDate = summary.learningMemory
+          ? summary.learningMemory.harvestedAt || summary.learningMemory.updatedAt || summary.learningMemory.createdAt
+          : 0;
+        if (noteMemoryDate > currentMemoryDate) summary.learningMemory = note;
+      }
+      for (const date of [note.createdAt, note.lastWateredAt, note.harvestedAt]) {
+        if (date && isSameMonth(date, today)) summary.activeDays.add(format(date, 'yyyy-MM-dd'));
+      }
+      return summary;
+    }, {
+      activeDays: new Set<string>(),
+      completedToday: 0,
+      dayClosure: undefined as SeedNote | undefined,
+      harvestCount: 0,
+      inboxCount: 0,
+      learningMemory: undefined as SeedNote | undefined,
+      plantedToday: 0,
+      shedCount: 0,
+      sproutCount: 0,
+      stepsToday: 0,
+      wateredTodayCount: 0,
+    });
+    const {
+      completedToday,
+      dayClosure,
+      harvestCount,
+      inboxCount,
+      learningMemory,
+      plantedToday,
+      shedCount,
+      sproutCount,
+      stepsToday,
+      wateredTodayCount,
+    } = todaySummary;
+    const activeDaysThisMonth = todaySummary.activeDays.size;
     const hour = today.getHours();
     const greeting = hour < 12 ? t('goodMorning') : hour < 19 ? t('goodAfternoon') : t('goodEvening');
     const firstName = accountName.trim().split(/\s+/)[0] || (appLanguage === 'en' ? 'there' : 'jardinero');
@@ -2238,7 +2338,7 @@ function TodayView({
       <AnimatePresence>
         {showDaySummary && (
           <motion.div
-            className="fixed inset-0 z-[75] flex items-end justify-center bg-black/20 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-md sm:items-center sm:pb-0"
+            className="mobile-modal-overlay fixed inset-0 z-[75] flex items-end justify-center bg-black/20 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] md:backdrop-blur-md sm:items-center sm:pb-0"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -2401,6 +2501,7 @@ function InboxView({
   onStartPlanting: () => void;
 }) {
   const inboxNotes = useMemo(() => notes.filter(note => note.inbox), [notes]);
+  const inboxList = useProgressiveList(inboxNotes, `${inboxNotes.length}-${inboxNotes[0]?.id || 'empty'}`);
 
   return (
     <motion.div
@@ -2427,7 +2528,7 @@ function InboxView({
             actionLabel={appLanguage === 'en' ? 'Plant a seed' : 'Plantar semilla'}
             onAction={onStartPlanting}
           />
-        ) : inboxNotes.map((note) => {
+        ) : inboxList.visibleItems.map((note) => {
           const hasUsefulDescription = note.content.trim().toLowerCase() !== note.title.trim().toLowerCase();
           const cardDescription = hasUsefulDescription
             ? note.content
@@ -2446,55 +2547,58 @@ function InboxView({
               leftLabel="Cobertizo"
               leftIcon={Archive}
               leftTone="bg-[var(--tone-warning)] text-[var(--on-sage)]"
-              wrapperClassName={IDEA_CARD_WRAPPER}
-              className={`${IDEA_CARD_SURFACE} p-4 ${recentlyCreatedNoteId === note.id ? 'bg-[var(--sage)]/10 ring-[var(--sage)]/30' : ''}`}
+              wrapperClassName={`${IDEA_CARD_RADIUS} bg-[var(--surface-strong)]`}
+              className={`group relative overflow-hidden rounded-[1.75rem] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--surface-strong)_94%,white_6%),color-mix(in_srgb,var(--surface-soft)_86%,var(--sage)_14%))] p-4 shadow-[0_14px_38px_rgba(20,30,24,0.08)] ring-1 ring-[color-mix(in_srgb,var(--border)_82%,white_18%)] transition-colors hover:bg-[var(--surface-hover)] sm:p-5 ${recentlyCreatedNoteId === note.id ? 'bg-[var(--sage)]/10 ring-[var(--sage)]/30' : ''}`}
             >
               <button
                 onClick={(event) => { event.stopPropagation(); onSelectNote(note.id); }}
-                className="flex w-full items-start gap-3 text-left"
+                className="flex min-h-[5.75rem] w-full items-start gap-3 text-left"
               >
-                <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-[1.1rem] bg-[var(--tone-seed-bg)] text-[var(--tone-seed)] shadow-sm ring-1 ring-[var(--tone-seed-border)]">
+                <span className="relative grid h-12 w-12 shrink-0 place-items-center rounded-[1.25rem] bg-[var(--tone-seed-bg)] text-[var(--tone-seed)] shadow-[inset_0_1px_0_rgba(255,255,255,0.42),0_10px_22px_rgba(20,30,24,0.08)] ring-1 ring-[var(--tone-seed-border)]">
                   <Sprout size={16} strokeWidth={2.2} />
                   <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-current opacity-45" />
                 </span>
                 <span className="min-w-0 flex-1 pt-0.5">
-                  <span className="block truncate text-base font-semibold leading-tight tracking-tight text-[var(--earth)]">{note.title}</span>
-                  <span className="mt-1 block line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{cardDescription}</span>
+                  <span className="block truncate text-[1.06rem] font-semibold leading-tight tracking-tight text-[var(--earth)]">{note.title}</span>
+                  <span className="mt-1.5 block line-clamp-2 text-[0.94rem] font-medium leading-relaxed text-[var(--text-muted)]">{cardDescription}</span>
+                  <span className="mt-3 inline-flex h-7 min-w-0 items-center rounded-full bg-[var(--bg-app)]/75 px-2.5 text-[11px] font-semibold leading-none text-[var(--text-muted)] ring-1 ring-[var(--border)]/70">
+                    {appLanguage === 'en' ? 'Created' : 'Creada'} {formatShortDate(note.createdAt)}
+                  </span>
                 </span>
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--text-muted)] transition-colors group-hover:bg-[var(--bg-app)] group-hover:text-[var(--sage)]">
                   <ChevronRight size={16} />
                 </span>
               </button>
 
-              <div className="mt-3 flex items-center justify-between gap-3 pl-14">
-                <span className="inline-flex h-7 min-w-0 items-center rounded-full bg-[var(--bg-app)] px-2.5 text-[11px] font-semibold leading-none text-[var(--text-muted)]">
-                  {appLanguage === 'en' ? 'Created' : 'Creada'} {formatShortDate(note.createdAt)}
-                </span>
-                <div className="flex shrink-0 items-center gap-1.5">
+              <div className="mt-4 flex items-center gap-2 pl-[3.75rem]">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-2">
                   <button
                     onClick={(event) => { event.stopPropagation(); onComplete(note.id); }}
-                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold leading-none text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-4 text-xs font-semibold leading-none text-[var(--on-sage)] shadow-[0_9px_20px_rgba(67,111,82,0.16)] active:translate-y-px soft-interaction"
                   >
                     <CheckCircle2 size={13} /> {t('done')}
                   </button>
                   <button
                     onClick={(event) => { event.stopPropagation(); onCultivate(note.id); }}
-                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold leading-none text-[var(--sage)] ring-1 ring-[var(--border)] active:translate-y-px soft-interaction hover:bg-[var(--surface-hover)]"
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--bg-app)]/82 px-4 text-xs font-semibold leading-none text-[var(--sage)] ring-1 ring-[var(--border)] active:translate-y-px soft-interaction hover:bg-[var(--surface-hover)]"
                   >
                     <Sprout size={13} /> {t('project')}
                   </button>
-                  <button
-                    onClick={(event) => { event.stopPropagation(); onShowActions(note.id); }}
-                    className="grid h-8 w-8 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)] hover:text-[var(--sage)]"
-                    aria-label="Más opciones"
-                  >
-                  <MoreHorizontal size={15} />
-                  </button>
                 </div>
+                <button
+                  onClick={(event) => { event.stopPropagation(); onShowActions(note.id); }}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)] hover:text-[var(--sage)]"
+                  aria-label="Más opciones"
+                >
+                  <MoreHorizontal size={15} />
+                </button>
               </div>
             </GestureNoteSurface>
           );
         })}
+        {inboxList.hasMore && (
+          <ProgressiveListMoreButton remaining={inboxList.remaining} onClick={inboxList.showMore} />
+        )}
       </div>
     </motion.div>
   );
@@ -2530,6 +2634,7 @@ function ProjectsView({
         return bScore - aScore;
       });
   }, [notes]);
+  const projectList = useProgressiveList(sortedProjects, `${sortedProjects.length}-${sortedProjects[0]?.id || 'empty'}`);
   const recommended = sortedProjects.find(note => note.tasks.some(task => !task.completed)) || sortedProjects[0];
   const recommendedTask = recommended?.tasks.find(task => !task.completed);
 
@@ -2593,7 +2698,7 @@ function ProjectsView({
             actionLabel={appLanguage === 'en' ? 'Create sprout' : 'Crear brote'}
             onAction={onStartSprout}
           />
-        ) : sortedProjects.map(note => {
+        ) : projectList.visibleItems.map(note => {
           const nextTask = note.tasks.find(task => !task.completed);
           const progress = getProgress(note);
           const needsWater = wateringDue(note) && !note.paused;
@@ -2625,7 +2730,7 @@ function ProjectsView({
                 <span className="shrink-0 rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-xs font-semibold text-[var(--sage)]">{progress}%</span>
               </button>
               <div className="mx-4 h-1 overflow-hidden rounded-full bg-[var(--bg-app)]">
-                <motion.div className="h-full bg-[var(--sage)]" animate={{ width: `${progress}%` }} />
+                <div className="h-full bg-[var(--sage)]" style={{ width: `${progress}%` }} />
               </div>
               <div className="grid grid-cols-3 gap-2 px-4 py-3">
                 <button onClick={(event) => { event.stopPropagation(); onFocusNote(note.id); }} className={`${IDEA_ACTION_PILL} bg-[var(--sage)] text-[var(--on-sage)]`}>
@@ -2641,6 +2746,9 @@ function ProjectsView({
             </GestureNoteSurface>
           );
         })}
+        {projectList.hasMore && (
+          <ProgressiveListMoreButton remaining={projectList.remaining} onClick={projectList.showMore} />
+        )}
       </section>
     </motion.div>
   );
@@ -3740,7 +3848,7 @@ function FocusView({
       <AnimatePresence>
         {confirmExit && (
           <motion.div
-            className="fixed inset-0 z-50 grid place-items-center bg-black/18 px-5 backdrop-blur-sm"
+            className="mobile-modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/18 px-5 md:backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -4919,8 +5027,9 @@ export default function App() {
   const [settingsPage, setSettingsPage] = useState<SettingsPage>('root');
 	  const [showMobileMenu, setShowMobileMenu] = useState(false);
 	  const [showGardenSwitcher, setShowGardenSwitcher] = useState(false);
-	  const [quickEntryViewport, setQuickEntryViewport] = useState<{ height: number | null; offsetTop: number; keyboardOpen: boolean }>({
+	  const [quickEntryViewport, setQuickEntryViewport] = useState<{ height: number | null; offsetTop: number; keyboardInset: number; keyboardOpen: boolean }>({
 	    height: null,
+	    keyboardInset: 0,
 	    offsetTop: 0,
 	    keyboardOpen: false
 	  });
@@ -5126,12 +5235,12 @@ export default function App() {
 
 	  useEffect(() => {
 	    if (!isAdding || typeof window === 'undefined') {
-	      setQuickEntryViewport({ height: null, offsetTop: 0, keyboardOpen: false });
+	      setQuickEntryViewport({ height: null, keyboardInset: 0, offsetTop: 0, keyboardOpen: false });
 	      setQuickEntryKeyboardReady(false);
 	      return;
 	    }
 
-	    setQuickEntryViewport({ height: null, offsetTop: 0, keyboardOpen: false });
+	    setQuickEntryViewport({ height: null, keyboardInset: 0, offsetTop: 0, keyboardOpen: false });
 	    setQuickEntryKeyboardReady(false);
 	    const visualViewport = window.visualViewport;
 	    if (!visualViewport) {
@@ -5145,6 +5254,7 @@ export default function App() {
 	      const quickEntryHasFocus = !!activeElement && quickEntryOverlayRef.current?.contains(activeElement);
 	      setQuickEntryViewport({
 	        height: visualViewport.height,
+	        keyboardInset: keyboardHeight,
 	        offsetTop: visualViewport.offsetTop,
 	        keyboardOpen: keyboardHeight > 120 && !!quickEntryHasFocus
 	      });
@@ -5731,7 +5841,7 @@ export default function App() {
 	    setShowProjectTodos(false);
 	    setProjectTodos([]);
 	    blurQuickEntryFocus();
-	    setQuickEntryViewport({ height: null, offsetTop: 0, keyboardOpen: false });
+	    setQuickEntryViewport({ height: null, keyboardInset: 0, offsetTop: 0, keyboardOpen: false });
 	    setQuickEntryKeyboardReady(false);
 	    setIsAdding(false);
 	    setSelectedNoteId(null);
@@ -6238,6 +6348,10 @@ export default function App() {
   }, [planetNotes]);
 
   const visibleGardenNotes = view === 'projects' ? projectNotes : filteredNotes;
+  const gardenList = useProgressiveList(
+    visibleGardenNotes,
+    `${activePlanet.id}-${view}-${search}-${filterStage}-${visibleGardenNotes.length}-${visibleGardenNotes[0]?.id || 'empty'}`
+  );
 
   const selectedNote = useMemo(() => 
     planetNotes.find(n => n.id === selectedNoteId), 
@@ -6382,7 +6496,7 @@ export default function App() {
 	    setFilterStage('all');
 	    setSearch('');
 	    setNewNote({ title: '', content: '', dueDate: '', seedType: 'idea', priority: 'normal', planetId: activePlanetId });
-	    setQuickEntryViewport({ height: null, offsetTop: 0, keyboardOpen: false });
+	    setQuickEntryViewport({ height: null, keyboardInset: 0, offsetTop: 0, keyboardOpen: false });
 	    setQuickEntryKeyboardReady(false);
 	    setIsAdding(true);
 	  };
@@ -6645,14 +6759,28 @@ export default function App() {
     setView(nextView);
 	  };
 
+	  const quickEntryIsMobile = useIsMobileViewport();
 	  const quickEntryKeyboardMode = quickEntryKeyboardReady && quickEntryViewport.keyboardOpen;
-	  const quickEntryViewportStyle = quickEntryKeyboardMode && quickEntryViewport.height
+	  const quickEntryViewportStyle = quickEntryKeyboardMode && quickEntryViewport.height && !quickEntryIsMobile
 	    ? {
 	        top: `${Math.round(quickEntryViewport.offsetTop)}px`,
 	        bottom: 'auto',
 	        height: `${Math.round(quickEntryViewport.height)}px`,
 	      }
 	    : undefined;
+	  const quickEntryKeyboardInset = Math.max(0, Math.round(quickEntryViewport.keyboardInset || 0));
+	  const quickEntryCardStyle = {
+	    ...(quickEntryKeyboardMode && !quickEntryIsMobile
+	      ? { height: `min(22.5rem, calc(${Math.max(300, Math.round(quickEntryViewport.height || 0))}px - 0.5rem))` }
+	      : {}),
+	    '--quick-entry-keyboard-inset': `${quickEntryKeyboardInset}px`,
+	    transformOrigin: quickEntryIsMobile
+	      ? '50% 100%'
+	      : '50% 100%',
+	  } as CSSProperties;
+	  const quickEntryMobileInitial = { y: 32, scale: 0.985, opacity: 0, borderRadius: '2.35rem' };
+	  const quickEntryMobileAnimate = { y: 0, scale: 1, opacity: 1, borderRadius: '0rem' };
+	  const quickEntryMobileExit = { y: 18, scale: 0.992, opacity: 0, borderRadius: '1.5rem' };
   const startCreateMenuPress = () => {
     if (showCreateMenu) return;
     unlockSeedAudio();
@@ -6796,7 +6924,7 @@ export default function App() {
       priority: 'normal',
       planetId: activePlanetId,
     });
-    setQuickEntryViewport({ height: null, offsetTop: 0, keyboardOpen: false });
+    setQuickEntryViewport({ height: null, keyboardInset: 0, offsetTop: 0, keyboardOpen: false });
     setQuickEntryKeyboardReady(false);
     setIsAdding(true);
   };
@@ -6968,7 +7096,7 @@ export default function App() {
     setShowQuickEntryDetails(false);
     setShowProjectTodos(false);
     setProjectTodos([]);
-    setQuickEntryViewport({ height: null, offsetTop: 0, keyboardOpen: false });
+    setQuickEntryViewport({ height: null, keyboardInset: 0, offsetTop: 0, keyboardOpen: false });
     setQuickEntryKeyboardReady(false);
     setIsAdding(false);
   };
@@ -7010,7 +7138,7 @@ export default function App() {
   }
 
   return (
-    <div className="safe-app-shell flex h-screen flex-col overflow-hidden bg-transparent font-sans text-[var(--text-main)] md:flex-row">
+    <div className="safe-app-shell app-shell flex h-screen flex-col overflow-hidden bg-transparent font-sans text-[var(--text-main)] md:flex-row">
       <div className={`fixed left-4 right-4 top-[var(--safe-top-control)] z-40 h-12 items-center justify-between rounded-[1.25rem] border border-[var(--border)] bg-[var(--surface-strong)]/88 px-2 shadow-xl shadow-black/10 backdrop-blur-2xl md:hidden ${view === 'focus' || showGardenFullscreen || isAdding ? 'hidden' : 'flex'}`}>
         <button
           type="button"
@@ -7051,12 +7179,12 @@ export default function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setShowMobileMenu(false)}
-	            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-md md:hidden"
+	            className="mobile-modal-overlay fixed inset-0 z-40 bg-black/20 md:hidden md:backdrop-blur-md"
           />
         )}
       </AnimatePresence>
       {/* Sidebar Navigation */}
-      <aside ref={mobileMenuRef} className={`fixed left-3 right-3 top-[calc(var(--safe-top-control)+3.25rem)] z-50 flex max-h-[calc(100vh-var(--safe-top-control)-env(safe-area-inset-bottom)-8.25rem)] shrink-0 origin-top flex-col overflow-y-auto rounded-[2rem] border border-white/60 bg-[var(--sidebar-bg)]/94 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-2xl transition-all duration-300 app-scrollbar md:static md:z-20 md:h-screen md:max-h-none md:w-72 md:max-w-none md:origin-center md:translate-y-0 md:scale-100 md:rounded-none md:border-r md:border-[var(--border)] md:bg-[var(--sidebar-bg)] md:p-6 md:opacity-100 md:shadow-none ${showMobileMenu ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none -translate-y-3 scale-[0.97] opacity-0 md:pointer-events-auto'}`}>
+      <aside ref={mobileMenuRef} className={`app-sidebar mobile-modal-sheet fixed left-3 right-3 top-[calc(var(--safe-top-control)+3.25rem)] z-50 flex max-h-[calc(100vh-var(--safe-top-control)-env(safe-area-inset-bottom)-8.25rem)] shrink-0 origin-top flex-col overflow-y-auto rounded-[2rem] border border-white/60 bg-[var(--sidebar-bg)]/94 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] transition-all duration-300 app-scrollbar md:static md:z-20 md:h-screen md:max-h-none md:w-72 md:max-w-none md:origin-center md:translate-y-0 md:scale-100 md:rounded-none md:border-r md:border-[var(--border)] md:bg-[var(--sidebar-bg)] md:p-6 md:opacity-100 md:shadow-none md:backdrop-blur-2xl ${showMobileMenu ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none -translate-y-3 scale-[0.97] opacity-0 md:pointer-events-auto'}`}>
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--border)] md:hidden" />
         <motion.div 
           initial={{ opacity: 0, y: 4 }}
@@ -7366,10 +7494,10 @@ export default function App() {
 
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-        <section className={`flex-1 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${view === 'calendar' ? 'px-3 pb-3 pt-[var(--safe-top-space)] sm:px-5 sm:pb-5 md:p-6' : 'px-4 pb-[var(--safe-bottom-space)] pt-[var(--safe-top-space)] sm:px-6 md:p-10'} ${selectedNoteId ? 'md:mr-[400px]' : ''}`}>
-          <div className={`${view === 'calendar' ? 'mx-auto max-w-[100rem]' : 'max-w-4xl mx-auto'}`}>
-            <header className={`mb-6 flex-col md:mb-10 md:flex-row justify-between items-start gap-4 md:gap-6 ${view === 'today' ? 'hidden md:flex' : 'flex'}`}>
+      <main className="app-main flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        <section className={`app-content ${selectedNoteId ? 'app-content-has-detail' : ''} flex-1 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${view === 'calendar' ? 'px-3 pb-3 pt-[var(--safe-top-space)] sm:px-5 sm:pb-5 md:p-6' : 'px-4 pb-[var(--safe-bottom-space)] pt-[var(--safe-top-space)] sm:px-6 md:p-10'} ${selectedNoteId ? 'md:mr-[400px]' : ''}`}>
+          <div className={`app-content-inner ${view === 'calendar' ? 'mx-auto max-w-[100rem]' : 'max-w-4xl mx-auto'}`}>
+            <header className={`app-page-header mb-6 flex-col md:mb-10 md:flex-row justify-between items-start gap-4 md:gap-6 ${view === 'today' ? 'hidden md:flex' : 'flex'}`}>
               <div className="w-full">
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -7671,7 +7799,7 @@ export default function App() {
                   </div>
 
                   <div className="mb-28 space-y-3 md:mb-20">
-                    {visibleGardenNotes.map((note) => {
+                    {gardenList.visibleItems.map((note) => {
                       const progress = getProgress(note);
 	                      const stageMeta = STAGE_META[note.growthStage];
 	                      const nextTask = note.tasks.find(task => !task.completed);
@@ -7734,10 +7862,8 @@ export default function App() {
 
                             {note.isGrowth && (
                               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-app)]">
-                                <motion.div
-                                  initial={{ width: 0 }}
-                                  animate={{ width: `${progress}%` }}
-                                  transition={{ type: 'spring', stiffness: 80, damping: 18 }}
+                                <div
+                                  style={{ width: `${progress}%` }}
                                   className={`h-full rounded-full ${note.growthStage === 'bloom' ? 'bg-[#7f9a83]' : 'bg-[var(--sage)]'}`}
                                 />
                               </div>
@@ -7773,6 +7899,9 @@ export default function App() {
                       </GestureNoteSurface>
                       );
                     })}
+                    {gardenList.hasMore && (
+                      <ProgressiveListMoreButton remaining={gardenList.remaining} onClick={gardenList.showMore} />
+                    )}
                   </div>
                 </motion.div>
               ) : view === 'calendar' ? (
@@ -7904,13 +8033,13 @@ export default function App() {
 	        <AnimatePresence>
 	          {selectedNoteId && selectedNote && selectedGuidance && (
 	            <motion.aside 
-	              initial={{ x: '100%' }}
-	              animate={{ x: 0 }}
-	              exit={{ x: '100%' }}
-	              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-	              className="absolute bottom-0 right-0 top-0 z-50 flex w-full flex-col border-l border-[var(--border)] bg-[var(--bg-app)] shadow-2xl md:z-30 md:w-[420px]"
+	              initial={{ x: '102%', opacity: 0.98 }}
+	              animate={{ x: 0, opacity: 1 }}
+	              exit={{ x: '102%', opacity: 0.98 }}
+	              transition={{ type: 'tween', duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+	              className="app-detail-panel mobile-detail-panel absolute bottom-0 right-0 top-0 z-50 flex w-full flex-col border-l border-[var(--border)] bg-[var(--bg-app)] shadow-2xl md:z-30 md:w-[420px]"
 	            >
-	              <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-strong)]/82 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.9rem)] backdrop-blur-2xl md:pt-4">
+	              <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-strong)]/82 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.9rem)] md:pt-4 md:backdrop-blur-2xl">
 	                <div className="min-w-0">
 	                  <p className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
 	                    {selectedNote.inbox ? 'Semillero' : selectedNote.paused ? 'Cobertizo' : STAGE_META[selectedNote.growthStage].label}
@@ -7922,7 +8051,7 @@ export default function App() {
 	                </button>
 	              </div>
 	
-	              <div className="flex-1 overflow-y-auto app-scrollbar px-4 py-4 pb-44 md:pb-36">
+	              <div className="mobile-fast-scroll flex-1 overflow-y-auto app-scrollbar px-4 py-4 pb-44 md:pb-36">
 	                <section className="overflow-hidden rounded-[1.75rem] bg-[var(--surface-strong)] shadow-sm ring-1 ring-[var(--border)]">
 	                  <div className="relative p-5">
 	                    <div className="absolute inset-x-0 top-0 h-24 bg-[linear-gradient(135deg,var(--surface-soft),transparent)]" />
@@ -8224,7 +8353,7 @@ export default function App() {
 	                </details>
 	              </div>
 
-              <div className="border-t border-[var(--border)] bg-[var(--surface-strong)]/92 px-5 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-2xl md:pb-3">
+              <div className="border-t border-[var(--border)] bg-[var(--surface-strong)]/92 px-5 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] md:pb-3 md:backdrop-blur-2xl">
                  <div className="grid grid-cols-2 gap-2">
                    {selectedIsDone ? (
                      <>
@@ -8296,15 +8425,15 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[64] flex items-end justify-center bg-black/25 p-3 backdrop-blur-sm sm:items-center sm:p-4"
+              className="mobile-modal-overlay fixed inset-0 z-[64] flex items-end justify-center bg-black/25 p-3 md:backdrop-blur-sm sm:items-center sm:p-4"
               onClick={() => setQuickActionsNoteId(null)}
             >
               <motion.div
                 initial={{ opacity: 0, y: 24, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 14, scale: 0.98 }}
-                transition={{ type: 'spring', damping: 26, stiffness: 320 }}
-                className="w-full max-w-md overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-2xl"
+                transition={{ type: 'tween', duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                className="mobile-modal-sheet w-full max-w-md overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-2xl"
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-[var(--border)] sm:hidden" />
@@ -8377,15 +8506,15 @@ export default function App() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[62] flex items-end justify-center bg-black/25 p-4 backdrop-blur-sm sm:items-center"
+                className="mobile-modal-overlay fixed inset-0 z-[62] flex items-end justify-center bg-black/25 p-4 md:backdrop-blur-sm sm:items-center"
                 onClick={() => setSproutPromptNoteId(null)}
               >
                 <motion.div
                   initial={{ opacity: 0, y: 28, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 18, scale: 0.97 }}
-                  transition={{ type: 'spring', damping: 24, stiffness: 280 }}
-                  className="w-full max-w-md rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] p-5 shadow-2xl"
+                  transition={{ type: 'tween', duration: 0.17, ease: [0.22, 1, 0.36, 1] }}
+                  className="mobile-modal-sheet w-full max-w-md rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] p-5 shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
                   <div className="flex items-start justify-between gap-4">
@@ -8469,14 +8598,15 @@ export default function App() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex items-end justify-center bg-black/24 p-3 pt-[calc(env(safe-area-inset-top)+1rem)] backdrop-blur-xl sm:items-center sm:p-4"
+                className="mobile-modal-overlay fixed inset-0 z-50 flex items-end justify-center bg-black/24 p-3 pt-[calc(env(safe-area-inset-top)+1rem)] md:backdrop-blur-xl sm:items-center sm:p-4"
                 onClick={() => setWateringNoteId(null)}
               >
                 <motion.div
                   initial={{ opacity: 0, y: 24, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 16, scale: 0.98 }}
-                  className="w-full max-w-md rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-2xl sm:p-6"
+                  transition={{ type: 'tween', duration: 0.17, ease: [0.22, 1, 0.36, 1] }}
+                  className="mobile-modal-sheet w-full max-w-md rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-2xl sm:p-6"
                   onClick={(event) => event.stopPropagation()}
                 >
                   <div className="mb-5 flex items-start justify-between gap-4">
@@ -8587,15 +8717,15 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[65] flex items-end justify-center bg-black/20 p-4 backdrop-blur-sm sm:items-center"
+              className="mobile-modal-overlay fixed inset-0 z-[65] flex items-end justify-center bg-black/20 p-4 md:backdrop-blur-sm sm:items-center"
               onClick={() => setFlowerReward(null)}
             >
               <motion.div
                 initial={{ opacity: 0, y: 28, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 16, scale: 0.96 }}
-                transition={{ type: 'spring', damping: 22, stiffness: 260 }}
-                className="w-full max-w-sm overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-2xl"
+                transition={{ type: 'tween', duration: 0.17, ease: [0.22, 1, 0.36, 1] }}
+                className="mobile-modal-sheet w-full max-w-sm overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-2xl"
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="relative grid h-48 place-items-center bg-[linear-gradient(180deg,var(--tone-harvest-bg),var(--surface-soft))]">
@@ -8665,14 +8795,15 @@ export default function App() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[65] bg-black/30 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+                className="mobile-modal-overlay fixed inset-0 z-[65] flex items-end justify-center bg-black/30 p-4 md:backdrop-blur-sm sm:items-center"
                 onClick={() => setHarvestNoteId(null)}
               >
                 <motion.div
                   initial={{ opacity: 0, y: 24, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 16, scale: 0.98 }}
-                  className="w-full max-w-lg rounded-[2rem] bg-[var(--surface-strong)] border border-[var(--border)] shadow-2xl p-6"
+                  transition={{ type: 'tween', duration: 0.17, ease: [0.22, 1, 0.36, 1] }}
+                  className="mobile-modal-sheet w-full max-w-lg rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] p-6 shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
                   <div className="relative mb-5 flex h-36 items-center justify-center overflow-hidden rounded-[2rem] border border-[var(--tone-harvest-border)] bg-[linear-gradient(180deg,var(--tone-harvest-bg),var(--surface-soft))]">
@@ -8728,14 +8859,15 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[66] flex items-end justify-center bg-black/18 p-0 backdrop-blur-2xl sm:items-center sm:p-4"
+              className="mobile-modal-overlay fixed inset-0 z-[66] flex items-end justify-center bg-black/18 p-0 md:backdrop-blur-2xl sm:items-center sm:p-4"
               onClick={closeSettings}
             >
               <motion.div
                 initial={{ opacity: 0, y: 24, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 16, scale: 0.98 }}
-                className="flex h-[92dvh] max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[2.25rem] bg-[var(--bg-app)]/96 p-0 shadow-[0_28px_100px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:h-auto sm:max-h-[86vh] sm:rounded-[2.25rem] sm:ring-1 sm:ring-[var(--border)]"
+                transition={{ type: 'tween', duration: 0.17, ease: [0.22, 1, 0.36, 1] }}
+                className="mobile-modal-sheet flex h-[92dvh] max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[2.25rem] bg-[var(--bg-app)]/96 p-0 shadow-[0_28px_100px_rgba(0,0,0,0.24)] md:backdrop-blur-2xl sm:h-auto sm:max-h-[86vh] sm:rounded-[2.25rem] sm:ring-1 sm:ring-[var(--border)]"
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-[var(--text-muted)]/20 sm:hidden" />
@@ -8757,7 +8889,7 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 app-scrollbar sm:px-6 sm:pb-6">
+                <div className="mobile-fast-scroll overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 app-scrollbar sm:px-6 sm:pb-6">
                   <AnimatePresence mode="wait" initial={false}>
                     {settingsPage === 'root' && (
                       <motion.div
@@ -9191,14 +9323,14 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-md sm:items-center sm:p-4"
+              className="mobile-modal-overlay fixed inset-0 z-[70] flex items-end justify-center bg-black/35 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-[calc(env(safe-area-inset-top)+0.75rem)] md:backdrop-blur-md sm:items-center sm:p-4"
             >
               <motion.div
                 initial={{ opacity: 0, y: 24, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 16, scale: 0.98 }}
-                transition={{ type: 'spring', stiffness: 360, damping: 34 }}
-                className="flex max-h-[min(88vh,44rem)] w-full max-w-lg flex-col overflow-hidden rounded-[2rem] border border-white/55 bg-[var(--surface-strong)] shadow-[0_24px_90px_rgba(20,30,24,0.28)] sm:max-w-2xl"
+                transition={{ type: 'tween', duration: 0.17, ease: [0.22, 1, 0.36, 1] }}
+                className="mobile-modal-sheet flex max-h-[min(88vh,44rem)] w-full max-w-lg flex-col overflow-hidden rounded-[2rem] border border-white/55 bg-[var(--surface-strong)] shadow-[0_24px_90px_rgba(20,30,24,0.28)] sm:max-w-2xl"
               >
                 {(() => {
                   const step = ONBOARDING_STEPS[onboardingStep] || ONBOARDING_STEPS[0];
@@ -9332,16 +9464,16 @@ export default function App() {
 	          {isAdding && (
 		            <motion.div
 		              ref={quickEntryOverlayRef}
-		              className="quick-entry-overlay fixed inset-0 z-[70] overflow-hidden text-[var(--text-main)]"
+		              className="quick-entry-overlay mobile-modal-overlay fixed inset-0 z-[70] overflow-hidden text-[var(--text-main)]"
 	              initial={{ opacity: 0 }}
 	              animate={{ opacity: 1 }}
 	              exit={{ opacity: 0 }}
               transition={{ duration: 0.16 }}
               onClick={closeQuickEntry}
 	            >
-	              <div className={`absolute inset-0 ${quickEntryKeyboardMode ? 'bg-black/24 backdrop-blur-xl' : 'bg-black/10 backdrop-blur-md'}`} />
+	              <div className={`quick-entry-backdrop absolute inset-0 ${quickEntryKeyboardMode ? 'bg-black/24 md:backdrop-blur-xl' : 'bg-black/10 md:backdrop-blur-md'}`} />
 	              <div
-	                className={`absolute inset-x-0 flex justify-center px-3 sm:p-5 ${
+	                className={`quick-entry-stage ${quickEntryKeyboardMode ? 'quick-entry-stage-keyboard' : ''} absolute inset-x-0 flex justify-center px-3 sm:p-5 ${
 	                  quickEntryKeyboardMode
 	                    ? 'items-end pb-0 pt-2'
 	                    : 'inset-y-0 items-center py-[calc(env(safe-area-inset-top)+0.8rem)]'
@@ -9349,19 +9481,19 @@ export default function App() {
 	                style={quickEntryViewportStyle}
 	              >
 	              <motion.div
-		                className={`relative flex w-full max-w-lg flex-col overflow-hidden border border-white/45 bg-[var(--surface-strong)]/96 shadow-[0_26px_90px_rgba(0,0,0,0.18)] backdrop-blur-2xl ${
+		                className={`quick-entry-card mobile-modal-sheet relative flex w-full max-w-lg flex-col overflow-hidden border border-white/45 bg-[var(--surface-strong)]/96 shadow-[0_26px_90px_rgba(0,0,0,0.18)] md:backdrop-blur-2xl ${
 		                  quickEntryKeyboardMode
 		                    ? 'quick-entry-keyboard max-h-full min-h-[17.5rem] rounded-t-[1.85rem] rounded-b-[1.25rem]'
 		                    : 'h-[min(54dvh,28rem)] min-h-[22.5rem] rounded-[2.15rem]'
 		                }`}
-		                style={quickEntryKeyboardMode
-		                  ? { height: `min(22.5rem, calc(${Math.max(300, Math.round(quickEntryViewport.height))}px - 0.5rem))` }
-			                  : undefined}
-	                initial={{ y: 10, scale: 0.965, opacity: 0 }}
-	                animate={{ y: 0, scale: 1, opacity: 1 }}
-                exit={{ y: 8, scale: 0.975, opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 560, damping: 44, mass: 0.68 }}
-                drag={quickEntryKeyboardMode || (createMode === 'sprout' && showProjectTodos) ? false : 'y'}
+		                style={quickEntryCardStyle}
+	                initial={quickEntryIsMobile ? quickEntryMobileInitial : { y: 10, scale: 0.965, opacity: 0 }}
+	                animate={quickEntryIsMobile ? quickEntryMobileAnimate : { y: 0, scale: 1, opacity: 1 }}
+                exit={quickEntryIsMobile ? quickEntryMobileExit : { y: 8, scale: 0.975, opacity: 0 }}
+                transition={quickEntryIsMobile
+                  ? { type: 'tween', duration: 0.24, ease: [0.22, 1, 0.36, 1] }
+                  : { type: 'tween', duration: 0.16, ease: [0.18, 1, 0.28, 1] }}
+                drag={quickEntryIsMobile || quickEntryKeyboardMode || (createMode === 'sprout' && showProjectTodos) ? false : 'y'}
                 dragConstraints={{ top: 0, bottom: 0 }}
                 dragElastic={0.14}
                 dragDirectionLock
@@ -9374,8 +9506,8 @@ export default function App() {
               >
 	                <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,var(--bg-app)_0%,transparent_82%)] opacity-55" />
 	                <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-white/70" />
-	                <div className={`relative mx-auto h-1 w-10 rounded-full bg-[var(--border)]/75 sm:hidden ${quickEntryKeyboardMode ? 'mt-2' : 'mt-3'}`} />
-	                <div className={`relative z-10 flex shrink-0 items-center border-b border-[var(--border)]/55 px-4 sm:px-5 ${
+	                <div className={`quick-entry-grabber relative mx-auto h-1 w-10 rounded-full bg-[var(--border)]/75 sm:hidden ${quickEntryKeyboardMode ? 'mt-2' : 'mt-3'}`} />
+	                <div className={`quick-entry-header relative z-10 flex shrink-0 items-center border-b border-[var(--border)]/55 px-4 sm:px-5 ${
 	                  quickEntryKeyboardMode ? 'h-14' : 'h-[4.85rem] pt-1'
 	                }`}>
                   <button
@@ -9383,15 +9515,16 @@ export default function App() {
                     onClick={() => {
                       closeQuickEntry();
                     }}
-                    className="absolute left-4 top-1/2 z-10 h-9 -translate-y-1/2 rounded-full text-left text-[15px] font-semibold text-[var(--sage)]"
+                    className="quick-entry-nav-button absolute left-4 top-1/2 z-10 h-9 -translate-y-1/2 rounded-full text-left text-[15px] font-semibold text-[var(--sage)]"
                   >
                     {t('cancel')}
                   </button>
-	                  <div className="pointer-events-none absolute inset-x-24 top-1/2 min-w-0 -translate-y-1/2 text-center">
-	                    <p className="truncate text-[16px] font-semibold leading-5 text-[var(--earth)]">
-	                      {quickEntryCopy.title}
+	                  <div className="quick-entry-title-block pointer-events-none absolute inset-x-24 top-1/2 min-w-0 -translate-y-1/2 text-center">
+	                    <p className="quick-entry-title-line truncate text-[16px] font-semibold leading-5 text-[var(--earth)]">
+	                      <span className="quick-entry-seed-mark" />
+	                      <span className="min-w-0 truncate">{quickEntryCopy.title}</span>
 	                    </p>
-	                    <p className={`mt-1 truncate text-[11px] font-medium text-[var(--text-muted)] ${quickEntryKeyboardMode ? 'hidden' : 'block'}`}>
+	                    <p className={`quick-entry-subtitle mt-1 truncate text-[11px] font-medium text-[var(--text-muted)] ${quickEntryKeyboardMode ? 'hidden' : 'block'}`}>
 	                      {quickEntryCopy.subtitle}
 	                    </p>
                   </div>
@@ -9399,7 +9532,7 @@ export default function App() {
                     type="button"
                     onClick={addNote}
                     disabled={!newNote.title.trim() && !newNote.content.trim()}
-                    className={`absolute right-4 top-1/2 z-10 h-9 -translate-y-1/2 rounded-full text-right text-[15px] font-semibold transition-colors disabled:opacity-35 ${
+                    className={`quick-entry-nav-button absolute right-4 top-1/2 z-10 h-9 -translate-y-1/2 rounded-full text-right text-[15px] font-semibold transition-colors disabled:opacity-35 ${
                       newNote.title.trim() || newNote.content.trim() ? 'text-[var(--sage)]' : 'text-[var(--text-muted)]'
                     }`}
                   >
@@ -9407,11 +9540,11 @@ export default function App() {
                   </button>
                 </div>
 
-	                <div className={`relative z-10 flex min-h-0 flex-1 flex-col px-5 sm:px-6 ${quickEntryKeyboardMode ? 'pt-3' : 'pt-5'}`}>
+	                <div className={`quick-entry-body relative z-10 flex min-h-0 flex-1 flex-col px-5 sm:px-6 ${quickEntryKeyboardMode ? 'pt-3' : 'pt-5'}`}>
 	                  {createMode === 'seed' ? (
 	                    <div className="flex min-h-0 flex-1 flex-col">
 	                      <div className={`flex shrink-0 items-center gap-3 ${quickEntryKeyboardMode ? 'mb-2' : 'mb-4'}`}>
-	                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--bg-app)] text-[var(--sage)]">
+	                        <span className="quick-entry-mode-icon grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--bg-app)] text-[var(--sage)]">
 	                          <Leaf size={17} />
 	                        </span>
 	                        <div className="min-w-0">
@@ -9440,14 +9573,14 @@ export default function App() {
 	                            addNote();
 	                          }
 	                        }}
-	                        className="quick-seed-textarea min-h-0 flex-1 resize-none bg-transparent text-[1.32rem] font-medium leading-[1.42] tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/40 sm:text-[1.42rem]"
+	                        className="quick-entry-main-input quick-seed-textarea min-h-0 flex-1 resize-none bg-transparent text-[1.32rem] font-medium leading-[1.42] tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/40 sm:text-[1.42rem]"
 	                      />
 	                    </div>
 	                  ) : (
 	                    <>
 	                      <div className={`flex shrink-0 items-center gap-3 ${quickEntryKeyboardMode ? 'mb-2' : 'mb-4'}`}>
 	                        {createMode === 'journal' && (
-	                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--bg-app)] text-[var(--sage)]">
+	                          <span className="quick-entry-mode-icon grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--bg-app)] text-[var(--sage)]">
 	                            <Sparkles size={16} />
 	                          </span>
 	                        )}
@@ -9462,7 +9595,7 @@ export default function App() {
 	                          placeholder={quickEntryCopy.titlePlaceholder}
 	                          value={newNote.title}
 	                          onChange={(event) => setNewNote({ ...newNote, title: event.target.value })}
-	                          className="quick-entry-title-input min-w-0 flex-1 bg-transparent text-[1.55rem] font-medium leading-none tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/44 sm:text-[1.75rem]"
+	                          className="quick-entry-main-input quick-entry-title-input min-w-0 flex-1 bg-transparent text-[1.55rem] font-medium leading-none tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/44 sm:text-[1.75rem]"
 	                        />
 	                      </div>
 
@@ -9519,14 +9652,14 @@ export default function App() {
 	                                addNote();
 	                              }
 	                            }}
-	                            className="quick-seed-textarea h-full min-h-0 w-full resize-none bg-transparent text-[1.12rem] font-medium leading-[1.5] tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/42 sm:text-[1.22rem]"
+	                            className="quick-entry-main-input quick-seed-textarea h-full min-h-0 w-full resize-none bg-transparent text-[1.12rem] font-medium leading-[1.5] tracking-normal text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/42 sm:text-[1.22rem]"
 	                          />
 	                        )}
 	                      </div>
 	                    </>
 	                  )}
 
-		                  <div className={`relative mb-3 flex shrink-0 flex-col gap-2 rounded-[1.35rem] bg-[var(--bg-app)]/62 p-2 shadow-[inset_0_0_0_1px_var(--border)] ${quickEntryKeyboardMode ? 'mt-1' : 'mt-4'}`}>
+		                  <div className={`quick-entry-controls relative mb-3 flex shrink-0 flex-col gap-2 rounded-[1.35rem] bg-[var(--bg-app)]/62 p-2 shadow-[inset_0_0_0_1px_var(--border)] ${quickEntryKeyboardMode ? 'mt-1' : 'mt-4'}`}>
 		                    <AnimatePresence>
 		                      {quickEntryPicker && (
 		                        <motion.div
@@ -9535,7 +9668,7 @@ export default function App() {
 		                          animate={{ opacity: 1, y: 0, scale: 1 }}
 		                          exit={{ opacity: 0, y: 6, scale: 0.98 }}
 		                          transition={{ duration: 0.16 }}
-		                          className="absolute bottom-[calc(100%+0.45rem)] left-2 right-2 z-30 max-h-56 overflow-y-auto rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-strong)]/98 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.2)] backdrop-blur-2xl app-scrollbar"
+		                          className="quick-entry-picker absolute bottom-[calc(100%+0.45rem)] left-2 right-2 z-30 max-h-56 overflow-y-auto rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-strong)]/98 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.2)] backdrop-blur-2xl app-scrollbar"
 		                        >
 		                          {quickEntryPicker === 'type' && (
 		                            <div className="grid gap-1">
@@ -9610,7 +9743,7 @@ export default function App() {
 		                      )}
 		                    </AnimatePresence>
 		                    <div className="flex min-h-10 items-center gap-2">
-		                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--surface-strong)] text-[var(--sage)]">
+		                      <span className="quick-entry-toolbar-icon grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--surface-strong)] text-[var(--sage)]">
 		                        {createMode === 'sprout' ? <Sprout size={15} /> : createMode === 'journal' ? <Sparkles size={15} /> : <Leaf size={15} />}
 		                      </span>
 		                      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--text-muted)]">
@@ -9624,7 +9757,7 @@ export default function App() {
 		                          setShowQuickEntryDetails(value => !value);
 		                          setQuickEntryPicker(null);
 		                        }}
-		                        className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors ${
+		                        className={`quick-entry-details-button inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors ${
 		                          showQuickEntryDetails
 		                            ? 'bg-[var(--sage)] text-[var(--on-sage)]'
 		                            : 'bg-[var(--surface-strong)] text-[var(--sage)]'
@@ -9808,7 +9941,7 @@ export default function App() {
                   <motion.button
                     type="button"
                     aria-label="Cerrar opciones de creación"
-                    className="fixed inset-0 z-40 bg-black/[0.03] backdrop-blur-[2px]"
+                    className="mobile-modal-overlay fixed inset-0 z-40 bg-black/[0.03] md:backdrop-blur-[2px]"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0, transition: { duration: 0.12 } }}
@@ -9820,7 +9953,7 @@ export default function App() {
                     exit={{ opacity: 0, y: 12, scale: 0.92, rotate: -1 }}
                     transition={{ duration: 0.38, ease: [0.18, 1.28, 0.32, 1] }}
                     style={{ transformOrigin: '85% 100%' }}
-                    className="fixed bottom-[calc(env(safe-area-inset-bottom)+5rem)] right-4 z-50 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)]/95 p-2 shadow-[0_24px_70px_rgba(0,0,0,0.16)] backdrop-blur-2xl md:bottom-24 md:right-8"
+                    className="mobile-modal-sheet fixed bottom-[calc(env(safe-area-inset-bottom)+5rem)] right-4 z-50 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-strong)]/95 p-2 shadow-[0_24px_70px_rgba(0,0,0,0.16)] md:bottom-24 md:right-8 md:backdrop-blur-2xl"
                   >
                     <div className="px-3 pb-2 pt-2">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">

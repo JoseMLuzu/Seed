@@ -10,6 +10,11 @@
   50% { transform: rotate(3deg) translateY(-2px); }
 }
 
+@keyframes seed-breathe {
+  0%, 100% { opacity: 0.72; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
 .sway {
   animation: sway 3.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
   transform-origin: 50% 100%;
@@ -89,12 +94,216 @@
   touch-action: manipulation;
 }
 
+.quick-entry-stage,
+.quick-entry-card {
+  min-height: 0;
+}
+
+.mobile-fast-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.mobile-modal-overlay {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: opacity;
+}
+
+.mobile-modal-sheet,
+.mobile-detail-panel {
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  contain: layout paint;
+  will-change: transform, opacity;
+}
+
 .quick-entry-overlay textarea,
 .quick-entry-overlay input {
   -webkit-text-size-adjust: 100%;
 }
 
 @media (max-width: 767px) {
+  .quick-entry-backdrop {
+    background:
+      radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--sage) 10%, transparent), transparent 34%),
+      linear-gradient(180deg, var(--bg-app) 0%, color-mix(in srgb, var(--bg-app) 94%, var(--sage)) 100%) !important;
+  }
+
+  .quick-entry-stage {
+    inset: 0 !important;
+    align-items: stretch !important;
+    height: 100% !important;
+    padding: 0 !important;
+  }
+
+  .quick-entry-stage-keyboard {
+    align-items: stretch !important;
+    padding: 0 !important;
+  }
+
+  .quick-entry-card {
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    max-height: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background:
+      radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--surface-strong) 88%, transparent), transparent 28%),
+      var(--bg-app) !important;
+    box-shadow: none !important;
+  }
+
+  .quick-entry-keyboard {
+    min-height: 100% !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+  }
+
+  .quick-entry-card::after {
+    content: "";
+    position: absolute;
+    inset: auto 1.15rem calc(env(safe-area-inset-bottom, 0px) + 5.35rem) 1.15rem;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--sage) 20%, transparent), transparent);
+    opacity: 0.55;
+    pointer-events: none;
+    display: block;
+  }
+
+  .quick-entry-header {
+    height: auto !important;
+    min-height: calc(env(safe-area-inset-top, 0px) + 5.35rem) !important;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 1.05rem) !important;
+    background: color-mix(in srgb, var(--surface-strong) 74%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--border) 42%, transparent) !important;
+  }
+
+  .quick-entry-grabber {
+    display: none;
+  }
+
+  .quick-entry-nav-button {
+    min-width: 4.25rem;
+    padding-inline: 0.1rem;
+    top: calc(50% + 0.38rem) !important;
+  }
+
+  .quick-entry-title-block {
+    inset-inline: 5.2rem !important;
+    top: calc(50% + 0.38rem) !important;
+  }
+
+  .quick-entry-title-line {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+  }
+
+  .quick-entry-seed-mark {
+    width: 0.48rem;
+    height: 0.48rem;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--sage);
+    box-shadow: 0 0 0 0.28rem color-mix(in srgb, var(--sage) 12%, transparent);
+    animation: seed-breathe 2.8s ease-in-out infinite;
+  }
+
+  .quick-entry-subtitle {
+    max-width: 11.5rem;
+    margin-inline: auto;
+  }
+
+  .quick-entry-body {
+    padding-left: 1.25rem !important;
+    padding-right: 1.25rem !important;
+    padding-top: 1.35rem !important;
+  }
+
+  .quick-entry-keyboard .quick-entry-body {
+    padding-bottom: calc(var(--quick-entry-keyboard-inset, 0px) + 5.75rem) !important;
+  }
+
+  .quick-entry-mode-icon {
+    background: color-mix(in srgb, var(--surface-strong) 88%, transparent) !important;
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--border) 80%, transparent),
+      0 0.75rem 1.8rem color-mix(in srgb, var(--sage) 8%, transparent);
+  }
+
+  .quick-entry-main-input {
+    caret-color: var(--sage);
+  }
+
+  .quick-entry-main-input::placeholder {
+    letter-spacing: 0;
+  }
+
+  .quick-entry-controls {
+    margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.85rem) !important;
+    border-radius: 1.35rem !important;
+    border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+    background: color-mix(in srgb, var(--surface-strong) 82%, transparent) !important;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 45%, transparent),
+      0 1rem 2.4rem rgba(0, 0, 0, 0.08) !important;
+  }
+
+  .quick-entry-keyboard .quick-entry-controls {
+    position: fixed !important;
+    left: 0.9rem !important;
+    right: 0.9rem !important;
+    bottom: calc(var(--quick-entry-keyboard-inset, 0px) + 0.55rem) !important;
+    z-index: 90 !important;
+    margin: 0 !important;
+    border-radius: 1.45rem !important;
+    background: color-mix(in srgb, var(--surface-strong) 90%, transparent) !important;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 52%, transparent),
+      0 0.9rem 2.5rem rgba(0, 0, 0, 0.16) !important;
+  }
+
+  .quick-entry-keyboard .quick-entry-picker {
+    max-height: min(13.5rem, calc(100dvh - var(--quick-entry-keyboard-inset, 0px) - 10.5rem)) !important;
+  }
+
+  .quick-entry-toolbar-icon {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 72%, transparent);
+  }
+
+  .quick-entry-details-button {
+    min-width: 5.1rem;
+    justify-content: center;
+  }
+
+  .quick-entry-picker {
+    border-color: color-mix(in srgb, var(--border) 78%, transparent) !important;
+    background: var(--surface-strong) !important;
+    box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.16) !important;
+  }
+
+  .mobile-modal-overlay {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .mobile-modal-sheet {
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18) !important;
+  }
+
+  .quick-entry-card.mobile-modal-sheet {
+    box-shadow: none !important;
+  }
+
+  .mobile-detail-panel {
+    box-shadow: -10px 0 28px rgba(0, 0, 0, 0.12) !important;
+  }
+
   input,
   textarea,
   select {
@@ -150,6 +359,93 @@
     --safe-top-space: 2.5rem;
     --safe-top-control: 1.25rem;
     --safe-bottom-space: 2.5rem;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1180px) {
+  .safe-app-shell {
+    --safe-top-space: 1.4rem;
+    --safe-top-control: 1rem;
+    --safe-bottom-space: 1.4rem;
+  }
+
+  .app-sidebar {
+    width: 14.75rem !important;
+    padding: 1.1rem !important;
+  }
+
+  .app-sidebar h1 {
+    font-size: 1.08rem !important;
+  }
+
+  .app-sidebar .mb-8 {
+    margin-bottom: 1.55rem !important;
+  }
+
+  .app-sidebar .md\:mb-12 {
+    margin-bottom: 1.65rem !important;
+  }
+
+  .app-sidebar button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .app-main {
+    min-width: 0;
+  }
+
+  .app-content {
+    padding: 1.5rem !important;
+  }
+
+  .app-content-inner {
+    max-width: min(100%, 58rem) !important;
+  }
+
+  .app-page-header {
+    margin-bottom: 1.55rem !important;
+    gap: 1rem !important;
+  }
+
+  .app-page-header h2 {
+    font-size: clamp(1.8rem, 3.2vw, 2.35rem) !important;
+  }
+
+  .app-content-has-detail {
+    margin-right: 22rem !important;
+  }
+
+  .app-detail-panel {
+    width: 22rem !important;
+  }
+
+  .app-detail-panel .mobile-fast-scroll {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  .no-touch-callout {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem) !important;
+    right: 1.5rem !important;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 900px) {
+  .app-sidebar {
+    width: 13.75rem !important;
+  }
+
+  .app-content {
+    padding: 1.15rem !important;
+  }
+
+  .app-content-has-detail {
+    margin-right: 0 !important;
+  }
+
+  .app-detail-panel {
+    width: min(26rem, 72vw) !important;
+    box-shadow: -1.5rem 0 4rem rgba(0, 0, 0, 0.14) !important;
   }
 }
 
