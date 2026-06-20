@@ -2516,7 +2516,7 @@ function InboxView({
         <p className="mt-1 text-sm font-medium text-[var(--text-muted)]">{inboxNotes.length} {t('pendingSeeds')}</p>
       </div>
 
-      <div className={inboxNotes.length === 0 ? '' : 'space-y-3'}>
+      <div className={inboxNotes.length === 0 ? '' : 'grid gap-3 xl:grid-cols-2 xl:items-start'}>
         {inboxNotes.length === 0 ? (
           <EmptyStatePanel
             icon={Inbox}
@@ -2548,46 +2548,49 @@ function InboxView({
               leftIcon={Archive}
               leftTone="bg-[var(--tone-warning)] text-[var(--on-sage)]"
               wrapperClassName={`${IDEA_CARD_RADIUS} bg-[var(--surface-strong)]`}
-              className={`group relative overflow-hidden rounded-[1.75rem] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--surface-strong)_94%,white_6%),color-mix(in_srgb,var(--surface-soft)_86%,var(--sage)_14%))] p-4 shadow-[0_14px_38px_rgba(20,30,24,0.08)] ring-1 ring-[color-mix(in_srgb,var(--border)_82%,white_18%)] transition-colors hover:bg-[var(--surface-hover)] sm:p-5 ${recentlyCreatedNoteId === note.id ? 'bg-[var(--sage)]/10 ring-[var(--sage)]/30' : ''}`}
+              className={`group relative overflow-hidden rounded-[1.35rem] bg-[var(--surface-strong)] p-3 shadow-[0_8px_24px_rgba(20,30,24,0.055)] ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--surface-hover)] sm:p-3.5 ${recentlyCreatedNoteId === note.id ? 'bg-[var(--sage)]/10 ring-[var(--sage)]/30' : ''}`}
             >
               <button
                 onClick={(event) => { event.stopPropagation(); onSelectNote(note.id); }}
-                className="flex min-h-[5.75rem] w-full items-start gap-3 text-left"
+                className="flex w-full items-start gap-3 text-left"
               >
-                <span className="relative grid h-12 w-12 shrink-0 place-items-center rounded-[1.25rem] bg-[var(--tone-seed-bg)] text-[var(--tone-seed)] shadow-[inset_0_1px_0_rgba(255,255,255,0.42),0_10px_22px_rgba(20,30,24,0.08)] ring-1 ring-[var(--tone-seed-border)]">
-                  <Sprout size={16} strokeWidth={2.2} />
-                  <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-current opacity-45" />
+                <span className="relative grid h-10 w-10 shrink-0 place-items-center rounded-[1rem] bg-[var(--tone-seed-bg)] text-[var(--tone-seed)] ring-1 ring-[var(--tone-seed-border)]">
+                  <Sprout size={15} strokeWidth={2.2} />
+                  <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-current opacity-45" />
                 </span>
-                <span className="min-w-0 flex-1 pt-0.5">
-                  <span className="block truncate text-[1.06rem] font-semibold leading-tight tracking-tight text-[var(--earth)]">{note.title}</span>
-                  <span className="mt-1.5 block line-clamp-2 text-[0.94rem] font-medium leading-relaxed text-[var(--text-muted)]">{cardDescription}</span>
-                  <span className="mt-3 inline-flex h-7 min-w-0 items-center rounded-full bg-[var(--bg-app)]/75 px-2.5 text-[11px] font-semibold leading-none text-[var(--text-muted)] ring-1 ring-[var(--border)]/70">
-                    {appLanguage === 'en' ? 'Created' : 'Creada'} {formatShortDate(note.createdAt)}
+                <span className="min-w-0 flex-1">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="block min-w-0 truncate text-[0.98rem] font-semibold leading-tight tracking-tight text-[var(--earth)]">{note.title}</span>
+                    <span className="h-1 w-1 shrink-0 rounded-full bg-[var(--text-muted)]/35" />
+                    <span className="shrink-0 text-[11px] font-semibold text-[var(--text-muted)]">
+                      {appLanguage === 'en' ? 'Created' : 'Creada'} {formatShortDate(note.createdAt)}
+                    </span>
                   </span>
+                  <span className="mt-1 block line-clamp-1 text-[0.9rem] font-medium leading-relaxed text-[var(--text-muted)]">{cardDescription}</span>
                 </span>
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--text-muted)] transition-colors group-hover:bg-[var(--bg-app)] group-hover:text-[var(--sage)]">
                   <ChevronRight size={16} />
                 </span>
               </button>
 
-              <div className="mt-4 flex items-center gap-2 pl-[3.75rem]">
+              <div className="mt-3 flex items-center gap-2 pl-[3.25rem]">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-2">
                   <button
                     onClick={(event) => { event.stopPropagation(); onComplete(note.id); }}
-                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-4 text-xs font-semibold leading-none text-[var(--on-sage)] shadow-[0_9px_20px_rgba(67,111,82,0.16)] active:translate-y-px soft-interaction"
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold leading-none text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
                   >
                     <CheckCircle2 size={13} /> {t('done')}
                   </button>
                   <button
                     onClick={(event) => { event.stopPropagation(); onCultivate(note.id); }}
-                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-[var(--bg-app)]/82 px-4 text-xs font-semibold leading-none text-[var(--sage)] ring-1 ring-[var(--border)] active:translate-y-px soft-interaction hover:bg-[var(--surface-hover)]"
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-[var(--bg-app)]/82 px-3 text-xs font-semibold leading-none text-[var(--sage)] ring-1 ring-[var(--border)] active:translate-y-px soft-interaction hover:bg-[var(--surface-hover)]"
                   >
                     <Sprout size={13} /> {t('project')}
                   </button>
                 </div>
                 <button
                   onClick={(event) => { event.stopPropagation(); onShowActions(note.id); }}
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)] hover:text-[var(--sage)]"
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)] hover:text-[var(--sage)]"
                   aria-label="Más opciones"
                 >
                   <MoreHorizontal size={15} />
@@ -2597,7 +2600,9 @@ function InboxView({
           );
         })}
         {inboxList.hasMore && (
-          <ProgressiveListMoreButton remaining={inboxList.remaining} onClick={inboxList.showMore} />
+          <div className="xl:col-span-2">
+            <ProgressiveListMoreButton remaining={inboxList.remaining} onClick={inboxList.showMore} />
+          </div>
         )}
       </div>
     </motion.div>
