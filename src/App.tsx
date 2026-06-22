@@ -2189,32 +2189,6 @@ function TodayView({
         </div>
       </div>
 
-      <form
-        className="flex min-h-[3.25rem] items-center gap-3 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)]/86 px-3 py-2 shadow-sm"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onQuickCapture();
-        }}
-      >
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)]">
-          <Leaf size={16} />
-        </span>
-        <input
-          value={quickNote}
-          onChange={(event) => setQuickNote(event.target.value)}
-          placeholder={appLanguage === 'en' ? 'Plant a quick seed...' : 'Planta una semilla rápida...'}
-          className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/62"
-        />
-        <button
-          type="submit"
-          disabled={!quickNote.trim()}
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--sage)] text-[var(--on-sage)] shadow-sm transition disabled:bg-[var(--bg-app)] disabled:text-[var(--text-muted)] disabled:shadow-none"
-          aria-label={appLanguage === 'en' ? 'Plant quick seed' : 'Plantar semilla rápida'}
-        >
-          <Plus size={17} />
-        </button>
-      </form>
-
       <section className="rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)]/82 p-3 shadow-sm">
         {isEditingIntention ? (
           <form
@@ -2280,6 +2254,32 @@ function TodayView({
           </div>
         )}
       </section>
+
+      <form
+        className="flex min-h-[3.25rem] items-center gap-3 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)]/86 px-3 py-2 shadow-sm"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onQuickCapture();
+        }}
+      >
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)]">
+          <Leaf size={16} />
+        </span>
+        <input
+          value={quickNote}
+          onChange={(event) => setQuickNote(event.target.value)}
+          placeholder={appLanguage === 'en' ? 'Plant a quick seed...' : 'Planta una semilla rápida...'}
+          className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/62"
+        />
+        <button
+          type="submit"
+          disabled={!quickNote.trim()}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--sage)] text-[var(--on-sage)] shadow-sm transition disabled:bg-[var(--bg-app)] disabled:text-[var(--text-muted)] disabled:shadow-none"
+          aria-label={appLanguage === 'en' ? 'Plant quick seed' : 'Plantar semilla rápida'}
+        >
+          <Plus size={17} />
+        </button>
+      </form>
 
       <section className="overflow-hidden rounded-[1.8rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[0_14px_34px_rgba(15,23,18,0.055)] sm:p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
