@@ -1,7 +1,7 @@
 import { useRef, useMemo, useState, Suspense, useEffect } from 'react';
 import type { MutableRefObject } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { AdaptiveDpr, OrbitControls, Environment, Html, Line, Sparkles, Stars, Text } from '@react-three/drei';
+import { AdaptiveDpr, OrbitControls, Environment, Html, Line, Sparkles, Stars, Text, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { SeedNote, Theme } from '../types';
 import { daysSince, wateringDue } from '../seedLogic';
@@ -1714,7 +1714,19 @@ function HotAirBalloon({
 function BannerPlane({ palette, text }: { palette: GardenPalette; text: string }) {
   const planeRef = useRef<THREE.Group>(null);
   const textRef = useRef<THREE.Group>(null);
+  const propellerRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
+  const { scene } = useGLTF('/models/biplano_low_poly_v4_smooth.glb');
+  const biplaneScene = useMemo(() => scene.clone(true), [scene]);
+
+  useEffect(() => {
+    biplaneScene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+  }, [biplaneScene]);
 
   useFrame((state) => {
     if (!planeRef.current) return;
@@ -1722,27 +1734,31 @@ function BannerPlane({ palette, text }: { palette: GardenPalette; text: string }
     planeRef.current.position.x = ((t * 2.45) % 76) - 38;
     planeRef.current.position.y = 24.5 + Math.sin(t * 0.4) * 0.5;
     planeRef.current.rotation.z = Math.sin(t * 0.5) * 0.035;
+    if (propellerRef.current) propellerRef.current.rotation.x += 0.85;
     if (textRef.current) textRef.current.lookAt(camera.position);
   });
 
   return (
-    <group ref={planeRef} position={[-38, 24.5, 30]} scale={[1.28, 1.28, 1.28]}>
-      <group>
-        <mesh rotation={[0, 0, Math.PI / 2]} scale={[0.22, 1.2, 0.22]}>
-          <capsuleGeometry args={[1, 1.1, 6, 12]} />
-          <meshStandardMaterial color="#f8faf7" roughness={0.48} metalness={0.05} />
-        </mesh>
-        <mesh position={[0.2, 0, 0]} scale={[0.24, 1.55, 0.08]}>
-          <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color={palette.leafAlt} roughness={0.58} />
-        </mesh>
-        <mesh position={[-1.05, 0, 0]} scale={[0.28, 0.5, 0.08]}>
-          <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color={palette.fruit[0]} roughness={0.58} />
-        </mesh>
+    <group ref={planeRef} position={[-38, 24.5, 30]} scale={[1, 1, 1]}>
+      <group scale={[0.72, 0.72, 0.72]} rotation={[0, 0, 0]}>
+        <primitive object={biplaneScene} />
+        <group ref={propellerRef} position={[2.45, 0, -0.02]} rotation={[0, Math.PI / 2, 0]}>
+          <mesh scale={[0.78, 0.78, 0.04]}>
+            <sphereGeometry args={[1, 28, 10]} />
+            <meshStandardMaterial color="#fffaf1" roughness={0.35} transparent opacity={0.28} depthWrite={false} />
+          </mesh>
+          <mesh rotation={[0, 0, Math.PI / 2]} scale={[0.09, 0.72, 0.035]}>
+            <boxGeometry args={[1, 1, 1]} />
+            <meshStandardMaterial color="#f8faf7" roughness={0.55} transparent opacity={0.58} />
+          </mesh>
+          <mesh scale={[0.09, 0.72, 0.035]}>
+            <boxGeometry args={[1, 1, 1]} />
+            <meshStandardMaterial color="#f8faf7" roughness={0.55} transparent opacity={0.58} />
+          </mesh>
+        </group>
       </group>
-      <Line points={[[-1.35, 0, 0], [-4.7, 0, 0]]} color="#ffffff" opacity={0.7} transparent lineWidth={1.6} />
-      <group ref={textRef} position={[-7.4, 0, 0]}>
+      <Line points={[[-2.05, 0.05, 0], [-5.05, 0.05, 0]]} color="#ffffff" opacity={0.72} transparent lineWidth={1.5} />
+      <group ref={textRef} position={[-7.75, 0.05, 0]}>
         <mesh scale={[3.4, 0.78, 0.035]}>
           <boxGeometry args={[1, 1, 1]} />
           <meshStandardMaterial color="#fffaf1" roughness={0.72} transparent opacity={0.95} />
@@ -1764,6 +1780,8 @@ function BannerPlane({ palette, text }: { palette: GardenPalette; text: string }
     </group>
   );
 }
+
+useGLTF.preload('/models/biplano_low_poly_v4_smooth.glb');
 
 function SkyKite({
   position,
