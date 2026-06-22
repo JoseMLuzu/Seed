@@ -1743,7 +1743,7 @@ function BannerPlane({ palette, text }: { palette: GardenPalette; text: string }
     orbitTarget.copy(orbitPosition).add(orbitTangent);
     planeRef.current.position.copy(orbitPosition);
     planeRef.current.lookAt(orbitTarget);
-    planeRef.current.rotateY(Math.PI / 2);
+    planeRef.current.rotateY(-Math.PI / 2);
     planeRef.current.rotateZ(Math.sin(t * 0.5) * 0.035);
     if (propellerRef.current) propellerRef.current.rotation.x += 0.85;
     if (textRef.current) textRef.current.lookAt(camera.position);
