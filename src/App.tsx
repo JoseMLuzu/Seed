@@ -2634,6 +2634,12 @@ function InboxView({
               <div className="mt-2.5 flex items-center gap-2 pl-[1.9rem]">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-2">
                   <button
+                    onClick={(event) => { event.stopPropagation(); onComplete(note.id); }}
+                    className="inline-flex h-7 items-center justify-center gap-1.5 rounded-full bg-[var(--sage)] px-3 text-[11px] font-semibold leading-none text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
+                  >
+                    <CheckCircle2 size={12} /> {t('done')}
+                  </button>
+                  <button
                     onClick={(event) => { event.stopPropagation(); onCultivate(note.id); }}
                     className="inline-flex h-7 items-center justify-center gap-1.5 rounded-full bg-[var(--bg-app)]/70 px-3 text-[11px] font-semibold leading-none text-[var(--sage)] ring-1 ring-[var(--border)] active:translate-y-px soft-interaction hover:bg-[var(--surface-hover)]"
                   >
