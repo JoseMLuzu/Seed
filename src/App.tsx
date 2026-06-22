@@ -2153,6 +2153,14 @@ function TodayView({
     setShowDaySummary(false);
     setIntentionOutcome('');
   };
+  const handleCloseDayClick = () => {
+    if (dayAlreadyClosed) {
+      onNavigate('harvest');
+      return;
+    }
+    setIntentionOutcome('');
+    setShowDaySummary(true);
+  };
 
   useEffect(() => {
     setIntentionDraft(dailyIntention);
@@ -2167,8 +2175,8 @@ function TodayView({
       exit={{ opacity: 0, y: 12 }}
       className="space-y-4 pb-2 md:pb-8"
     >
-      <div>
-        <div className="min-w-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium capitalize text-[var(--text-muted)]">{todayWeekday} · {todayDate}</p>
           <h3 className="mt-0.5 truncate text-3xl font-semibold tracking-tight text-[var(--earth)]">{greeting}, {firstName}</h3>
           <p className="mt-1 max-w-[22rem] text-sm font-medium leading-relaxed text-[var(--text-muted)]">{todayPlan}</p>
@@ -2187,6 +2195,27 @@ function TodayView({
             )}
           </div>
         </div>
+        <button
+          type="button"
+          onClick={handleCloseDayClick}
+          className={`mt-1 inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-semibold ring-1 transition-colors sm:h-10 sm:px-4 sm:text-sm ${
+            dayAlreadyClosed
+              ? 'bg-[var(--tone-harvest-bg)] text-[var(--tone-harvest)] ring-[var(--tone-harvest-border)]'
+              : 'bg-[var(--surface-strong)] text-[var(--sage)] shadow-sm ring-[var(--border)] hover:bg-[var(--surface-hover)]'
+          }`}
+        >
+          {dayAlreadyClosed ? <CheckCircle2 size={14} /> : <Archive size={14} />}
+          <span className="hidden sm:inline">
+            {dayAlreadyClosed
+              ? appLanguage === 'en' ? 'Day closed' : 'Día cerrado'
+              : appLanguage === 'en' ? 'Close day' : 'Cerrar día'}
+          </span>
+          <span className="sm:hidden">
+            {dayAlreadyClosed
+              ? appLanguage === 'en' ? 'Closed' : 'Cerrado'
+              : appLanguage === 'en' ? 'Close' : 'Cerrar'}
+          </span>
+        </button>
       </div>
 
       <section className="rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)]/82 p-3 shadow-sm">
@@ -2332,62 +2361,6 @@ function TodayView({
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section className={`overflow-hidden rounded-[1.65rem] border p-4 shadow-sm ${
-        dayAlreadyClosed
-          ? 'border-[var(--tone-harvest-border)] bg-[var(--tone-harvest-bg)]'
-          : 'border-[var(--border)] bg-[var(--surface-strong)]'
-      }`}>
-        <div className="flex items-start gap-3">
-          <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${
-            dayAlreadyClosed
-              ? 'bg-[var(--surface-strong)] text-[var(--tone-harvest)]'
-              : 'bg-[var(--bg-app)] text-[var(--sage)]'
-          }`}>
-            {dayAlreadyClosed ? <CheckCircle2 size={19} /> : <Archive size={19} />}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-              {appLanguage === 'en' ? 'End of day' : 'Cierre del día'}
-            </p>
-            <h4 className="mt-1 text-lg font-semibold tracking-tight text-[var(--earth)]">
-              {dayAlreadyClosed
-                ? appLanguage === 'en' ? 'Today is already closed' : 'Hoy ya está cerrado'
-                : appLanguage === 'en' ? 'Save what today left you' : 'Guarda lo que te dejó hoy'}
-            </h4>
-            <p className="mt-1 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
-              {dayAlreadyClosed
-                ? appLanguage === 'en'
-                  ? 'Your closure is saved with your harvest memories.'
-                  : 'Tu cierre quedó guardado junto a tus aprendizajes.'
-                : appLanguage === 'en'
-                  ? 'A short reflection is enough. Close the loop and leave tomorrow lighter.'
-                  : 'Una frase basta. Cierra el ciclo y deja mañana más liviano.'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (dayAlreadyClosed) {
-                onNavigate('harvest');
-                return;
-              }
-              setIntentionOutcome('');
-              setShowDaySummary(true);
-            }}
-            className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold ring-1 transition-colors ${
-              dayAlreadyClosed
-                ? 'bg-[var(--surface-strong)] text-[var(--tone-harvest)] ring-[var(--tone-harvest-border)]'
-                : 'bg-[var(--sage)] text-[var(--on-sage)] ring-[var(--sage)] shadow-sm hover:opacity-92'
-            }`}
-          >
-            {dayAlreadyClosed ? <CheckCircle2 size={14} /> : <Archive size={14} />}
-            {dayAlreadyClosed
-              ? appLanguage === 'en' ? 'View' : 'Ver'
-              : appLanguage === 'en' ? 'Close day' : 'Cerrar día'}
-          </button>
         </div>
       </section>
 
