@@ -1590,7 +1590,6 @@ function ButterflyField({
 }
 
 function BirdFlock({
-  palette,
   position,
   speed = 2.25,
   spread = 74,
@@ -1598,7 +1597,6 @@ function BirdFlock({
   opacity = 0.58,
   phase = 0,
 }: {
-  palette: GardenPalette;
   position: [number, number, number];
   speed?: number;
   spread?: number;
@@ -1607,49 +1605,37 @@ function BirdFlock({
   phase?: number;
 }) {
   const flockRef = useRef<THREE.Group>(null);
-  const birds = useMemo(() => [
-    { x: -12, y: 2.6, z: 0, scale: 1.35, delay: 0 },
-    { x: -7, y: 4.3, z: -1.2, scale: 1.08, delay: 0.8 },
-    { x: -1.5, y: 3.2, z: 1.2, scale: 0.96, delay: 1.2 },
-    { x: 5.5, y: 5.1, z: -0.8, scale: 1.16, delay: 1.8 },
-    { x: 12, y: 3.7, z: 1.8, scale: 0.88, delay: 2.4 },
-  ], []);
+  const { camera } = useThree();
+  const { scene } = useGLTF('/models/bandada_gaviotas_low_poly.glb');
+  const flockScene = useMemo(() => scene.clone(true), [scene]);
+
+  useEffect(() => {
+    flockScene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = false;
+        child.receiveShadow = false;
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach((material) => {
+          material.transparent = opacity < 1;
+          material.opacity = opacity;
+          material.depthWrite = opacity >= 0.9;
+        });
+      }
+    });
+  }, [flockScene, opacity]);
 
   useFrame((state) => {
     if (!flockRef.current) return;
     const t = state.clock.elapsedTime + phase;
     flockRef.current.position.x = position[0] + ((t * speed) % spread) - spread / 2;
     flockRef.current.position.y = position[1] + Math.sin(t * 0.35) * 0.55;
+    flockRef.current.lookAt(camera.position);
+    flockRef.current.rotateZ(Math.sin(t * 0.42) * 0.035);
   });
 
   return (
     <group ref={flockRef} position={position} scale={[scale, scale, scale]}>
-      {birds.map((bird, index) => (
-        <group key={index} position={[bird.x, bird.y, bird.z]} scale={[bird.scale, bird.scale, bird.scale]}>
-          <Line
-            points={[
-              [-0.8, 0, 0],
-              [0, 0.28 + Math.sin(bird.delay) * 0.08, 0],
-              [0.8, 0, 0],
-            ]}
-            color={palette.skyNight}
-            opacity={opacity * 0.42}
-            transparent
-            lineWidth={2.8}
-          />
-          <Line
-            points={[
-              [-0.76, 0.03, 0.012],
-              [0, 0.3 + Math.sin(bird.delay) * 0.08, 0.012],
-              [0.76, 0.03, 0.012],
-            ]}
-            color="#fffaf1"
-            opacity={opacity}
-            transparent
-            lineWidth={1.7}
-          />
-        </group>
-      ))}
+      <primitive object={flockScene} />
     </group>
   );
 }
@@ -1793,6 +1779,7 @@ function BannerPlane({ palette, text }: { palette: GardenPalette; text: string }
 }
 
 useGLTF.preload('/models/biplano_low_poly_v4_smooth.glb');
+useGLTF.preload('/models/bandada_gaviotas_low_poly.glb');
 
 function SkyKite({
   position,
@@ -1861,8 +1848,8 @@ function SkyLife({
 
   return (
     <group>
-      <BirdFlock palette={palette} position={[-18, 22.8, 40]} speed={1.35} spread={54} scale={0.72} opacity={0.5} phase={1.4} />
-      <BirdFlock palette={palette} position={[34, 19.6, -26]} speed={1.05} spread={48} scale={0.56} opacity={0.36} phase={7.8} />
+      <BirdFlock position={[-18, 22.8, 40]} speed={1.35} spread={54} scale={0.2} opacity={0.84} phase={1.4} />
+      <BirdFlock position={[34, 19.6, -26]} speed={1.05} spread={48} scale={0.15} opacity={0.62} phase={7.8} />
       <BannerPlane palette={palette} text={bannerText} />
     </group>
   );
