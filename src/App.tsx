@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lazy, memo, Suspense, useRef, useState, useEffect, useLayoutEffect, useMemo, useCallback, type CSSProperties, type ReactNode } from 'react';
+import { lazy, memo, Suspense, useRef, useState, useEffect, useLayoutEffect, useMemo, useCallback, type ChangeEvent, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { DndContext, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -80,6 +80,7 @@ type AccountProfile = {
   name: string;
   email: string;
   role: string;
+  photo?: string;
   purpose?: string;
   mantra?: string;
 };
@@ -968,6 +969,68 @@ function getAccountInitials(name: string, email: string) {
   const parts = source.split(/\s+/).filter(Boolean);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
+function resizeProfilePhoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('invalid-image'));
+      return;
+    }
+
+    const imageUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const maxSize = 512;
+      const ratio = Math.min(1, maxSize / Math.max(image.width, image.height));
+      const width = Math.max(1, Math.round(image.width * ratio));
+      const height = Math.max(1, Math.round(image.height * ratio));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) {
+        URL.revokeObjectURL(imageUrl);
+        reject(new Error('canvas-unavailable'));
+        return;
+      }
+
+      context.fillStyle = '#f5f5f7';
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+      URL.revokeObjectURL(imageUrl);
+      resolve(canvas.toDataURL('image/jpeg', 0.84));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(imageUrl);
+      reject(new Error('image-load-failed'));
+    };
+    image.src = imageUrl;
+  });
+}
+
+function AccountAvatar({
+  photo,
+  initials,
+  className,
+  textClassName = '',
+}: {
+  photo?: string;
+  initials: string;
+  className: string;
+  textClassName?: string;
+}) {
+  return (
+    <div className={`relative shrink-0 overflow-hidden bg-[var(--sage)] text-[var(--on-sage)] ${className}`}>
+      {photo ? (
+        <img src={photo} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className={`grid h-full w-full place-items-center font-serif font-bold italic ${textClassName}`}>
+          {initials}
+        </span>
+      )}
+    </div>
+  );
 }
 
 function formatAuthError(message: string) {
@@ -5087,6 +5150,19 @@ export default function App() {
   });
   const wateredToday = wateringRitual.lastDate === todayKey;
   const accountInitials = getAccountInitials(account.name, account.email);
+  const handleProfilePhotoChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    try {
+      const photo = await resizeProfilePhoto(file);
+      setAccount(current => ({ ...current, photo }));
+      setSyncStatus('Foto de perfil actualizada.');
+    } catch {
+      setSyncStatus('No se pudo usar esa imagen. Prueba con una foto JPG o PNG.');
+    }
+  };
   const profileStats = useMemo(() => {
     const stats = notes.reduce((total, note) => {
       total.totalFocus += note.focusedMinutes || 0;
@@ -7472,9 +7548,12 @@ export default function App() {
 	            Plantar semilla
 	          </button>
 	          <div className="flex items-center gap-4 px-2 py-4 border-t border-[var(--border)]">
-	            <div className="w-10 h-10 rounded-full bg-[var(--sage)] flex items-center justify-center text-[var(--on-sage)] font-serif font-bold italic ring-2 ring-[var(--surface-strong)]">
-	              {accountInitials}
-	            </div>
+	            <AccountAvatar
+	              photo={account.photo}
+	              initials={accountInitials}
+	              className="h-10 w-10 rounded-full ring-2 ring-[var(--surface-strong)]"
+	              textClassName="text-sm"
+	            />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-black text-[var(--earth)] truncate">{account.name || 'Jardinero Digital'}</p>
               <p className="text-[10px] font-medium text-[var(--text-muted)] truncate">{account.email || 'Sin correo'}</p>
@@ -7661,10 +7740,13 @@ export default function App() {
                   className="space-y-5 pb-2 md:pb-8"
                 >
                   <section className="overflow-hidden rounded-[1.8rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-sm">
-                    <div className="flex items-center gap-4 px-5 py-5">
-	                      <div className="grid h-16 w-16 shrink-0 place-items-center rounded-[1.35rem] bg-[var(--sage)] text-2xl font-semibold text-[var(--on-sage)]">
-                        {accountInitials}
-                      </div>
+	                    <div className="flex items-center gap-4 px-5 py-5">
+	                      <AccountAvatar
+	                        photo={account.photo}
+	                        initials={accountInitials}
+	                        className="h-16 w-16 rounded-[1.35rem] ring-1 ring-[var(--border)]"
+	                        textClassName="text-2xl"
+	                      />
                       <div className="min-w-0 flex-1">
                         <h3 className="truncate text-2xl font-semibold tracking-tight text-[var(--earth)]">{account.name || 'Jardinero Digital'}</h3>
                         <p className="mt-1 truncate text-sm font-medium text-[var(--text-muted)]">{account.purpose || 'Un jardín para ideas y proyectos'}</p>
@@ -8911,9 +8993,12 @@ export default function App() {
                             onClick={() => setSettingsPage('profile')}
                             className="flex w-full items-center gap-4 px-4 py-4 text-left transition-colors active:bg-[var(--surface-hover)] sm:px-5 sm:hover:bg-[var(--surface-hover)]"
                           >
-                            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--sage)] text-xl font-semibold text-[var(--on-sage)] shadow-sm">
-                              {accountInitials}
-                            </div>
+                            <AccountAvatar
+                              photo={account.photo}
+                              initials={accountInitials}
+                              className="h-14 w-14 rounded-full shadow-sm ring-1 ring-[var(--border)]"
+                              textClassName="text-xl"
+                            />
                             <div className="min-w-0 flex-1">
                               <h4 className="truncate text-xl font-semibold tracking-tight text-[var(--earth)]">{account.name || 'Tu jardín'}</h4>
                               <p className="mt-0.5 truncate text-sm font-medium text-[var(--text-muted)]">{session?.user?.email || account.email || 'Sin sesión en la nube'}</p>
@@ -8969,6 +9054,45 @@ export default function App() {
                         transition={{ duration: 0.18 }}
                         className="space-y-6"
                       >
+                        {renderSettingsSection('Foto de perfil', (
+                          <div className="flex items-center gap-4 px-4 py-4">
+                            <AccountAvatar
+                              photo={account.photo}
+                              initials={accountInitials}
+                              className="h-20 w-20 rounded-[1.65rem] shadow-sm ring-1 ring-[var(--border)]"
+                              textClassName="text-2xl"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-[var(--earth)]">
+                                {account.photo ? 'Foto personalizada' : 'Agrega una foto'}
+                              </p>
+                              <p className="mt-1 text-xs font-medium leading-relaxed text-[var(--text-muted)]">
+                                Se usa en tu perfil, sidebar y ajustes. La imagen queda guardada solo en esta app.
+                              </p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <label className="inline-flex h-9 cursor-pointer items-center justify-center rounded-full bg-[var(--sage)] px-4 text-xs font-semibold text-[var(--on-sage)] shadow-sm soft-interaction">
+                                  Elegir foto
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleProfilePhotoChange}
+                                    className="sr-only"
+                                  />
+                                </label>
+                                {account.photo && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setAccount(current => ({ ...current, photo: undefined }))}
+                                    className="inline-flex h-9 items-center justify-center rounded-full bg-[var(--bg-app)] px-4 text-xs font-semibold text-[var(--text-muted)] ring-1 ring-[var(--border)] soft-interaction hover:text-[var(--sage)]"
+                                  >
+                                    Quitar
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
                         {renderSettingsSection('Identidad', (
                           <>
                             <label className="flex min-h-14 items-center gap-3 border-b border-[var(--border)] px-4 py-2.5">
