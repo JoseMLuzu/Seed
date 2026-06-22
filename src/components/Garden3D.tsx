@@ -1243,7 +1243,7 @@ function DaySun({ raining }: { raining: boolean }) {
   });
 
   return (
-    <group ref={sunRef} position={[30, 34, 34]}>
+    <group ref={sunRef} position={[28, 25.5, 38]}>
       <mesh>
         <sphereGeometry args={[5.4, 48, 48]} />
         <meshStandardMaterial
@@ -1633,9 +1633,20 @@ function BirdFlock({
               [0.8, 0, 0],
             ]}
             color={palette.skyNight}
+            opacity={opacity * 0.42}
+            transparent
+            lineWidth={2.8}
+          />
+          <Line
+            points={[
+              [-0.76, 0.03, 0.012],
+              [0, 0.3 + Math.sin(bird.delay) * 0.08, 0.012],
+              [0.76, 0.03, 0.012],
+            ]}
+            color="#fffaf1"
             opacity={opacity}
             transparent
-            lineWidth={2}
+            lineWidth={1.7}
           />
         </group>
       ))}
@@ -1850,6 +1861,8 @@ function SkyLife({
 
   return (
     <group>
+      <BirdFlock palette={palette} position={[-18, 22.8, 40]} speed={1.35} spread={54} scale={0.72} opacity={0.5} phase={1.4} />
+      <BirdFlock palette={palette} position={[34, 19.6, -26]} speed={1.05} spread={48} scale={0.56} opacity={0.36} phase={7.8} />
       <BannerPlane palette={palette} text={bannerText} />
     </group>
   );
