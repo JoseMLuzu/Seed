@@ -1850,56 +1850,6 @@ function SkyLife({
 
   return (
     <group>
-      <BirdFlock palette={palette} position={[-20, 21.5, 34]} speed={2.05} spread={62} scale={0.92} opacity={0.48} phase={2.1} />
-      <BirdFlock palette={palette} position={[-42, 18.5, -4]} speed={1.75} spread={58} scale={0.78} opacity={0.4} phase={6.8} />
-      <BirdFlock palette={palette} position={[24, 25.2, -48]} speed={1.45} spread={64} scale={0.72} opacity={0.34} phase={10.4} />
-      <HotAirBalloon
-        palette={palette}
-        position={[-24, 17.6, 34]}
-        colors={{ body: '#f7d39b', stripe: '#d96b53', accent: '#fff1cb' }}
-        scale={1.22}
-        phase={0.3}
-      />
-      <HotAirBalloon
-        palette={palette}
-        position={[22, 25.2, 38]}
-        colors={{ body: '#a8c7e8', stripe: '#446f8f', accent: '#f5eee0' }}
-        scale={0.92}
-        phase={2.1}
-      />
-      <HotAirBalloon
-        palette={palette}
-        position={[-46, 24.5, 4]}
-        colors={{ body: '#f3eee2', stripe: '#7fa6a2', accent: '#d7b778' }}
-        scale={0.64}
-        phase={1.4}
-        opacity={0.82}
-      />
-      <HotAirBalloon
-        palette={palette}
-        position={[48, 16.8, -10]}
-        colors={{ body: '#f1c79f', stripe: '#9c6f52', accent: '#f9ead7' }}
-        scale={0.84}
-        phase={3.6}
-        opacity={0.9}
-      />
-      <HotAirBalloon
-        palette={palette}
-        position={[-24, 29.5, -42]}
-        colors={{ body: '#e9b7c3', stripe: '#8d5f7a', accent: '#ffe6a8' }}
-        scale={0.78}
-        phase={4.5}
-      />
-      <HotAirBalloon
-        palette={palette}
-        position={[10, 32.5, -58]}
-        colors={{ body: '#c9d7ee', stripe: '#6e7fa0', accent: '#fff3cc' }}
-        scale={0.5}
-        phase={6.2}
-        opacity={0.74}
-      />
-      <SkyKite position={[35, 27.8, 20]} colors={{ body: '#f6ead7', tail: palette.trunkLight }} scale={0.84} phase={1.2} />
-      <SkyKite position={[-36, 28.8, -24]} colors={{ body: '#dce9df', tail: palette.connection }} scale={0.72} phase={5.6} />
       <BannerPlane palette={palette} text={bannerText} />
     </group>
   );
@@ -2690,7 +2640,6 @@ export default function Garden3D({
         <hemisphereLight intensity={0.64} color={isRaining ? "#d7f3ff" : "#ffffff"} groundColor="#182014" />
         
         {isDay && <DaySun raining={isRaining} />}
-        {isDay && !isRaining && <AmbientClouds palette={palette} compact={compact3D} />}
         {isDay && (
           <SkyLife
             palette={palette}
@@ -2708,7 +2657,6 @@ export default function Garden3D({
         )}
         {isRaining && (
           <>
-            <RainClouds palette={palette} />
             <RainField palette={palette} compact={compact3D} />
           </>
         )}
