@@ -1715,6 +1715,9 @@ function BannerPlane({ palette, text }: { palette: GardenPalette; text: string }
   const { camera } = useThree();
   const { scene } = useGLTF('/models/biplano_low_poly_v4_smooth.glb');
   const biplaneScene = useMemo(() => scene.clone(true), [scene]);
+  const orbitPosition = useMemo(() => new THREE.Vector3(), []);
+  const orbitTarget = useMemo(() => new THREE.Vector3(), []);
+  const orbitTangent = useMemo(() => new THREE.Vector3(), []);
 
   useEffect(() => {
     biplaneScene.traverse((child) => {
@@ -1728,15 +1731,26 @@ function BannerPlane({ palette, text }: { palette: GardenPalette; text: string }
   useFrame((state) => {
     if (!planeRef.current) return;
     const t = state.clock.elapsedTime;
-    planeRef.current.position.x = ((t * 2.15) % 58) - 29;
-    planeRef.current.position.y = 23.2 + Math.sin(t * 0.4) * 0.42;
-    planeRef.current.rotation.z = Math.sin(t * 0.5) * 0.035;
+    const angle = t * 0.16 + 2.25;
+    const orbitX = 42;
+    const orbitZ = 48;
+    orbitPosition.set(
+      Math.cos(angle) * orbitX,
+      23.2 + Math.sin(t * 0.4) * 0.42,
+      Math.sin(angle) * orbitZ,
+    );
+    orbitTangent.set(-Math.sin(angle) * orbitX, 0, Math.cos(angle) * orbitZ).normalize();
+    orbitTarget.copy(orbitPosition).add(orbitTangent);
+    planeRef.current.position.copy(orbitPosition);
+    planeRef.current.lookAt(orbitTarget);
+    planeRef.current.rotateY(Math.PI / 2);
+    planeRef.current.rotateZ(Math.sin(t * 0.5) * 0.035);
     if (propellerRef.current) propellerRef.current.rotation.x += 0.85;
     if (textRef.current) textRef.current.lookAt(camera.position);
   });
 
   return (
-    <group ref={planeRef} position={[-29, 23.2, 43]} scale={[1.22, 1.22, 1.22]}>
+    <group ref={planeRef} position={[-26, 23.2, 37]} scale={[1.22, 1.22, 1.22]}>
       <group scale={[0.82, 0.82, 0.82]} rotation={[0, 0, 0]}>
         <primitive object={biplaneScene} />
         <group ref={propellerRef} position={[2.45, 0, -0.02]} rotation={[0, Math.PI / 2, 0]}>
