@@ -2011,6 +2011,21 @@ function TodayView({
     firstName,
   } = todayData;
   const GardenMoodIcon = gardenMood.icon;
+  const primaryCardEyebrow = appLanguage === 'en' ? 'One thing for today' : 'Una cosa para hoy';
+  const primaryStats = [
+    {
+      label: appLanguage === 'en' ? 'Watered' : 'Riego',
+      value: wateredTodayCount,
+    },
+    {
+      label: appLanguage === 'en' ? 'Steps' : 'Pasos',
+      value: stepsToday,
+    },
+    {
+      label: appLanguage === 'en' ? 'Harvests' : 'Cosechas',
+      value: completedToday,
+    },
+  ];
   const todayRoutes = [
     {
       label: t('seeds'),
@@ -2266,22 +2281,30 @@ function TodayView({
         )}
       </section>
 
-      <section className="overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[linear-gradient(135deg,var(--surface-strong),var(--surface-soft))] p-4 shadow-sm sm:p-5">
-        <p className="mb-4 rounded-full bg-[var(--bg-app)] px-3 py-2 text-xs font-semibold leading-relaxed text-[var(--text-muted)]">
-          {contextualPhrase}
-        </p>
-        <button type="button" onClick={primaryClick} className="flex w-full items-start gap-4 text-left">
-          <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] shadow-sm ring-1 ring-[var(--border)] ${primaryAccent}`}>
-            <PrimaryIcon size={22} />
+      <section className="overflow-hidden rounded-[1.8rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[0_14px_34px_rgba(15,23,18,0.055)] sm:p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] ring-1 ring-[var(--border)] ${primaryAccent}`}>
+              <PrimaryIcon size={19} />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">{primaryCardEyebrow}</p>
+              <p className="mt-0.5 truncate text-xs font-semibold text-[var(--sage)]">{primaryEyebrow}</p>
+            </div>
+          </div>
+          <span className="hidden shrink-0 rounded-full bg-[var(--bg-app)] px-3 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] ring-1 ring-[var(--border)] sm:inline-flex">
+            {gardenMood.detail}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">{primaryEyebrow}</span>
-            <span className="mt-1 block truncate text-xl font-semibold tracking-tight text-[var(--earth)]">{primaryTitle}</span>
-            <span className="mt-1 block line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{primaryDetail}</span>
+        </div>
+
+        <button type="button" onClick={primaryClick} className="group block w-full rounded-[1.35rem] text-left transition-colors hover:bg-[var(--surface-hover)]">
+          <span className="block px-1 py-1">
+            <span className="block text-[1.45rem] font-semibold leading-tight tracking-tight text-[var(--earth)] sm:text-[1.65rem]">{primaryTitle}</span>
+            <span className="mt-2 block line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{primaryDetail}</span>
           </span>
-          <ChevronRight size={18} className="mt-3 shrink-0 text-[var(--text-muted)]" />
         </button>
-        <div className="mt-5 grid grid-cols-[1.4fr_1fr] gap-2">
+
+        <div className="mt-5 grid grid-cols-[1.35fr_1fr] gap-2">
           <button
             onClick={primaryClick}
             className="flex h-11 items-center justify-center rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
@@ -2295,12 +2318,20 @@ function TodayView({
             {secondaryActionLabel}
           </button>
         </div>
-        <div className="mt-4 flex flex-col gap-3 border-t border-[var(--border)] pt-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs font-semibold text-[var(--text-muted)]">
-            {appLanguage === 'en'
-              ? `${wateredTodayCount} watered · ${stepsToday} steps · ${completedToday} harvests today`
-              : `${wateredTodayCount} riegos · ${stepsToday} pasos · ${completedToday} cosechas hoy`}
-          </p>
+
+        <div className="mt-4 rounded-[1.25rem] bg-[var(--bg-app)] px-3 py-2.5 ring-1 ring-[var(--border)]">
+          <div className="flex items-start gap-2">
+            <Leaf size={14} className="mt-0.5 shrink-0 text-[var(--sage)]" />
+            <p className="text-xs font-semibold leading-relaxed text-[var(--text-muted)]">{contextualPhrase}</p>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[var(--border)] pt-3">
+            {primaryStats.map(item => (
+              <div key={item.label} className="min-w-0">
+                <p className="text-base font-semibold leading-none text-[var(--earth)]">{item.value}</p>
+                <p className="mt-1 truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">{item.label}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
