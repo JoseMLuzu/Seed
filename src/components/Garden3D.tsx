@@ -1731,16 +1731,16 @@ function BannerPlane({ palette, text }: { palette: GardenPalette; text: string }
   useFrame((state) => {
     if (!planeRef.current) return;
     const t = state.clock.elapsedTime;
-    planeRef.current.position.x = ((t * 2.45) % 76) - 38;
-    planeRef.current.position.y = 24.5 + Math.sin(t * 0.4) * 0.5;
+    planeRef.current.position.x = ((t * 2.15) % 58) - 29;
+    planeRef.current.position.y = 23.2 + Math.sin(t * 0.4) * 0.42;
     planeRef.current.rotation.z = Math.sin(t * 0.5) * 0.035;
     if (propellerRef.current) propellerRef.current.rotation.x += 0.85;
     if (textRef.current) textRef.current.lookAt(camera.position);
   });
 
   return (
-    <group ref={planeRef} position={[-38, 24.5, 30]} scale={[1, 1, 1]}>
-      <group scale={[0.72, 0.72, 0.72]} rotation={[0, 0, 0]}>
+    <group ref={planeRef} position={[-29, 23.2, 43]} scale={[1.22, 1.22, 1.22]}>
+      <group scale={[0.82, 0.82, 0.82]} rotation={[0, 0, 0]}>
         <primitive object={biplaneScene} />
         <group ref={propellerRef} position={[2.45, 0, -0.02]} rotation={[0, Math.PI / 2, 0]}>
           <mesh scale={[0.78, 0.78, 0.04]}>
@@ -1757,16 +1757,16 @@ function BannerPlane({ palette, text }: { palette: GardenPalette; text: string }
           </mesh>
         </group>
       </group>
-      <Line points={[[-2.05, 0.05, 0], [-5.05, 0.05, 0]]} color="#ffffff" opacity={0.72} transparent lineWidth={1.5} />
-      <group ref={textRef} position={[-7.75, 0.05, 0]}>
-        <mesh scale={[3.4, 0.78, 0.035]}>
+      <Line points={[[-2.2, 0.05, 0], [-5.55, 0.05, 0]]} color="#ffffff" opacity={0.76} transparent lineWidth={1.6} />
+      <group ref={textRef} position={[-8.55, 0.05, 0]}>
+        <mesh scale={[3.9, 0.9, 0.035]}>
           <boxGeometry args={[1, 1, 1]} />
           <meshStandardMaterial color="#fffaf1" roughness={0.72} transparent opacity={0.95} />
         </mesh>
         <Text
           position={[0, -0.03, 0.04]}
-          fontSize={0.34}
-          maxWidth={5.9}
+          fontSize={0.42}
+          maxWidth={6.8}
           textAlign="center"
           anchorX="center"
           anchorY="middle"
