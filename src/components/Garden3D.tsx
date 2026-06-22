@@ -1640,6 +1640,55 @@ function BirdFlock({
   );
 }
 
+function SkyCloudPack({
+  position,
+  scale = 1,
+  opacity = 0.78,
+  phase = 0,
+  drift = 1.2,
+  rotationY = 0,
+}: {
+  position: [number, number, number];
+  scale?: number;
+  opacity?: number;
+  phase?: number;
+  drift?: number;
+  rotationY?: number;
+}) {
+  const cloudRef = useRef<THREE.Group>(null);
+  const { scene } = useGLTF('/models/nubes_cartoon_pack.glb');
+  const cloudScene = useMemo(() => scene.clone(true), [scene]);
+
+  useEffect(() => {
+    cloudScene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = false;
+        child.receiveShadow = false;
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach((material) => {
+          material.transparent = true;
+          material.opacity = opacity;
+          material.depthWrite = false;
+        });
+      }
+    });
+  }, [cloudScene, opacity]);
+
+  useFrame((state) => {
+    if (!cloudRef.current) return;
+    const t = state.clock.elapsedTime + phase;
+    cloudRef.current.position.x = position[0] + Math.sin(t * 0.045) * drift;
+    cloudRef.current.position.y = position[1] + Math.cos(t * 0.06) * 0.28;
+    cloudRef.current.rotation.y = rotationY + Math.sin(t * 0.035) * 0.035;
+  });
+
+  return (
+    <group ref={cloudRef} position={position} scale={[scale, scale, scale]} rotation={[0, rotationY, 0]}>
+      <primitive object={cloudScene} />
+    </group>
+  );
+}
+
 function HotAirBalloon({
   palette,
   position,
@@ -1794,6 +1843,7 @@ function BannerPlane({ palette, text }: { palette: GardenPalette; text: string }
 
 useGLTF.preload('/models/biplano_low_poly_v4_smooth.glb');
 useGLTF.preload('/models/bandada_gaviotas_low_poly.glb');
+useGLTF.preload('/models/nubes_cartoon_pack.glb');
 
 function SkyKite({
   position,
@@ -1862,6 +1912,9 @@ function SkyLife({
 
   return (
     <group>
+      <SkyCloudPack position={[-34, 27.5, 31]} scale={0.54} opacity={0.82} phase={0.8} drift={1.8} rotationY={0.18} />
+      <SkyCloudPack position={[24, 30.5, -34]} scale={0.42} opacity={0.58} phase={5.2} drift={1.4} rotationY={-0.42} />
+      <SkyCloudPack position={[42, 21.2, 26]} scale={0.34} opacity={0.64} phase={8.4} drift={1.1} rotationY={0.72} />
       <BirdFlock position={[-18, 22.8, 40]} speed={1.35} spread={54} scale={0.2} opacity={0.84} phase={1.4} />
       <BirdFlock position={[34, 19.6, -26]} speed={1.05} spread={48} scale={0.15} opacity={0.62} phase={7.8} />
       <BannerPlane palette={palette} text={bannerText} />
