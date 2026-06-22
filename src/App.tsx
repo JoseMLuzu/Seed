@@ -2301,6 +2301,41 @@ function TodayView({
               ? `${wateredTodayCount} watered · ${stepsToday} steps · ${completedToday} harvests today`
               : `${wateredTodayCount} riegos · ${stepsToday} pasos · ${completedToday} cosechas hoy`}
           </p>
+        </div>
+      </section>
+
+      <section className={`overflow-hidden rounded-[1.65rem] border p-4 shadow-sm ${
+        dayAlreadyClosed
+          ? 'border-[var(--tone-harvest-border)] bg-[var(--tone-harvest-bg)]'
+          : 'border-[var(--border)] bg-[var(--surface-strong)]'
+      }`}>
+        <div className="flex items-start gap-3">
+          <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${
+            dayAlreadyClosed
+              ? 'bg-[var(--surface-strong)] text-[var(--tone-harvest)]'
+              : 'bg-[var(--bg-app)] text-[var(--sage)]'
+          }`}>
+            {dayAlreadyClosed ? <CheckCircle2 size={19} /> : <Archive size={19} />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {appLanguage === 'en' ? 'End of day' : 'Cierre del día'}
+            </p>
+            <h4 className="mt-1 text-lg font-semibold tracking-tight text-[var(--earth)]">
+              {dayAlreadyClosed
+                ? appLanguage === 'en' ? 'Today is already closed' : 'Hoy ya está cerrado'
+                : appLanguage === 'en' ? 'Save what today left you' : 'Guarda lo que te dejó hoy'}
+            </h4>
+            <p className="mt-1 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
+              {dayAlreadyClosed
+                ? appLanguage === 'en'
+                  ? 'Your closure is saved with your harvest memories.'
+                  : 'Tu cierre quedó guardado junto a tus aprendizajes.'
+                : appLanguage === 'en'
+                  ? 'A short reflection is enough. Close the loop and leave tomorrow lighter.'
+                  : 'Una frase basta. Cierra el ciclo y deja mañana más liviano.'}
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -2311,15 +2346,15 @@ function TodayView({
               setIntentionOutcome('');
               setShowDaySummary(true);
             }}
-            className={`inline-flex h-9 items-center justify-center gap-2 rounded-full px-3 text-xs font-semibold ring-1 ring-[var(--border)] transition-colors ${
+            className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold ring-1 transition-colors ${
               dayAlreadyClosed
-                ? 'bg-[var(--surface-strong)] text-[var(--text-muted)]'
-                : 'bg-[var(--bg-app)] text-[var(--sage)] hover:bg-[var(--surface-hover)]'
+                ? 'bg-[var(--surface-strong)] text-[var(--tone-harvest)] ring-[var(--tone-harvest-border)]'
+                : 'bg-[var(--sage)] text-[var(--on-sage)] ring-[var(--sage)] shadow-sm hover:opacity-92'
             }`}
           >
             {dayAlreadyClosed ? <CheckCircle2 size={14} /> : <Archive size={14} />}
             {dayAlreadyClosed
-              ? appLanguage === 'en' ? 'Day closed' : 'Día cerrado'
+              ? appLanguage === 'en' ? 'View' : 'Ver'
               : appLanguage === 'en' ? 'Close day' : 'Cerrar día'}
           </button>
         </div>
