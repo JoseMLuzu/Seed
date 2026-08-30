@@ -1,6 +1,3 @@
--- Seeds Supabase schema
--- Run this in Supabase SQL Editor.
-
 create table if not exists public.seed_planets (
   id text not null,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -93,7 +90,8 @@ alter table public.seed_notes replica identity full;
 do $$
 begin
   if not exists (
-    select 1 from pg_publication_tables
+    select 1
+    from pg_publication_tables
     where pubname = 'supabase_realtime'
       and schemaname = 'public'
       and tablename = 'seed_planets'
@@ -102,11 +100,13 @@ begin
   end if;
 
   if not exists (
-    select 1 from pg_publication_tables
+    select 1
+    from pg_publication_tables
     where pubname = 'supabase_realtime'
       and schemaname = 'public'
       and tablename = 'seed_notes'
   ) then
     alter publication supabase_realtime add table public.seed_notes;
   end if;
-end $$;
+end
+$$;
