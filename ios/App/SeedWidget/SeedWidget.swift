@@ -47,7 +47,7 @@ struct SeedWidgetSummary: Codable {
 }
 
 struct SeedWidgetProvider: TimelineProvider {
-    private let suiteName = "group.seedapp.com.ec"
+    private let suiteName = "group.seedapp.com.ec.62tpvt35fp"
     private let summaryKey = "seed-widget-summary"
 
     func placeholder(in context: Context) -> SeedWidgetEntry {

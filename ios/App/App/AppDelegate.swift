@@ -116,7 +116,7 @@ public class SeedWidgetDataPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "update", returnType: CAPPluginReturnPromise)
     ]
 
-    private let suiteName = "group.seedapp.com.ec"
+    private let suiteName = "group.seedapp.com.ec.62tpvt35fp"
     private let summaryKey = "seed-widget-summary"
 
     @objc func update(_ call: CAPPluginCall) {

@@ -394,8 +394,9 @@
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 6594PZ2M42;
+				DEVELOPMENT_TEAM = 62TPVT35FP;
 				INFOPLIST_FILE = App/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -418,8 +419,9 @@
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 6594PZ2M42;
+				DEVELOPMENT_TEAM = 62TPVT35FP;
 				INFOPLIST_FILE = App/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -441,7 +443,7 @@
 				CODE_SIGN_ENTITLEMENTS = SeedWidget/SeedWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 6594PZ2M42;
+				DEVELOPMENT_TEAM = 62TPVT35FP;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SeedWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -467,7 +469,7 @@
 				CODE_SIGN_ENTITLEMENTS = SeedWidget/SeedWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 6594PZ2M42;
+				DEVELOPMENT_TEAM = 62TPVT35FP;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SeedWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
