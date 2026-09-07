@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { runNativeAccountTask } from './accountPrivacy';
 import { LocalNotifications } from '@capacitor/local-notifications';
 
 type SeedReminderNote = {
@@ -65,11 +66,21 @@ export async function requestSeedNotificationPermission() {
   return requested.display === 'granted' ? 'granted' as const : 'denied' as const;
 }
 
-export async function clearSeedNotifications() {
+export async function clearSeedNotifications(strict = false) {
   if (!isNativeShell()) return;
   try {
-    await cancelSeedReminders();
+    await runNativeAccountTask(async () => {
+      await cancelSeedReminders();
+      if (strict) {
+        const delivered = await LocalNotifications.getDeliveredNotifications();
+        const notifications = delivered.notifications.filter(notification =>
+          notification.id === DAILY_REMINDER_ID ||
+          (notification.id >= WATERING_REMINDER_START_ID && notification.id < WATERING_REMINDER_START_ID + WATERING_REMINDER_LIMIT));
+        if (notifications.length) await LocalNotifications.removeDeliveredNotifications({ notifications });
+      }
+    });
   } catch (error) {
+    if (strict) throw error;
     console.warn('Seed notifications could not be cleared.', error);
   }
 }
@@ -78,52 +89,54 @@ export async function scheduleSeedReminders({ notes, reminderHour, language }: S
   if (!isNativeShell()) return false;
 
   try {
-    const permission = await requestSeedNotificationPermission();
-    if (permission !== 'granted') return false;
+    return await runNativeAccountTask(async () => {
+      const permission = await requestSeedNotificationPermission();
+      if (permission !== 'granted') return false;
 
-    await cancelSeedReminders();
+      await cancelSeedReminders();
 
-    const now = Date.now();
-    const livingNotes = notes
-      .filter(note => !note.inbox && !note.paused && note.growthStage !== 'bloom' && note.growthStage !== 'withered')
-      .map(note => ({ note, dueAt: wateringDueAt(note) }))
-      .sort((a, b) => a.dueAt - b.dueAt)
-      .slice(0, WATERING_REMINDER_LIMIT);
+      const now = Date.now();
+      const livingNotes = notes
+        .filter(note => !note.inbox && !note.paused && note.growthStage !== 'bloom' && note.growthStage !== 'withered')
+        .map(note => ({ note, dueAt: wateringDueAt(note) }))
+        .sort((a, b) => a.dueAt - b.dueAt)
+        .slice(0, WATERING_REMINDER_LIMIT);
 
-    const dailyBody = language === 'en'
-      ? 'Open Seed and choose one idea to water, move forward, or leave for later.'
-      : 'Abre Seed y elige una idea para regar, avanzar o dejar para después.';
+      const dailyBody = language === 'en'
+        ? 'Open Seed and choose one idea to water, move forward, or leave for later.'
+        : 'Abre Seed y elige una idea para regar, avanzar o dejar para después.';
 
-    const notifications = [
-      {
-        id: DAILY_REMINDER_ID,
-        title: language === 'en' ? 'A gentle garden review' : 'Revisión suave del jardín',
-        body: dailyBody,
-        schedule: {
-          at: nextReminderDate(reminderHour, now),
-          repeats: true,
-          every: 'day' as const,
-        },
-        sound: 'default',
-      },
-      ...livingNotes.map(({ note, dueAt }, index) => {
-        const dueDate = nextReminderDate(reminderHour, Math.max(now, dueAt) - 60_000);
-        const body = language === 'en'
-          ? `"${note.title}" may be ready for a quick review.`
-          : `"${note.title}" puede valer una revisión rápida.`;
-
-        return {
-          id: WATERING_REMINDER_START_ID + index,
-          title: language === 'en' ? 'An idea may need water' : 'Una idea puede necesitar riego',
-          body,
-          schedule: { at: dueDate },
+      const notifications = [
+        {
+          id: DAILY_REMINDER_ID,
+          title: language === 'en' ? 'A gentle garden review' : 'Revisión suave del jardín',
+          body: dailyBody,
+          schedule: {
+            at: nextReminderDate(reminderHour, now),
+            repeats: true,
+            every: 'day' as const,
+          },
           sound: 'default',
-        };
-      }),
-    ];
+        },
+        ...livingNotes.map(({ note, dueAt }, index) => {
+          const dueDate = nextReminderDate(reminderHour, Math.max(now, dueAt) - 60_000);
+          const body = language === 'en'
+            ? `"${note.title}" may be ready for a quick review.`
+            : `"${note.title}" puede valer una revisión rápida.`;
 
-    await LocalNotifications.schedule({ notifications });
-    return true;
+          return {
+            id: WATERING_REMINDER_START_ID + index,
+            title: language === 'en' ? 'An idea may need water' : 'Una idea puede necesitar riego',
+            body,
+            schedule: { at: dueDate },
+            sound: 'default',
+          };
+        }),
+      ];
+
+      await LocalNotifications.schedule({ notifications });
+      return true;
+    });
   } catch (error) {
     console.warn('Seed notifications could not be scheduled.', error);
     return false;

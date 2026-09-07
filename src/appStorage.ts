@@ -1,3 +1,5 @@
+import { scopedStorageKey, type AccountScope } from './accountScope';
+
 export function getStoredItem(key: string) {
   try {
     return localStorage.getItem(key);
@@ -25,7 +27,9 @@ export function removeStoredItem(key: string) {
 }
 
 export function getStoredNumber(key: string, fallback: number, min = -Infinity, max = Infinity) {
-  const value = Number(getStoredItem(key));
+  const stored = getStoredItem(key);
+  if (stored === null || !stored.trim()) return fallback;
+  const value = Number(stored);
   if (!Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
 }
@@ -51,4 +55,17 @@ export function getStoredJson<T>(key: string, fallback: T, validate?: (value: un
 
 export function setStoredJson(key: string, value: unknown) {
   return setStoredItem(key, JSON.stringify(value));
+}
+
+/** Bound to an immutable owner, never to a mutable global current-user variable. */
+export function createAccountStorage(scope: AccountScope) {
+  const keyFor = (key: string) => scopedStorageKey(scope, key);
+  return {
+    getStoredItem: (key: string) => getStoredItem(keyFor(key)),
+    setStoredItem: (key: string, value: string) => setStoredItem(keyFor(key), value),
+    removeStoredItem: (key: string) => removeStoredItem(keyFor(key)),
+    getStoredBoolean: (key: string, fallback: boolean) => getStoredBoolean(keyFor(key), fallback),
+    getStoredNumber: (key: string, fallback: number, min = -Infinity, max = Infinity) =>
+      getStoredNumber(keyFor(key), fallback, min, max),
+  };
 }

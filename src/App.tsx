@@ -65,14 +65,20 @@ import {
 } from 'lucide-react';
 import { Theme, SeedNote, Planet } from './types';
 import { addFocusMinutes, createDailyClosureNote, DAY_MS, daysSince, isDailyClosureForDate, toggleTaskForNote, wateringDue, waterNote as waterSeedNote } from './seedLogic';
-import { loadNotesFromDb, migrateLocalNotesToDb, saveNotesToDb } from './storage';
+import { loadLegacyNotes, loadNotesFromDb, saveNotesToDb } from './storage';
 import { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';
 import { deleteNoteFromSupabase, deletePlanetFromSupabase, pushGardenToSupabase, syncGardenWithSupabase } from './supabaseSync';
 import { normalizeNote, normalizeNotes } from './normalize';
 import { playSeedSound, preloadSeedSounds, unlockSeedAudio, type SeedSoundKind } from './sound';
-import { getStoredBoolean, getStoredItem, getStoredNumber, removeStoredItem, setStoredItem } from './appStorage';
+import { createAccountStorage, getStoredItem as getDeviceItem, removeStoredItem as removeDeviceItem } from './appStorage';
+import { AccountLease } from './accountScope';
+import AccountBoundary from './components/AccountBoundary';
+import { assertLegacyRecoveryOwner, reserveLegacyRecovery, mergeLegacyGarden } from './legacyRecovery';
 import { migrateFocusNotesIntoSeeds, normalizeFocusNoteMap } from './focusNotes';
+import AuthEntryPage from './components/AuthEntryPage';
+import LandingPage from './components/LandingPage';
+import { passwordPolicyError } from './authValidation';
 
 const Garden3D = lazy(() => import('./components/Garden3D'));
 
@@ -1035,17 +1041,13 @@ function AccountAvatar({
 
 function formatAuthError(message: string) {
   if (message.toLowerCase().includes('email rate limit exceeded')) {
-    return 'Límite de emails alcanzado. Para pruebas: Supabase > Authentication > Providers > Email > desactiva Confirm email, guarda y vuelve a intentar.';
+    return 'Se han solicitado demasiados correos. Espera unos minutos antes de volver a intentarlo.';
   }
+  if (message.toLowerCase().includes('invalid login credentials')) return 'El correo o la contraseña no son correctos.';
+  if (message.toLowerCase().includes('email not confirmed')) return 'Confirma tu correo antes de entrar. Revisa también la carpeta de spam.';
+  if (message.toLowerCase().includes('user already registered')) return 'Ya existe una cuenta con este correo. Puedes iniciar sesión.';
 
   return message;
-}
-
-function passwordPolicyError(password: string) {
-  if (password.length < 6) return 'La contraseña debe tener al menos 6 caracteres.';
-  if (!/[A-ZÁÉÍÓÚÑ]/.test(password)) return 'La contraseña debe incluir al menos una mayúscula.';
-  if (!/\d/.test(password)) return 'La contraseña debe incluir al menos un número.';
-  return '';
 }
 
 function GestureNoteSurface({
@@ -4249,822 +4251,28 @@ function PlantIllustration({ stage, progress, isGrowth, theme = 'earth' }: { sta
   );
 }
 
-function ProductOrbitPreview() {
-  const plants = [
-    { left: '48%', top: '17%', delay: 0, tone: 'bg-[#b56b3f]' },
-    { left: '70%', top: '37%', delay: 0.1, tone: 'bg-[#efd0d8]' },
-    { left: '30%', top: '44%', delay: 0.2, tone: 'bg-[#5d4634]' },
-    { left: '57%', top: '68%', delay: 0.3, tone: 'bg-[#7ab9d6]' },
-    { left: '22%', top: '67%', delay: 0.4, tone: 'bg-[#6d4bb3]' },
-  ];
 
-  return (
-    <div className="relative min-h-[34rem] overflow-hidden rounded-[2.5rem] border border-[#dfe8dd] bg-[#f9fbf8] shadow-[0_34px_120px_rgba(17,34,23,0.12)]">
-      <div className="absolute inset-x-6 top-6 flex items-center justify-between">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.26em] text-[#7a8f63]">Planeta Personal</p>
-          <h3 className="mt-1 font-serif text-3xl font-black text-[#19251d]">12 ideas creciendo</h3>
-        </div>
-        <span className="rounded-full bg-white px-4 py-2 text-xs font-black text-[#49623e] shadow-sm">3 por regar</span>
-      </div>
-      <div className="absolute left-1/2 top-[54%] h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#77a960] shadow-[inset_-28px_-32px_70px_rgba(25,47,30,0.24),0_34px_90px_rgba(75,105,63,0.28)]">
-        <div className="absolute left-12 top-16 h-16 w-28 rounded-full bg-[#a2bd76] rotate-[-20deg]" />
-        <div className="absolute bottom-14 right-12 h-20 w-32 rounded-full bg-[#4d8756] rotate-[18deg]" />
-        <div className="absolute right-20 top-24 h-10 w-16 rounded-full bg-[#d7d8a9] rotate-[28deg]" />
-        {plants.map((plant) => (
-          <motion.div
-            key={`${plant.left}-${plant.top}`}
-            className="absolute h-11 w-11 -translate-x-1/2 -translate-y-1/2"
-            style={{ left: plant.left, top: plant.top }}
-            animate={{ y: [0, -5, 0] }}
-            transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut', delay: plant.delay }}
-          >
-            <div className={`absolute bottom-0 left-1/2 h-6 w-8 -translate-x-1/2 rounded-b-xl rounded-t-md ${plant.tone} border border-black/10`} />
-            <div className="absolute bottom-5 left-1/2 h-8 w-2 -translate-x-1/2 rounded-full bg-[#355b34]" />
-            <div className="absolute bottom-9 left-2 h-5 w-7 rounded-full bg-[#7fb66b]" />
-            <div className="absolute bottom-10 right-1 h-5 w-7 rounded-full bg-[#9acb72]" />
-          </motion.div>
-        ))}
-      </div>
-      <div className="absolute bottom-6 left-6 right-6 grid grid-cols-3 gap-3">
-        {[
-          { label: 'Regar', value: '3' },
-          { label: 'Enfoque', value: '42m' },
-          { label: 'Cosechas', value: '8' },
-        ].map((item) => (
-          <div key={item.label} className="rounded-2xl bg-white/90 px-4 py-3 shadow-sm">
-            <p className="text-[9px] font-black uppercase tracking-widest text-[#7b8278]">{item.label}</p>
-            <p className="mt-1 font-serif text-2xl font-black text-[#19251d]">{item.value}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function MiniProductStrip() {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-      <div className="rounded-[2rem] border border-[#e3e8df] bg-white p-5 shadow-sm">
-        <div className="flex min-h-[18rem] flex-col rounded-[1.5rem] bg-[#f7faf5] p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#7a8f63]">Hoy</p>
-            <Droplets size={20} className="text-[#536f45]" />
-          </div>
-          <h3 className="mt-3 font-serif text-3xl font-black text-[#1b271f]">Riego diario</h3>
-          <p className="mt-2 text-sm font-semibold text-[#667466]">Un pequeño recordatorio para que tus buenas ideas no se queden olvidadas.</p>
-          <div className="mt-auto space-y-2 pt-5">
-            {['Volver a mirarla', 'Elegir un paso fácil', 'Dejarla más clara'].map((item, index) => (
-              <div key={item} className="flex min-h-11 items-center justify-between gap-3 rounded-2xl bg-white px-4 py-2.5 shadow-sm">
-                <span className="min-w-0 text-sm font-black leading-snug text-[#253229]">{item}</span>
-                <span className="h-2.5 shrink-0 rounded-full bg-[#7a8f63]/25" style={{ width: 36 + index * 14 }} />
-              </div>
-            ))}
-          </div>
-        </div>
-        <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Siempre sabes qué hacer</h4>
-        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">Abres Seeds y encuentras una acción simple: plantar algo nuevo, cuidar una idea o avanzar un paso.</p>
-      </div>
-
-      <div className="rounded-[2rem] border border-[#e3e8df] bg-white p-5 shadow-sm">
-        <div className="flex min-h-[18rem] flex-col rounded-[1.5rem] bg-[#101812] p-4 text-white">
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#b8d69c]">Concentración</p>
-          <div className="mt-8 text-center">
-            <p className="font-mono text-6xl font-black">24:18</p>
-            <p className="mt-2 text-xs font-black uppercase tracking-widest text-white/55">Una idea, cero ruido</p>
-          </div>
-          <div className="mt-auto rounded-2xl bg-white/10 p-3">
-            <div className="h-2 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full w-2/3 rounded-full bg-[#b8d69c]" />
-            </div>
-            <p className="mt-3 text-sm font-semibold text-white/70">Terminar el primer borrador</p>
-          </div>
-        </div>
-        <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Entra en modo jardín</h4>
-        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">La app se calma contigo: ves solo una idea, su siguiente paso y cómo crece mientras avanzas.</p>
-      </div>
-
-      <div className="rounded-[2rem] border border-[#e3e8df] bg-white p-5 shadow-sm">
-        <div className="flex min-h-[18rem] flex-col rounded-[1.5rem] bg-[#eef6ee] p-4">
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#7a8f63]">Cosecha</p>
-          <h3 className="mt-3 font-serif text-3xl font-black leading-tight text-[#1b271f]">Idea cosechada</h3>
-          <div className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
-            <Archive size={22} className="text-[#536f45]" />
-            <p className="mt-4 text-sm font-bold leading-relaxed text-[#536159]">Qué lograste, qué aprendiste y qué podría crecer después.</p>
-          </div>
-          <button className="mt-auto w-full rounded-2xl bg-[#19251d] py-3 text-sm font-black text-white">Cerrar ciclo</button>
-        </div>
-        <h4 className="mt-5 font-serif text-2xl font-black text-[#1b271f]">Terminar también se siente bien</h4>
-        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">Cada proyecto cerrado deja una pequeña cosecha: progreso, claridad y ganas para lo siguiente.</p>
-      </div>
-    </div>
-  );
-}
-
-function HeroGardenScene() {
-  const plants = [
-    { left: '30%', top: '33%', delay: 0, pot: '#b46a44', leaves: '#83b86b' },
-    { left: '49%', top: '18%', delay: 0.15, pot: '#efbfd1', leaves: '#7fb76d' },
-    { left: '66%', top: '42%', delay: 0.3, pot: '#6d4bb3', leaves: '#98c86f' },
-    { left: '43%', top: '68%', delay: 0.45, pot: '#7ab9d6', leaves: '#6fae62' },
-    { left: '76%', top: '69%', delay: 0.6, pot: '#5d4634', leaves: '#9cc975' },
-  ];
-
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden bg-[#f7faf6]">
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,#eaf6ff_0%,#eef8fb_28%,#f6faf5_56%,#f8faf7_100%)]" />
-      <div className="absolute inset-y-0 left-0 w-[72%] bg-[linear-gradient(90deg,rgba(248,250,247,0.94)_0%,rgba(248,250,247,0.76)_48%,rgba(248,250,247,0)_100%)]" />
-      <div className="absolute inset-x-0 top-[30%] h-[24rem] bg-[linear-gradient(180deg,rgba(234,246,255,0)_0%,rgba(248,250,247,0.82)_55%,rgba(248,250,247,0)_100%)]" />
-      <div className="absolute right-[9%] top-20 h-24 w-24 rounded-full bg-[#ffd56b] shadow-[0_0_90px_rgba(255,213,107,0.42)]" />
-      <motion.div
-        animate={{ y: [0, -10, 0] }}
-        transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute bottom-[-15rem] right-[-13rem] h-[38rem] w-[38rem] rounded-full bg-[#78a85f] opacity-50 shadow-[inset_-42px_-48px_90px_rgba(31,50,30,0.26),0_44px_120px_rgba(65,93,55,0.24)] sm:opacity-70 lg:bottom-[-16rem] lg:right-[-7rem] lg:h-[46rem] lg:w-[46rem] lg:opacity-100"
-      >
-        <div className="absolute left-20 top-28 h-20 w-36 rotate-[-22deg] rounded-full bg-[#a6c879]" />
-        <div className="absolute bottom-36 right-28 h-24 w-44 rotate-[17deg] rounded-full bg-[#4d8756]" />
-        <div className="absolute right-36 top-36 h-12 w-24 rotate-[26deg] rounded-full bg-[#d7d8a9]" />
-        <div className="absolute left-40 bottom-44 h-14 w-28 rotate-[-8deg] rounded-full bg-[#6f9855]" />
-        {plants.map((plant) => (
-          <motion.div
-            key={`${plant.left}-${plant.top}`}
-            className="absolute h-16 w-16 -translate-x-1/2 -translate-y-1/2"
-            style={{ left: plant.left, top: plant.top }}
-            animate={{ y: [0, -6, 0] }}
-            transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut', delay: plant.delay }}
-          >
-            <div className="absolute bottom-0 left-1/2 h-7 w-10 -translate-x-1/2 rounded-b-2xl rounded-t-lg border border-black/10" style={{ backgroundColor: plant.pot }} />
-            <div className="absolute bottom-6 left-1/2 h-9 w-2 -translate-x-1/2 rounded-full bg-[#355b34]" />
-            <div className="absolute bottom-11 left-2 h-6 w-9 rounded-full" style={{ backgroundColor: plant.leaves }} />
-            <div className="absolute bottom-12 right-1 h-6 w-9 rounded-full bg-[#a9d17d]" />
-          </motion.div>
-        ))}
-      </motion.div>
-      <div className="absolute bottom-16 left-6 hidden rounded-2xl border border-white/70 bg-white/80 px-5 py-4 shadow-[0_18px_60px_rgba(31,45,35,0.14)] backdrop-blur md:block lg:left-[48%]">
-        <p className="text-xs font-black text-[#7a8f63]">Riego diario</p>
-        <p className="mt-1 text-sm font-bold text-[#1f2d23]">3 ideas listas para revisar</p>
-      </div>
-      <div className="absolute right-8 top-[42%] hidden rounded-2xl border border-white/70 bg-white/80 px-5 py-4 shadow-[0_18px_60px_rgba(31,45,35,0.14)] backdrop-blur md:block">
-        <p className="text-xs font-black text-[#7a8f63]">Enfoque activo</p>
-        <p className="mt-1 font-mono text-2xl font-black text-[#1f2d23]">25:00</p>
-      </div>
-    </div>
-  );
-}
-
-function LandingPage({
-  onEnter,
-  onShowLogin,
-  onShowRegister,
-}: {
-  onEnter: () => void;
-  onShowLogin: () => void;
-  onShowRegister: () => void;
-}) {
-  const features = [
-    { icon: Leaf, title: 'Guarda ideas sin pensarlo tanto', text: 'Escribe eso que se te ocurrió y déjalo crecer poco a poco, sin tener que organizarlo todo desde el primer día.' },
-    { icon: Droplets, title: 'Vuelve a lo que vale la pena', text: 'Seeds te recuerda ideas que podrían seguir vivas, para revisarlas en segundos y decidir si quieres darles cariño.' },
-    { icon: Target, title: 'Menos distracción, más avance', text: 'Cuando quieras trabajar, eliges una idea y la app te deja con lo justo: foco, pasos y una sensación clara de progreso.' },
-    { icon: Box, title: 'Un jardín para cada parte de ti', text: 'Trabajo, estudio, vida personal o proyectos creativos pueden vivir separados, cada uno con su propio planeta visual.' },
-  ];
-  const ecosystems = [
-    { name: 'Pradera', theme: 'earth' as Theme, mood: 'Claro, fresco y tranquilo', sky: '#dff2ff', planet: '#93bd6b', accent: '#f5d36c', plant: 'Pasto suave' },
-    { name: 'Bosque', theme: 'forest' as Theme, mood: 'Profundo, calmado y enfocado', sky: '#dce9ef', planet: '#5f7f55', accent: '#b8d69c', plant: 'Pinos pequeños' },
-    { name: 'Floración', theme: 'bloom' as Theme, mood: 'Creativo, amable y luminoso', sky: '#ffeaf1', planet: '#f0b6c8', accent: '#fff0a8', plant: 'Cerezos rosados' },
-    { name: 'Nocturno', theme: 'night' as Theme, mood: 'Silencioso, íntimo y mental', sky: '#172338', planet: '#526a84', accent: '#f7e9a0', plant: 'Brotes lunares' },
-    { name: 'Jungla', theme: 'jungle' as Theme, mood: 'Vivo, intenso y explorador', sky: '#d8f5e2', planet: '#2e8a57', accent: '#ffd166', plant: 'Hojas tropicales' },
-    { name: 'Alien', theme: 'alien' as Theme, mood: 'Extraño, divertido y experimental', sky: '#e9ddff', planet: '#7251a7', accent: '#f3ff6b', plant: 'Setas brillantes' },
-    { name: 'Desierto', theme: 'desert' as Theme, mood: 'Minimal, cálido y despejado', sky: '#fff0d9', planet: '#d8a35f', accent: '#7cb7d8', plant: 'Cactus ideas' },
-    { name: 'Ártico', theme: 'arctic' as Theme, mood: 'Limpio, sereno y sin ruido', sky: '#e5f7fb', planet: '#a9d7e4', accent: '#8aa7d8', plant: 'Cristales verdes' },
-  ];
-  const [activeEcosystem, setActiveEcosystem] = useState(ecosystems[0]);
-  const ecosystemPreviewNotes = useMemo<SeedNote[]>(() => {
-    const now = Date.now();
-    const makePreviewNote = (
-      id: string,
-      title: string,
-      growthStage: SeedNote['growthStage'],
-      ageDays: number,
-      seedType: SeedNote['seedType'],
-      taskCount = 3,
-      completedCount = growthStage === 'bloom' ? taskCount : 1,
-    ): SeedNote => ({
-      id,
-      title,
-      content: growthStage === 'bloom'
-        ? 'Una idea que ya creció con el tiempo.'
-        : 'Una idea tomando forma dentro de tu jardín.',
-      createdAt: now - DAY_MS * ageDays,
-      updatedAt: now - DAY_MS * Math.max(1, Math.floor(ageDays / 3)),
-      tags: [],
-      isGrowth: growthStage !== 'seed',
-      tasks: Array.from({ length: taskCount }, (_, index) => ({
-        id: `${id}-task-${index}`,
-        text: index === 0 ? 'Elegir el siguiente paso' : `Avance ${index + 1}`,
-        completed: index < completedCount,
-      })),
-      growthStage,
-      lastWateredAt: now - DAY_MS,
-      wateringIntervalDays: 7,
-      seedType,
-      harvestedAt: growthStage === 'bloom' ? now - DAY_MS * Math.max(1, Math.floor(ageDays / 5)) : undefined,
-    });
-
-    return [
-      makePreviewNote('preview-canopy-1', 'Curso terminado', 'bloom', 48, 'learning', 4, 4),
-      makePreviewNote('preview-canopy-2', 'Proyecto lanzado', 'bloom', 42, 'project', 5, 5),
-      makePreviewNote('preview-canopy-3', 'Rutina creada', 'bloom', 36, 'goal', 3, 3),
-      makePreviewNote('preview-canopy-4', 'Idea convertida en plan', 'bloom', 31, 'idea', 4, 4),
-      makePreviewNote('preview-canopy-5', 'Propuesta enviada', 'bloom', 27, 'project', 3, 3),
-      makePreviewNote('preview-canopy-6', 'Aprendizaje aplicado', 'bloom', 22, 'learning', 3, 3),
-      makePreviewNote('preview-canopy-7', 'Sistema ordenado', 'bloom', 19, 'goal', 4, 4),
-      makePreviewNote('preview-canopy-8', 'Idea publicada', 'bloom', 17, 'project', 3, 3),
-      makePreviewNote('preview-sprout-1', 'Proyecto en marcha', 'sprout', 14, 'project', 4, 2),
-      makePreviewNote('preview-sprout-2', 'Nueva habilidad', 'sprout', 11, 'learning', 3, 1),
-      makePreviewNote('preview-sprout-3', 'Meta personal', 'sprout', 9, 'goal', 3, 2),
-      makePreviewNote('preview-sprout-4', 'Experimento creativo', 'sprout', 7, 'idea', 2, 1),
-      makePreviewNote('preview-sprout-5', 'Plan de lectura', 'sprout', 6, 'learning', 3, 1),
-      makePreviewNote('preview-sprout-6', 'Mejora pendiente', 'sprout', 5, 'project', 2, 1),
-      makePreviewNote('preview-seed-1', 'Idea nueva', 'seed', 2, 'idea', 0, 0),
-      makePreviewNote('preview-seed-2', 'Algo por explorar', 'seed', 1, 'learning', 0, 0),
-      makePreviewNote('preview-seed-3', 'Pregunta interesante', 'seed', 1, 'idea', 0, 0),
-      makePreviewNote('preview-seed-4', 'Posible proyecto', 'seed', 1, 'project', 0, 0),
-    ];
-  }, []);
-
-  const welcomeHighlights = [
-    { label: 'Planta', value: 'Ideas' },
-    { label: 'Cuida', value: 'Proyectos' },
-    { label: 'Vuelve', value: 'Foco' },
-  ];
-
-  return (
-    <main className="min-h-screen overflow-y-auto bg-[#f5f6f2] text-[#111813]">
-      <section className="relative min-h-screen overflow-hidden px-5 py-[calc(env(safe-area-inset-top)+1.25rem)] sm:px-8 lg:px-12">
-        <HeroGardenScene />
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(245,246,242,0.46),rgba(245,246,242,0.94)_62%,#f5f6f2)]" />
-
-        <nav className="relative z-10 mx-auto flex max-w-6xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/icon-192.png" alt="Seeds" className="h-12 w-12 rounded-[1.15rem] shadow-sm" />
-            <div>
-              <p className="text-xl font-semibold leading-none tracking-tight text-[#111813]">Seeds</p>
-              <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.22em] text-[#71836b]">Grow What Matters</p>
-            </div>
-          </div>
-          <button onClick={onShowLogin} className="rounded-full border border-white/70 bg-white/70 px-4 py-2 text-sm font-semibold text-[#1c241f] shadow-sm backdrop-blur-xl transition-colors hover:bg-white">
-            Iniciar sesión
-          </button>
-        </nav>
-
-        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-6rem)] max-w-6xl grid-cols-1 gap-8 py-10 lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-center">
-          <section className="mx-auto max-w-3xl text-center lg:mx-0 lg:text-left">
-            <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#6e835d]">
-              Bienvenido a Seeds
-            </motion.p>
-            <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }} className="mt-5 text-5xl font-semibold leading-[0.96] tracking-tight text-[#101612] sm:text-7xl lg:text-8xl">
-              Haz crecer lo que importa.
-            </motion.h1>
-            <motion.p initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="mx-auto mt-6 max-w-2xl text-lg font-medium leading-relaxed text-[#536159] sm:text-xl lg:mx-0">
-              Guarda ideas, conviértelas en pasos pequeños y vuelve a ellas con calma. Un jardín privado para proyectos, hábitos y pensamientos que no quieres perder.
-            </motion.p>
-
-            <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }} className="mt-9 flex flex-col gap-3 sm:mx-auto sm:max-w-md lg:mx-0">
-              <button onClick={onShowRegister} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-[#111813] px-6 text-base font-semibold text-white shadow-[0_18px_50px_rgba(17,24,19,0.22)] transition-transform active:scale-[0.99]">
-                Crear cuenta
-                <ArrowRight size={18} />
-              </button>
-              <button onClick={onShowLogin} className="flex h-14 items-center justify-center rounded-2xl border border-white/80 bg-white/78 px-6 text-base font-semibold text-[#111813] shadow-sm backdrop-blur-xl transition-colors hover:bg-white">
-                Ya tengo cuenta
-              </button>
-              <button onClick={onEnter} className="h-12 text-sm font-semibold text-[#647160] transition-colors hover:text-[#111813]">
-                Explorar sin cuenta
-              </button>
-            </motion.div>
-
-            <div className="mx-auto mt-8 grid max-w-md grid-cols-3 gap-2 lg:mx-0">
-              {welcomeHighlights.map((item) => (
-                <div key={item.label} className="rounded-2xl border border-white/70 bg-white/58 px-3 py-3 text-center shadow-sm backdrop-blur-xl">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#7c8876]">{item.label}</p>
-                  <p className="mt-1 text-sm font-semibold text-[#172019]">{item.value}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <aside className="mx-auto w-full max-w-[25rem] rounded-[2.2rem] border border-white/70 bg-white/72 p-4 shadow-[0_30px_90px_rgba(31,45,35,0.16)] backdrop-blur-2xl">
-            <div className="rounded-[1.7rem] bg-[#f7faf4] p-4 shadow-inner shadow-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#75856f]">Hoy</p>
-                  <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[#111813]">Tu jardín</h2>
-                </div>
-                <span className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-[#6f7d4f] shadow-sm">
-                  <Leaf size={22} />
-                </span>
-              </div>
-
-              <div className="mt-5 overflow-hidden rounded-[1.45rem] bg-[#dfead8] p-5">
-                <div className="relative mx-auto h-48 w-48 rounded-full bg-[#88af68] shadow-[inset_-22px_-28px_48px_rgba(33,61,38,0.22),0_24px_60px_rgba(75,112,70,0.22)]">
-                  <div className="absolute left-8 top-9 h-9 w-16 rotate-[-18deg] rounded-full bg-[#b8d69c]" />
-                  <div className="absolute bottom-10 right-8 h-12 w-20 rotate-[18deg] rounded-full bg-[#5f935f]" />
-                  <div className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2">
-                    <div className="absolute bottom-0 left-1/2 h-7 w-8 -translate-x-1/2 rounded-b-2xl rounded-t-lg bg-[#b8794d]" />
-                    <div className="absolute bottom-6 left-1/2 h-10 w-1.5 -translate-x-1/2 rounded-full bg-[#315735]" />
-                    <div className="absolute bottom-12 left-1 h-6 w-10 rounded-full bg-[#83b86b]" />
-                    <div className="absolute bottom-12 right-1 h-6 w-10 rounded-full bg-[#c0df92]" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 space-y-2">
-                {[
-                  { title: 'Idea lista para cuidar', detail: 'Elegir el primer paso' },
-                  { title: 'Riego pendiente', detail: 'Revisar en 20 segundos' },
-                  { title: 'Foco sugerido', detail: '25 minutos sin ruido' },
-                ].map((item) => (
-                  <div key={item.title} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm">
-                    <span className="grid h-9 w-9 place-items-center rounded-full bg-[#edf4e8] text-[#6e835d]">
-                      <CheckCircle2 size={17} />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-[#172019]">{item.title}</span>
-                      <span className="mt-0.5 block truncate text-xs font-medium text-[#73806f]">{item.detail}</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </aside>
-        </div>
-      </section>
-    </main>
-  );
-
-  return (
-    <main className="min-h-screen overflow-x-hidden bg-[#f8faf7] text-[#162019]">
-      <section className="relative min-h-[88vh] overflow-hidden border-b border-[#e4ebe1] px-5 sm:px-8 lg:px-12">
-        <HeroGardenScene />
-        <nav className="relative z-10 mx-auto flex max-w-7xl items-center justify-between py-6">
-          <div className="flex items-center gap-3.5">
-            <img src="/icon-192.png" alt="Seeds" className="h-14 w-14 rounded-[1.35rem] shadow-sm" />
-            <div>
-              <p className="font-serif text-3xl font-black leading-none text-[#1f2d23]">Seeds</p>
-              <p className="text-[10px] font-black uppercase text-[#7a8f63]">Grow What Matters</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={onShowLogin} className="rounded-full border border-[#dfe8dd] bg-white px-4 py-2 text-sm font-black text-[#1f2d23] shadow-sm transition-colors hover:bg-[#f1f6ef]">
-              Iniciar sesión
-            </button>
-            <button onClick={onShowRegister} className="rounded-full bg-[#1f2d23] px-4 py-2 text-sm font-black text-white shadow-sm transition-colors hover:bg-[#324434]">
-              Crear cuenta
-            </button>
-          </div>
-        </nav>
-
-        <div className="relative z-10 mx-auto flex min-h-[68vh] max-w-7xl items-center py-10 sm:py-14">
-          <div className="max-w-4xl pb-8">
-            <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] font-black uppercase text-[#7a8f63]">
-              Un jardín para tus ideas, planes y proyectos
-            </motion.p>
-            <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="mt-6 max-w-4xl font-serif text-5xl font-black leading-[0.95] text-[#162019] sm:text-7xl lg:text-8xl">
-              Haz crecer tus ideas.
-            </motion.h1>
-            <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="mt-7 max-w-2xl text-lg font-semibold leading-relaxed text-[#536159] sm:text-xl">
-              Seeds convierte esas ideas que normalmente se pierden en algo que puedes cuidar. Planta lo que se te ocurre, vuelve cuando haga falta y mira cómo toma forma sin sentir que tienes otra app complicada que aprender.
-            </motion.p>
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <button onClick={onShowRegister} className="rounded-2xl bg-[#1f2d23] px-6 py-4 font-black text-white shadow-[0_18px_50px_rgba(31,45,35,0.22)] transition-colors hover:bg-[#324434]">
-                Crear mi jardín
-              </button>
-              <button onClick={onShowLogin} className="rounded-2xl border border-[#dfe8dd] bg-white px-6 py-4 font-black text-[#1f2d23] shadow-sm transition-colors hover:bg-[#f1f6ef]">
-                Ya tengo cuenta
-              </button>
-              <a href="#producto" className="rounded-2xl px-6 py-4 text-center font-black text-[#536159] transition-colors hover:text-[#1f2d23]">
-                Ver producto
-              </a>
-            </motion.div>
-            <div className="mt-10 grid max-w-xl grid-cols-3 gap-3">
-              {[
-                { label: 'Revisar', value: '20s' },
-                { label: 'Enfocar', value: '1 idea' },
-                { label: 'Guardar', value: 'Siempre' },
-              ].map((item) => (
-                <div key={item.label} className="rounded-2xl border border-[#dfe8dd] bg-white px-4 py-3 shadow-sm">
-                  <p className="text-[9px] font-black uppercase text-[#7b8278]">{item.label}</p>
-                  <p className="mt-1 font-serif text-2xl font-black text-[#1b271f]">{item.value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="producto" className="border-y border-[#e4ebe1] bg-white px-5 py-20 sm:px-8 lg:px-12">
-        <div className="mx-auto max-w-7xl">
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-[0.78fr_1.22fr] lg:items-end">
-            <div>
-              <p className="text-[10px] font-black uppercase text-[#7a8f63]">Por qué se siente diferente</p>
-              <h2 className="mt-4 max-w-3xl font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">No guardes ideas para olvidarlas. Dales un lugar donde crecer.</h2>
-            </div>
-            <p className="text-lg font-semibold leading-relaxed text-[#536159]">
-              Muchas apps terminan siendo cajones llenos de notas. Seeds se siente más como cuidar un jardín: vuelves con curiosidad, eliges algo pequeño y lo haces avanzar.
-            </p>
-          </div>
-          <div className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {features.map((feature) => (
-              <div key={feature.title} className="rounded-[2rem] border border-[#e3e8df] bg-[#f8faf7] p-6">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-[#536f45] shadow-sm">
-                  <feature.icon size={22} />
-                </div>
-                <h3 className="mt-6 font-serif text-2xl font-black text-[#162019]">{feature.title}</h3>
-                <p className="mt-3 text-sm font-semibold leading-relaxed text-[#667466]">{feature.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-[#f8faf7] px-5 py-20 sm:px-8 lg:px-12">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-10 lg:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.05fr)] lg:items-center">
-          <ProductOrbitPreview />
-          <div>
-            <p className="text-[10px] font-black uppercase text-[#7a8f63]">Mundo 3D</p>
-            <h2 className="mt-4 max-w-3xl font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Tu progreso se vuelve algo que puedes ver.</h2>
-            <p className="mt-5 text-lg font-semibold leading-relaxed text-[#536159]">
-              En vez de mirar una lista fría, ves un pequeño mundo lleno de ideas. Algunas apenas nacen, otras necesitan atención y otras ya están listas para florecer.
-            </p>
-            <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {[
-                { title: 'Encuentra tu idea rápido', text: 'Tocas una planta y el mundo se acerca a ella, para que no tengas que buscar entre listas interminables.' },
-                { title: 'El jardín también respira', text: 'La luz, el movimiento y los ecosistemas hacen que volver a tus ideas se sienta menos como una tarea y más como un ritual.' },
-                { title: 'Cada jardín tiene personalidad', text: 'Puedes tener un espacio para trabajo, otro para estudio y otro para tus proyectos personales.' },
-                { title: 'Ves cómo va creciendo', text: 'Una idea empieza como semilla, se vuelve brote y puede terminar como árbol cuando la haces avanzar.' },
-              ].map((item) => (
-                <div key={item.title} className="rounded-2xl border border-[#e3e8df] bg-white p-5 shadow-sm">
-                  <h3 className="font-serif text-xl font-black text-[#162019]">{item.title}</h3>
-                  <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">{item.text}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-[#f8faf7] px-5 py-20 sm:px-8 lg:px-12">
-        <div className="mx-auto max-w-7xl">
-          <div className="mx-auto max-w-3xl text-center">
-            <p className="text-[10px] font-black uppercase text-[#7a8f63]">Interfaz</p>
-            <h2 className="mt-4 font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Una app que te invita a volver.</h2>
-            <p className="mt-5 text-lg font-semibold leading-relaxed text-[#536159]">
-              Seeds no quiere llenarte de botones. Quiere ayudarte a recordar qué importa, elegir un paso pequeño y sentir que tus ideas siguen vivas.
-            </p>
-          </div>
-          <div className="mt-12">
-            <MiniProductStrip />
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-white px-5 py-20 sm:px-8 lg:px-12">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:items-center">
-          <div>
-            <p className="text-[10px] font-black uppercase text-[#7a8f63]">Ecosistemas</p>
-            <h2 className="mt-4 font-serif text-5xl font-black leading-[0.98] text-[#162019] sm:text-6xl">Separa tu vida sin complicarla.</h2>
-            <p className="mt-5 text-lg font-semibold leading-relaxed text-[#536159]">
-              Tu trabajo, tus estudios, tus planes personales y tus ideas raras no tienen por qué mezclarse. Cada mundo puede tener su propia energía, color y ritmo.
-            </p>
-            <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:max-w-xl">
-              {ecosystems.map((item) => {
-                const isActive = activeEcosystem.name === item.name;
-                return (
-                  <button
-                    key={item.name}
-                    type="button"
-                    onMouseEnter={() => setActiveEcosystem(item)}
-                    onFocus={() => setActiveEcosystem(item)}
-                    onClick={() => setActiveEcosystem(item)}
-                    className={`group rounded-2xl border p-3 text-left transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(31,45,35,0.12)] ${isActive ? 'border-[#6e9b58] bg-[#f4faf1] shadow-sm' : 'border-[#e3e8df] bg-[#f8faf7]'}`}
-                  >
-                    <div className="h-12 rounded-2xl transition-transform duration-200 group-hover:scale-[1.03]" style={{ background: `linear-gradient(135deg, ${item.sky}, ${item.planet} 58%, ${item.accent})` }} />
-                    <p className="mt-3 text-sm font-black text-[#1b271f]">{item.name}</p>
-                    <p className="mt-1 text-[11px] font-bold leading-snug text-[#667466]">{item.plant}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="relative">
-            <Suspense fallback={
-              <div className="grid h-[31rem] place-items-center rounded-[2.5rem] border border-[#dfe8dd] bg-[#f8faf7] text-center shadow-[0_34px_120px_rgba(17,34,23,0.12)]">
-                <div>
-                  <Box className="mx-auto text-[#6e9b58]" size={36} />
-                  <p className="mt-4 font-serif text-3xl font-black text-[#162019]">Cargando mundo 3D</p>
-                  <p className="mt-2 text-sm font-semibold text-[#667466]">El mismo planeta que verás dentro de Seeds.</p>
-                </div>
-              </div>
-            }>
-              <Garden3D
-                key={`${activeEcosystem.theme}-preview`}
-                notes={ecosystemPreviewNotes}
-                theme={activeEcosystem.theme}
-                planetName={activeEcosystem.name}
-                onSelectNote={() => undefined}
-                variant="preview"
-              />
-            </Suspense>
-            <div className="pointer-events-none absolute bottom-6 left-6 right-6 rounded-2xl border border-white/20 bg-black/25 px-5 py-4 text-white shadow-2xl backdrop-blur-xl">
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/55">Así se ve en la app</p>
-              <p className="mt-1 text-sm font-semibold leading-relaxed text-white/78">{activeEcosystem.mood}. {activeEcosystem.plant} para tus ideas.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="px-5 py-20 sm:px-8 lg:px-12">
-        <div className="mx-auto max-w-5xl rounded-[2.5rem] bg-[#162019] px-6 py-14 text-center text-white sm:px-12">
-          <Sparkles className="mx-auto text-[#b8d69c]" size={28} />
-          <h2 className="mx-auto mt-5 max-w-3xl font-serif text-5xl font-black leading-[0.98] sm:text-6xl">Empieza con una idea pequeña. Deja que crezca contigo.</h2>
-          <p className="mx-auto mt-5 max-w-2xl text-lg font-semibold leading-relaxed text-white/70">
-            No necesitas tener todo claro. Solo planta una idea, vuelve cuando puedas y deja que Seeds te ayude a convertirla en algo real.
-          </p>
-          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-            <button onClick={onShowRegister} className="rounded-2xl bg-white px-6 py-4 font-black text-[#162019]">
-              Crear cuenta
-            </button>
-            <button onClick={onEnter} className="rounded-2xl border border-white/20 px-6 py-4 font-black text-white">
-              Explorar sin cuenta
-            </button>
-          </div>
-        </div>
-      </section>
-    </main>
-  );
-}
-
-function AuthEntryPage({
-  mode,
-  onBack,
-  onSwitchMode,
-  onEnter,
-  accountName,
-  setAccountName,
-  authEmail,
-  setAuthEmail,
-  authPassword,
-  setAuthPassword,
-  authConfirmPassword,
-  setAuthConfirmPassword,
-  authDisabledReason,
-  authStatus,
-  onSignIn,
-  onSignUp,
-}: {
-  mode: 'login' | 'register';
-  onBack: () => void;
-  onSwitchMode: () => void;
-  onEnter: () => void;
-  accountName: string;
-  setAccountName: (value: string) => void;
-  authEmail: string;
-  setAuthEmail: (value: string) => void;
-  authPassword: string;
-  setAuthPassword: (value: string) => void;
-  authConfirmPassword: string;
-  setAuthConfirmPassword: (value: string) => void;
-  authDisabledReason: string;
-  authStatus: string;
-  onSignIn: () => void;
-  onSignUp: () => void;
-}) {
-  const isRegister = mode === 'register';
-  const nameMissing = isRegister && !accountName.trim();
-  const registerPasswordIssue = isRegister ? passwordPolicyError(authPassword) : '';
-  const confirmPasswordMissing = isRegister && !authConfirmPassword ? 'Confirma tu contraseña para crear tu jardín.' : '';
-  const confirmPasswordIssue = isRegister && authConfirmPassword && authPassword !== authConfirmPassword ? 'Las contraseñas no coinciden.' : '';
-  const disabledReason =
-    nameMissing ? 'Escribe tu nombre para crear tu jardín.' :
-    authDisabledReason || registerPasswordIssue || confirmPasswordMissing || confirmPasswordIssue;
-  const submit = () => {
-    if (disabledReason) return;
-    if (isRegister) onSignUp();
-    else onSignIn();
-  };
-  const benefits = isRegister
-    ? [
-        { title: 'Tus ideas contigo', text: 'Empieza en un dispositivo y vuelve desde otro sin perder lo que estabas cuidando.' },
-        { title: 'Sin configurar mil cosas', text: 'Planta una idea ahora. Ya habrá tiempo para darle forma cuando vuelva a llamar tu atención.' },
-        { title: 'Recordatorios amables', text: 'El riego te ayuda a volver a ideas buenas sin culpa, presión ni listas eternas.' },
-        { title: 'Un paso a la vez', text: 'Cuando quieras avanzar, Seeds te ayuda a mirar una sola idea y hacer algo pequeño.' },
-      ]
-    : [
-        { title: 'Vuelve sin perderte', text: 'Encuentra tus jardines, tus ideas y el siguiente paso que dejaste pendiente.' },
-        { title: 'Ideas que piden atención', text: 'Seeds te muestra lo que vale la pena volver a mirar antes de que se enfríe.' },
-        { title: 'Foco más fácil', text: 'Retoma una idea, pon un tiempo y avanza sin rodearte de distracciones.' },
-        { title: 'Tu progreso guardado', text: 'Cada idea terminada deja claridad para la próxima vez que quieras crear algo.' },
-      ];
-
-  return (
-    <main className="min-h-dvh overflow-y-auto bg-[#f8faf7] text-[#162019]">
-      <div className="mx-auto flex min-h-dvh max-w-7xl flex-col px-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-[calc(env(safe-area-inset-top)+1rem)] sm:px-8 lg:px-12">
-        <header className="flex items-center justify-between gap-4">
-          <button onClick={onBack} className="inline-flex items-center gap-3 rounded-full border border-[#dfe8dd] bg-white px-4 py-2 text-sm font-black text-[#1f2d23] shadow-sm transition-colors hover:bg-[#f1f6ef]">
-            <ChevronLeft size={17} />
-            <span>Volver</span>
-          </button>
-          <button onClick={onSwitchMode} className="rounded-full border border-[#dfe8dd] bg-white px-4 py-2 text-sm font-black text-[#536159] shadow-sm transition-colors hover:bg-[#f1f6ef]">
-            {isRegister ? 'Iniciar sesión' : 'Crear cuenta'}
-          </button>
-        </header>
-
-        <div className="grid flex-1 grid-cols-1 gap-8 py-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] lg:items-center lg:gap-12">
-          <section className="hidden lg:block">
-            <div className="flex items-center gap-3.5">
-              <img src="/icon-192.png" alt="Seeds" className="h-14 w-14 rounded-[1.35rem] shadow-sm" />
-              <div>
-                <p className="font-serif text-4xl font-black leading-none text-[#1f2d23]">Seeds</p>
-                <p className="text-[10px] font-black uppercase text-[#7a8f63]">Grow What Matters</p>
-              </div>
-            </div>
-
-            <p className="mt-14 text-[11px] font-black uppercase text-[#7a8f63]">
-              {isRegister ? 'Tu jardín empieza aquí' : 'Vuelve a tu jardín'}
-            </p>
-            <h1 className="mt-5 max-w-3xl font-serif text-6xl font-black leading-[0.94] text-[#162019]">
-              {isRegister ? 'Un lugar bonito para no perder tus mejores ideas.' : 'Tus ideas siguen creciendo donde las dejaste.'}
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg font-semibold leading-relaxed text-[#536159]">
-              Seeds te ayuda a guardar lo que se te ocurre, volver con ganas y avanzar poco a poco. Sin tableros infinitos. Sin sentir que tienes que organizar tu vida entera.
-            </p>
-
-            <div className="mt-9 grid max-w-2xl grid-cols-2 gap-4">
-              {benefits.map((benefit) => (
-                <div key={benefit.title} className="rounded-2xl border border-[#e3e8df] bg-white p-5 shadow-sm">
-                  <CheckCircle2 size={20} className="text-[#6e9b58]" />
-                  <h3 className="mt-4 font-serif text-xl font-black text-[#162019]">{benefit.title}</h3>
-                  <p className="mt-2 text-sm font-semibold leading-relaxed text-[#667466]">{benefit.text}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-8 max-w-2xl overflow-hidden rounded-[2rem] border border-[#dfe8dd] bg-[#eef7ed] p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-black uppercase text-[#7a8f63]">Vista previa</p>
-                  <h3 className="mt-1 font-serif text-3xl font-black text-[#162019]">Tu primer jardín</h3>
-                </div>
-                <span className="rounded-full bg-white px-4 py-2 text-xs font-black text-[#49623e] shadow-sm">Guardado</span>
-              </div>
-              <div className="mt-5 grid grid-cols-[140px_minmax(0,1fr)] gap-5">
-                <div className="relative h-36 rounded-full bg-[#78a85f] shadow-[inset_-18px_-24px_44px_rgba(31,50,30,0.24)]">
-                  <div className="absolute left-8 top-8 h-8 w-14 rotate-[-18deg] rounded-full bg-[#a6c879]" />
-                  <div className="absolute bottom-8 right-6 h-10 w-16 rotate-[16deg] rounded-full bg-[#4d8756]" />
-                  <div className="absolute left-14 top-14 h-8 w-8">
-                    <div className="absolute bottom-0 left-1/2 h-4 w-6 -translate-x-1/2 rounded-b-xl rounded-t-md bg-[#b46a44]" />
-                    <div className="absolute bottom-4 left-1/2 h-5 w-1 -translate-x-1/2 rounded-full bg-[#355b34]" />
-                    <div className="absolute bottom-8 left-0 h-4 w-6 rounded-full bg-[#83b86b]" />
-                    <div className="absolute bottom-8 right-0 h-4 w-6 rounded-full bg-[#a9d17d]" />
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  {[
-                    { label: 'Ideas por cuidar', value: '3' },
-                    { label: 'Buen momento para', value: '25 min' },
-                    { label: 'Siguiente paso', value: 'Escribir el primer borrador' },
-                  ].map((item) => (
-                    <div key={item.label} className="rounded-2xl bg-white px-4 py-3 shadow-sm">
-                      <p className="text-[10px] font-black uppercase text-[#7b8278]">{item.label}</p>
-                      <p className="mt-1 text-sm font-black text-[#1f2d23]">{item.value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="mx-auto w-full max-w-[29rem] rounded-[2rem] border border-[#dfe8dd] bg-white p-5 shadow-[0_30px_100px_rgba(31,45,35,0.14)] sm:p-7">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <img src="/icon-192.png" alt="Seeds" className="h-11 w-11 rounded-2xl shadow-sm lg:hidden" />
-                <div>
-                  <p className="text-[11px] font-black uppercase text-[#7a8f63]">{isRegister ? 'Crear cuenta' : 'Iniciar sesión'}</p>
-                  <h2 className="mt-1 font-serif text-4xl font-black leading-none text-[#162019]">{isRegister ? 'Crea tu jardín' : 'Entra a tu jardín'}</h2>
-                </div>
-              </div>
-              <Leaf size={24} className="hidden text-[#6e9b58] sm:block" />
-            </div>
-
-            <p className="mt-4 text-sm font-semibold leading-relaxed text-[#536159]">
-              {isRegister ? 'Crea un jardín privado para esas ideas que quieres recordar, cuidar y convertir en algo real.' : 'Entra a tu jardín y retoma las ideas que estaban esperando un poco de atención.'}
-            </p>
-
-            <div className="mt-7 space-y-4">
-              {isRegister && (
-                <label className="block">
-                  <span className="text-xs font-black uppercase text-[#536f45]">Nombre</span>
-	                  <input
-	                    value={accountName}
-	                    onChange={(event) => setAccountName(event.target.value)}
-	                    placeholder="Tu nombre"
-	                    autoComplete="name"
-	                    enterKeyHint="next"
-	                    className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
-	                  />
-                </label>
-              )}
-              <label className="block">
-                <span className="text-xs font-black uppercase text-[#536f45]">Correo</span>
-                <input
-	                  type="email"
-	                  value={authEmail}
-	                  onChange={(event) => setAuthEmail(event.target.value)}
-	                  placeholder="tu@email.com"
-	                  autoComplete="email"
-	                  inputMode="email"
-	                  enterKeyHint="next"
-	                  className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
-	                />
-              </label>
-              <label className="block">
-                <span className="text-xs font-black uppercase text-[#536f45]">Contraseña</span>
-                <input
-	                  type="password"
-	                  value={authPassword}
-	                  onChange={(event) => setAuthPassword(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') submit();
-	                  }}
-	                  placeholder="Mayúscula, número y mínimo 6 caracteres"
-	                  autoComplete={isRegister ? 'new-password' : 'current-password'}
-	                  enterKeyHint={isRegister ? 'next' : 'done'}
-	                  className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
-	                />
-              </label>
-              {isRegister && (
-                <>
-                  <label className="block">
-                    <span className="text-xs font-black uppercase text-[#536f45]">Confirmar contraseña</span>
-                    <input
-                      type="password"
-	                      value={authConfirmPassword}
-	                      onChange={(event) => setAuthConfirmPassword(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') submit();
-	                      }}
-	                      placeholder="Repite tu contraseña"
-	                      autoComplete="new-password"
-	                      enterKeyHint="done"
-	                      className="mt-2 w-full rounded-2xl border border-[#dfe8dd] bg-[#f8faf7] px-4 py-3 text-sm font-bold text-[#162019] outline-none transition focus:border-[#6e9b58] focus:bg-white focus:ring-2 focus:ring-[#6e9b58]/20"
-	                    />
-                  </label>
-                  <div className="rounded-2xl bg-[#f8faf7] px-4 py-3">
-                    <p className="text-[10px] font-black uppercase text-[#7a8f63]">Contraseña segura</p>
-                    <p className="mt-1 text-xs font-semibold leading-relaxed text-[#667466]">
-                      Usa mínimo 6 caracteres, una mayúscula y un número.
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <button onClick={submit} disabled={Boolean(disabledReason)} className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1f2d23] px-5 py-4 font-black text-white shadow-[0_18px_50px_rgba(31,45,35,0.22)] transition-colors hover:bg-[#324434] disabled:cursor-not-allowed disabled:opacity-45">
-              <span>{isRegister ? 'Crear mi jardín' : 'Entrar a mi jardín'}</span>
-              <ArrowRight size={18} />
-            </button>
-            {(disabledReason || authStatus) && (
-              <p className="mt-3 text-xs font-semibold leading-relaxed text-[#667466]">{authStatus || disabledReason}</p>
-            )}
-
-            <div className="mt-6 hidden rounded-2xl bg-[#f8faf7] p-4 sm:block">
-              <p className="text-xs font-black uppercase text-[#7a8f63]">{isRegister ? 'Qué obtienes' : 'Al entrar'}</p>
-              <p className="mt-2 text-sm font-semibold leading-relaxed text-[#536159]">
-                {isRegister ? 'Un lugar simple para ideas de trabajo, estudio o vida personal, con jardines separados y recordatorios amables.' : 'Tus jardines, ideas pendientes y próximos pasos listos para seguir avanzando sin empezar de cero.'}
-              </p>
-            </div>
-
-            <div className="mt-5 flex flex-col gap-3 text-sm font-bold text-[#667466] sm:flex-row sm:items-center sm:justify-between">
-              <button onClick={onSwitchMode} className="text-left text-[#536f45] transition-colors hover:text-[#1f2d23]">
-                {isRegister ? 'Ya tengo cuenta' : 'Crear una cuenta nueva'}
-              </button>
-              <button onClick={onEnter} className="text-left text-[#536159] transition-colors hover:text-[#1f2d23]">
-                Explorar sin cuenta
-              </button>
-            </div>
-          </section>
-        </div>
-      </div>
-    </main>
-  );
-}
 
 export default function App() {
+  return <AccountBoundary>{(session, lease) => <AccountWorkspace key={lease.id} session={session} lease={lease} />}</AccountBoundary>;
+}
+
+function AccountWorkspace({ session, lease }: { session: Session | null; lease: AccountLease }) {
+  const { getStoredItem, setStoredItem, removeStoredItem, getStoredBoolean, getStoredNumber } = useMemo(() => createAccountStorage(lease.scope), [lease]);
   const [notes, setNotes] = useState<SeedNote[]>([]);
   const [notesLoaded, setNotesLoaded] = useState(false);
+  const [storageError, setStorageError] = useState('');
+  const [recoveringLegacy, setRecoveringLegacy] = useState(false);
+  const latestNotes = useRef({ notes, notesLoaded });
+  useLayoutEffect(() => { latestNotes.current = { notes, notesLoaded }; }, [notes, notesLoaded]);
+  useLayoutEffect(() => () => {
+    if (latestNotes.current.notesLoaded) {
+      void saveNotesToDb(lease.scope, latestNotes.current.notes).catch(error => console.warn('No se pudo guardar el jardín al cambiar de cuenta.', error));
+    }
+  }, [lease]);
   const todayKey = format(new Date(), 'yyyy-MM-dd');
   const [dailyIntention, setDailyIntention] = useState(() => getStoredItem(`seed-daily-intention-${todayKey}`) || '');
-  const [showLanding, setShowLanding] = useState(() => getStoredItem('seed-welcome-v2-seen') !== 'true');
+  const [showLanding, setShowLanding] = useState(() => !session && getStoredItem('seed-welcome-v2-seen') !== 'true');
   const [landingRoute, setLandingRoute] = useState<'landing' | 'login' | 'register'>('landing');
   const importInputRef = useRef<HTMLInputElement>(null);
   const [planets, setPlanets] = useState<Planet[]>(() => {
@@ -5136,8 +4344,8 @@ export default function App() {
 	    keyboardOpen: false
 	  });
 	  const [quickEntryKeyboardReady, setQuickEntryKeyboardReady] = useState(false);
-	  const [session, setSession] = useState<Session | null>(null);
-  const [authEmail, setAuthEmail] = useState('');
+  const [authEmail, setAuthEmail] = useState(session?.user.email || '');
+  const [authName, setAuthName] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authConfirmPassword, setAuthConfirmPassword] = useState('');
   const [authStatus, setAuthStatus] = useState('');
@@ -5167,10 +4375,12 @@ export default function App() {
     }
   });
   const [account, setAccount] = useState<AccountProfile>(() => {
+    const fallback = { name: typeof session?.user.user_metadata?.name === 'string' ? session.user.user_metadata.name : session ? 'Mi cuenta' : 'Modo invitado', email: session?.user.email || '', role: 'Cuidador de ideas' };
     try {
-      return JSON.parse(getStoredItem('seed-account') || '{"name":"Jardinero Digital","email":"jose@garden.com","role":"Cuidador de ideas"}');
+      const saved = JSON.parse(getStoredItem('seed-account') || 'null');
+      return saved && typeof saved.name === 'string' ? { ...fallback, ...saved, email: session?.user.email || saved.email || '' } : fallback;
     } catch {
-      return { name: 'Jardinero Digital', email: 'jose@garden.com', role: 'Cuidador de ideas' };
+      return fallback;
     }
   });
   const [harvestNoteId, setHarvestNoteId] = useState<string | null>(null);
@@ -5269,7 +4479,7 @@ export default function App() {
     });
   }, [dailyIntention, notes, notesLoaded, profileStats.active, profileStats.harvests, profileStats.seeds, wateringRitual.streak]);
   const authDisabledReason = !isSupabaseConfigured
-    ? 'Faltan las variables VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en este despliegue.'
+    ? 'El acceso con cuenta aún no está disponible en esta versión. Puedes explorar tu jardín sin cuenta.'
     : !authEmail.trim()
       ? 'Escribe tu correo para continuar.'
       : authPassword.length < 6
@@ -5279,10 +4489,9 @@ export default function App() {
   // Persistence
   useEffect(() => {
     let cancelled = false;
-    migrateLocalNotesToDb()
-      .then(loadNotesFromDb)
+    loadNotesFromDb(lease.scope)
       .then(loadedNotes => {
-        if (!cancelled) {
+        if (!cancelled && lease.isActive()) {
           let rawLegacyFocusNotes: unknown = {};
           try {
             rawLegacyFocusNotes = JSON.parse(getStoredItem('seed-focus-notes') || '{}');
@@ -5292,14 +4501,12 @@ export default function App() {
           const legacyFocusNotes = normalizeFocusNoteMap(rawLegacyFocusNotes);
           const migratedNotes = migrateFocusNotesIntoSeeds(loadedNotes, legacyFocusNotes);
           setNotes(migratedNotes);
+          setNotesLoaded(true);
           if (migratedNotes !== loadedNotes) removeStoredItem('seed-focus-notes');
         }
       })
       .catch(() => {
-        if (!cancelled) setNotes([]);
-      })
-      .finally(() => {
-        if (!cancelled) setNotesLoaded(true);
+        if (!cancelled && lease.isActive()) setStorageError('No se pudo abrir el jardín de esta cuenta. Tus datos no se han reemplazado.');
       });
 
     return () => { cancelled = true; };
@@ -5316,7 +4523,9 @@ export default function App() {
     const persist = () => {
       if (cancelled || flushed) return;
       flushed = true;
-      void saveNotesToDb(notes);
+      void saveNotesToDb(lease.scope, notes).catch(() => {
+        if (lease.isActive()) setStorageError('No se pudo guardar el jardín. Libera espacio y vuelve a intentarlo.');
+      });
     };
     const idleId = browserWindow.requestIdleCallback
       ? browserWindow.requestIdleCallback(persist, { timeout: 900 })
@@ -5407,7 +4616,7 @@ export default function App() {
 	  }, [createMode, isAdding]);
 
 	  useEffect(() => {
-	    if (!import.meta.env.DEV || !notesLoaded) return;
+    if (!import.meta.env.DEV || !notesLoaded || session?.user) return;
 
     const demoNote: SeedNote = {
       id: 'demo-watering-note',
@@ -5657,24 +4866,6 @@ export default function App() {
     preloadSeedSounds();
   }, []);
 
-  useEffect(() => {
-    if (!supabase) return;
-
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setAuthEmail(data.session?.user.email || '');
-    });
-
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setAuthEmail(nextSession?.user.email || authEmail);
-    });
-
-    return () => {
-      subscription.subscription.unsubscribe();
-    };
-  }, []);
-
   const playMicroSound = (kind: SeedSoundKind, force = false) => {
     playSeedSound(kind, soundsEnabled, force);
   };
@@ -5694,7 +4885,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!session?.user || !notesLoaded) {
+    if (!session?.user || !notesLoaded || !lease.isActive()) {
       remoteSyncReadyRef.current = false;
       return;
     }
@@ -5703,9 +4894,9 @@ export default function App() {
     setIsSyncing(true);
     setSyncStatus('Preparando sync entre dispositivos...');
 
-    syncGardenWithSupabase({ planets, notes }, session.user)
+    syncGardenWithSupabase({ ownerId: lease.scope.userId!, planets, notes }, lease.syncAccess())
       .then(synced => {
-        if (cancelled) return;
+        if (cancelled || !lease.isActive()) return;
         applyingRemoteSyncRef.current = true;
         if (synced.planets.length > 0) setPlanets(synced.planets);
         setNotes(synced.notes);
@@ -5726,11 +4917,14 @@ export default function App() {
   }, [session?.user?.id, notesLoaded]);
 
   useEffect(() => {
-    if (!supabase || !session?.user) return;
+    if (!supabase || !session?.user || !lease.isActive()) return;
     const userId = session.user.id;
     const markRemoteApplyDone = () => window.setTimeout(() => { applyingRemoteSyncRef.current = false; }, 0);
 
     const handleNotePayload = (payload: SupabaseRealtimePayload) => {
+      if (!lease.isActive()) return;
+      const owner = payload.eventType === 'DELETE' ? payload.old?.user_id : payload.new?.user_id;
+      if (owner !== lease.scope.userId) return;
       applyingRemoteSyncRef.current = true;
       if (payload.eventType === 'DELETE') {
         const deletedId = typeof payload.old?.id === 'string' ? payload.old.id : undefined;
@@ -5767,6 +4961,9 @@ export default function App() {
     };
 
     const handlePlanetPayload = (payload: SupabaseRealtimePayload) => {
+      if (!lease.isActive()) return;
+      const owner = payload.eventType === 'DELETE' ? payload.old?.user_id : payload.new?.user_id;
+      if (owner !== lease.scope.userId) return;
       applyingRemoteSyncRef.current = true;
       if (payload.eventType === 'DELETE') {
         const deletedId = typeof payload.old?.id === 'string' ? payload.old.id : undefined;
@@ -5826,7 +5023,8 @@ export default function App() {
     if (autoSyncTimerRef.current) window.clearTimeout(autoSyncTimerRef.current);
 
     autoSyncTimerRef.current = window.setTimeout(() => {
-      pushGardenToSupabase({ planets, notes }, session.user)
+      if (!lease.isActive()) return;
+      pushGardenToSupabase({ ownerId: lease.scope.userId!, planets, notes }, lease.syncAccess())
         .then(() => setSyncStatus('Cambios guardados en la nube.'))
         .catch(error => setSyncStatus(error instanceof Error ? error.message : 'No se pudieron guardar los cambios en la nube.'));
     }, 900);
@@ -6004,7 +5202,7 @@ export default function App() {
     setNotes(current => current.filter(n => n.id !== id));
     if (selectedNoteId === id) setSelectedNoteId(null);
     if (session?.user) {
-      deleteNoteFromSupabase(id, session.user).catch(error => {
+      deleteNoteFromSupabase(id, lease.syncAccess()).catch(error => {
         setSyncStatus(error instanceof Error ? error.message : 'No se pudo borrar la idea en la nube.');
       });
     }
@@ -6548,10 +5746,43 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const recoverLegacyGarden = async () => {
+    if (!lease.isActive() || isSyncing) return;
+    setRecoveringLegacy(true);
+    try {
+      assertLegacyRecoveryOwner(lease.scope);
+      const legacyNotes = await loadLegacyNotes();
+      const legacyPlanets = normalizePlanets(JSON.parse(getDeviceItem('seed-planets') || '[]'));
+      if (!lease.isActive()) return;
+      if (!legacyNotes.length && !legacyPlanets.length) {
+        setSyncStatus('No se encontraron notas ni jardines de la versión anterior.');
+        return;
+      }
+      const destination = session?.user.email || 'el modo invitado de este dispositivo';
+      if (!window.confirm(`Los datos anteriores no tienen una cuenta identificada. ¿Confirmas que son tuyos y quieres recuperar ${legacyNotes.length} ideas en ${destination}?${session ? ' Se podrán sincronizar con esta cuenta.' : ''} No se reemplazarán ideas existentes ni se copiará el perfil anterior.`)) return;
+      reserveLegacyRecovery(lease.scope);
+      const focusNotes = normalizeFocusNoteMap(JSON.parse(getDeviceItem('seed-focus-notes') || '{}'));
+      const recovered = mergeLegacyGarden({ notes: latestNotes.current.notes, planets }, {
+        notes: migrateFocusNotesIntoSeeds(legacyNotes, focusNotes), planets: legacyPlanets,
+      });
+      await saveNotesToDb(lease.scope, recovered.notes);
+      if (!setStoredItem('seed-planets', JSON.stringify(recovered.planets))) throw new Error('No se pudieron guardar los jardines recuperados. Los originales siguen intactos.');
+      if (!lease.isActive()) return;
+      setPlanets(recovered.planets);
+      setNotes(recovered.notes);
+      setSyncStatus('Datos recuperados en este espacio. La copia anterior permanece intacta.');
+    } catch (error) {
+      if (lease.isActive()) setSyncStatus(error instanceof Error ? error.message : 'No se pudieron recuperar los datos anteriores.');
+    } finally {
+      if (lease.isActive()) setRecoveringLegacy(false);
+    }
+  };
+
   const importBackup = async (file: File) => {
     let parsed: unknown;
     try {
       const text = await file.text();
+      if (!lease.isActive()) return;
       parsed = JSON.parse(text);
     } catch {
       window.alert('No se pudo leer este backup. Revisa que sea un archivo JSON valido.');
@@ -6618,7 +5849,7 @@ export default function App() {
 
 	  useEffect(() => {
 	    const openSharedSeed = (sharedText = '') => {
-	      removeStoredItem('seed-pending-action');
+      removeDeviceItem('seed-pending-action');
 	      startPlanting();
 	      if (sharedText.trim()) {
 	        window.requestAnimationFrame(() => {
@@ -6627,7 +5858,7 @@ export default function App() {
 	      }
 	    };
 	    const openToday = () => {
-	      removeStoredItem('seed-pending-action');
+      removeDeviceItem('seed-pending-action');
 	      setSelectedNoteId(null);
 	      setView('today');
 	    };
@@ -6640,7 +5871,7 @@ export default function App() {
 	      openSharedSeed();
 	    };
 
-	    const pendingAction = getStoredItem('seed-pending-action');
+    const pendingAction = getDeviceItem('seed-pending-action');
 	    if (pendingAction === 'new-seed') {
 	      window.requestAnimationFrame(() => openSharedSeed());
 	    } else if (pendingAction === 'today') {
@@ -6728,7 +5959,7 @@ export default function App() {
     setNotes(current => current.filter(note => (note.planetId || DEFAULT_PLANET_ID) !== activePlanet.id));
     setPlanets(current => current.filter(planet => planet.id !== activePlanet.id));
     if (session?.user) {
-      deletePlanetFromSupabase(activePlanet.id, session.user).catch(error => {
+      deletePlanetFromSupabase(activePlanet.id, lease.syncAccess()).catch(error => {
         setSyncStatus(error instanceof Error ? error.message : 'No se pudo borrar el jardín en la nube.');
       });
     }
@@ -6755,6 +5986,11 @@ export default function App() {
       return;
     }
 
+    try { await saveNotesToDb(lease.scope, notes); } catch {
+      setAuthStatus('Guarda tu jardín local antes de crear una cuenta. Revisa el espacio disponible.');
+      return;
+    }
+    if (!lease.isActive()) return;
     setAuthStatus('Creando cuenta...');
     const { data, error } = await supabase.auth.signUp({
       email: authEmail.trim(),
@@ -6762,7 +5998,7 @@ export default function App() {
       options: {
         emailRedirectTo: window.location.origin,
         data: {
-          name: account.name,
+          name: authName.trim() || (account.name === 'Modo invitado' ? 'Mi cuenta' : account.name),
           role: account.role,
         },
       },
@@ -6772,6 +6008,7 @@ export default function App() {
       : data.session
         ? 'Cuenta creada. Tu sesión ya está activa.'
         : 'Cuenta creada. Te enviamos un correo para confirmar tu registro.');
+    if (!error && data.session) enterApp();
   };
 
   const signInWithEmail = async () => {
@@ -6780,6 +6017,11 @@ export default function App() {
       return;
     }
 
+    try { await saveNotesToDb(lease.scope, notes); } catch {
+      setAuthStatus('No se pudo guardar el jardín invitado. Revisa el espacio disponible antes de entrar.');
+      return;
+    }
+    if (!lease.isActive()) return;
     setAuthStatus('Iniciando sesión...');
     const { error } = await supabase.auth.signInWithPassword({
       email: authEmail.trim(),
@@ -6795,10 +6037,16 @@ export default function App() {
 
   const signOut = async () => {
     if (!supabase) return;
-    await supabase.auth.signOut();
-    setSession(null);
-    setAuthPassword('');
-    setAuthStatus('Sesión cerrada.');
+    setSyncStatus('');
+    setAuthStatus('Guardando el jardín antes de salir…');
+    try {
+      await saveNotesToDb(lease.scope, notes);
+      if (!lease.isActive()) return;
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) throw error;
+    } catch {
+      if (lease.isActive()) setAuthStatus('No se pudo cerrar sesión con seguridad. Tus notas siguen en esta cuenta; vuelve a intentarlo.');
+    }
   };
 
   const syncGarden = async () => {
@@ -6810,7 +6058,8 @@ export default function App() {
     setIsSyncing(true);
     setSyncStatus('Sincronizando jardín...');
     try {
-      const synced = await syncGardenWithSupabase({ planets, notes }, session.user);
+      const synced = await syncGardenWithSupabase({ ownerId: lease.scope.userId!, planets, notes }, lease.syncAccess());
+      if (!lease.isActive()) return;
       if (synced.planets.length > 0) setPlanets(synced.planets);
       setNotes(synced.notes);
       setSyncStatus(`Sincronizado: ${synced.planets.length} jardines y ${synced.notes.length} ideas.`);
@@ -7216,21 +6465,47 @@ export default function App() {
     setIsAdding(false);
   };
 
+  if (storageError || !notesLoaded || recoveringLegacy) {
+    return (
+      <main className="grid min-h-dvh place-items-center bg-[#f5f7f1] p-6 text-center text-[#263324]">
+        <section role="status" className="max-w-sm space-y-4">
+          <h1 className="text-xl font-semibold">
+            {storageError ? 'Tu jardín necesita atención' : recoveringLegacy ? 'Recuperando datos anteriores…' : 'Abriendo tu jardín…'}
+          </h1>
+          <p>{storageError || 'Cargando solo los datos de este espacio.'}</p>
+          {storageError && <>
+            <button onClick={async () => {
+              if (!notesLoaded) { window.location.reload(); return; }
+              try {
+                await saveNotesToDb(lease.scope, notes);
+                if (lease.isActive()) setStorageError('');
+              } catch { /* Keep the in-memory garden and recovery UI. */ }
+            }} className="rounded-full bg-[#263324] px-6 py-3 text-white">Reintentar</button>
+            {notesLoaded && <button onClick={exportBackup} className="block w-full underline">Exportar una copia antes de salir</button>}
+          </>}
+        </section>
+      </main>
+    );
+  }
+
   if (showLanding) {
     if (landingRoute !== 'landing') {
       return (
         <AuthEntryPage
+          key={landingRoute}
           mode={landingRoute}
           onBack={() => setLandingRoute('landing')}
-          onSwitchMode={() => setLandingRoute(landingRoute === 'login' ? 'register' : 'login')}
-          onEnter={enterApp}
-          accountName={account.name}
-          setAccountName={(name) => setAccount(current => ({ ...current, name }))}
-          authEmail={authEmail}
-          setAuthEmail={(email) => {
-            setAuthEmail(email);
-            setAccount(current => ({ ...current, email }));
+          onSwitchMode={() => {
+            setAuthStatus('');
+            setAuthPassword('');
+            setAuthConfirmPassword('');
+            setLandingRoute(landingRoute === 'login' ? 'register' : 'login');
           }}
+          onEnter={enterApp}
+          accountName={authName}
+          setAccountName={setAuthName}
+          authEmail={authEmail}
+          setAuthEmail={setAuthEmail}
           authPassword={authPassword}
           setAuthPassword={setAuthPassword}
           authConfirmPassword={authConfirmPassword}
@@ -9359,7 +8634,7 @@ export default function App() {
                               <div className="min-w-0">
                                 <p className="text-sm font-semibold text-[var(--earth)]">{session?.user ? 'Cuenta conectada' : 'Modo local'}</p>
                                 <p className="mt-1 text-xs font-medium leading-relaxed text-[var(--text-muted)]">
-                                  {session?.user ? session.user.email : 'Inicia sesión solo si quieres llevar tus semillas a otros dispositivos.'}
+                                  {session?.user ? session.user.email : 'Este jardín invitado se guarda solo en este dispositivo. Al iniciar sesión permanecerá separado de la cuenta.'}
                                 </p>
                               </div>
                               {session?.user && (
@@ -9428,12 +8703,16 @@ export default function App() {
                           </div>
                         ))}
 
+                        <p className="px-2 text-xs leading-relaxed text-[var(--text-muted)]">
+                          Cada cuenta y el modo invitado conservan un jardín separado. Los datos de versiones anteriores no se importan automáticamente: puedes recuperarlos aquí confirmando que son tuyos. La copia original se conserva.
+                        </p>
                         {renderSettingsSection('Backups', (
                           <>
                             {[
                               { label: 'Exportar Markdown', icon: Download, onClick: exportGarden },
                               { label: 'Exportar backup', icon: Download, onClick: exportBackup },
                               { label: 'Importar backup', icon: Archive, onClick: () => importInputRef.current?.click() },
+                              { label: 'Recuperar datos de la versión anterior', icon: Archive, onClick: recoverLegacyGarden },
                             ].map(item => (
                               <button
                                 key={item.label}
