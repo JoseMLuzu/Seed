@@ -73,11 +73,12 @@ import { normalizeNote, normalizeNotes } from './normalize';
 import { playSeedSound, preloadSeedSounds, unlockSeedAudio, type SeedSoundKind } from './sound';
 import { createAccountStorage, getStoredItem as getDeviceItem, removeStoredItem as removeDeviceItem } from './appStorage';
 import { AccountLease } from './accountScope';
-import AccountBoundary from './components/AccountBoundary';
+import AccountBoundary, { type AccountAuthFlow } from './components/AccountBoundary';
 import { assertLegacyRecoveryOwner, reserveLegacyRecovery, mergeLegacyGarden } from './legacyRecovery';
 import { migrateFocusNotesIntoSeeds, normalizeFocusNoteMap } from './focusNotes';
-import LandingPage from './components/LandingPage';
+import LandingPage, { type AuthRoute } from './components/LandingPage';
 import { passwordPolicyError } from './authValidation';
+import { getAuthRedirectUrl, isAuthCallbackUrl } from './authFlow';
 
 const Garden3D = lazy(() => import('./components/Garden3D'));
 
@@ -4253,10 +4254,10 @@ function PlantIllustration({ stage, progress, isGrowth, theme = 'earth' }: { sta
 
 
 export default function App() {
-  return <AccountBoundary>{(session, lease) => <AccountWorkspace key={lease.id} session={session} lease={lease} />}</AccountBoundary>;
+  return <AccountBoundary>{(session, lease, authFlow) => <AccountWorkspace key={lease.id} session={session} lease={lease} authFlow={authFlow} />}</AccountBoundary>;
 }
 
-function AccountWorkspace({ session, lease }: { session: Session | null; lease: AccountLease }) {
+function AccountWorkspace({ session, lease, authFlow }: { session: Session | null; lease: AccountLease; authFlow: AccountAuthFlow }) {
   const { getStoredItem, setStoredItem, removeStoredItem, getStoredBoolean, getStoredNumber } = useMemo(() => createAccountStorage(lease.scope), [lease]);
   const [notes, setNotes] = useState<SeedNote[]>([]);
   const [notesLoaded, setNotesLoaded] = useState(false);
@@ -4271,8 +4272,8 @@ function AccountWorkspace({ session, lease }: { session: Session | null; lease: 
   }, [lease]);
   const todayKey = format(new Date(), 'yyyy-MM-dd');
   const [dailyIntention, setDailyIntention] = useState(() => getStoredItem(`seed-daily-intention-${todayKey}`) || '');
-  const [showLanding, setShowLanding] = useState(() => !session && getStoredItem('seed-welcome-v2-seen') !== 'true');
-  const [landingRoute, setLandingRoute] = useState<'landing' | 'login' | 'register'>('landing');
+  const [showLanding, setShowLanding] = useState(() => authFlow.passwordRecovery || (!session && getStoredItem('seed-welcome-v2-seen') !== 'true'));
+  const [landingRoute, setLandingRoute] = useState<AuthRoute>(() => authFlow.passwordRecovery ? 'reset' : 'landing');
   const importInputRef = useRef<HTMLInputElement>(null);
   const [planets, setPlanets] = useState<Planet[]>(() => {
     try {
@@ -4382,6 +4383,22 @@ function AccountWorkspace({ session, lease }: { session: Session | null; lease: 
       return fallback;
     }
   });
+
+  useEffect(() => {
+    if (authFlow.passwordRecovery) {
+      setAuthPassword('');
+      setAuthConfirmPassword('');
+      setAuthStatus(authFlow.callbackError ? 'El enlace ya no es válido o expiró. Solicita uno nuevo.' : 'Enlace verificado. Elige una nueva contraseña.');
+      setLandingRoute('reset');
+      setShowLanding(true);
+      return;
+    }
+    if (authFlow.callbackError) {
+      setAuthStatus('No pudimos confirmar ese enlace. Solicita uno nuevo o inicia sesión.');
+      setLandingRoute('login');
+      setShowLanding(true);
+    }
+  }, [authFlow.passwordRecovery, authFlow.callbackError]);
   const [harvestNoteId, setHarvestNoteId] = useState<string | null>(null);
   const [recentlyWateredId, setRecentlyWateredId] = useState<string | null>(null);
   const [wateringRitual, setWateringRitual] = useState<{ lastDate: string; streak: number }>(() => {
@@ -5862,6 +5879,7 @@ function AccountWorkspace({ session, lease }: { session: Session | null; lease: 
 	      setView('today');
 	    };
 	    const handleSeedUrl = (rawUrl = '') => {
+	      if (isAuthCallbackUrl(rawUrl)) return;
 	      const normalizedUrl = rawUrl.toLowerCase();
 	      if (normalizedUrl.includes('today')) {
 	        openToday();
@@ -5995,7 +6013,7 @@ function AccountWorkspace({ session, lease }: { session: Session | null; lease: 
       email: authEmail.trim(),
       password: authPassword,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: getAuthRedirectUrl('confirmation'),
         data: {
           name: authName.trim() || (account.name === 'Modo invitado' ? 'Mi cuenta' : account.name),
           role: account.role,
@@ -6007,7 +6025,58 @@ function AccountWorkspace({ session, lease }: { session: Session | null; lease: 
       : data.session
         ? 'Cuenta creada. Tu sesión ya está activa.'
         : 'Cuenta creada. Te enviamos un correo para confirmar tu registro.');
-    if (!error && data.session) enterApp();
+    if (!error && data.session) {
+      authFlow.completeAuthFlow();
+      enterApp();
+    }
+  };
+
+  const requestPasswordReset = async () => {
+    if (!supabase) {
+      setAuthStatus('Supabase no está configurado.');
+      return;
+    }
+    const email = authEmail.trim();
+    if (!email || !email.includes('@')) {
+      setAuthStatus('Escribe un correo válido para recuperar tu cuenta.');
+      return;
+    }
+
+    setAuthStatus('Enviando enlace seguro…');
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: getAuthRedirectUrl('recovery'),
+    });
+    setAuthStatus(error
+      ? formatAuthError(error.message)
+      : 'Si existe una cuenta con ese correo, recibirás un enlace para crear una nueva contraseña.');
+  };
+
+  const updatePassword = async () => {
+    if (!supabase || !session?.user || !authFlow.passwordRecovery || authFlow.callbackError) {
+      setAuthStatus('El enlace ya no es válido o expiró. Solicita uno nuevo.');
+      return;
+    }
+    const passwordIssue = passwordPolicyError(authPassword);
+    if (passwordIssue) {
+      setAuthStatus(passwordIssue);
+      return;
+    }
+    if (!authConfirmPassword || authPassword !== authConfirmPassword) {
+      setAuthStatus(!authConfirmPassword ? 'Confirma tu nueva contraseña.' : 'Las contraseñas no coinciden.');
+      return;
+    }
+
+    setAuthStatus('Guardando tu nueva contraseña…');
+    const { error } = await supabase.auth.updateUser({ password: authPassword });
+    if (error) {
+      setAuthStatus(formatAuthError(error.message));
+      return;
+    }
+    setAuthPassword('');
+    setAuthConfirmPassword('');
+    setAuthStatus('Contraseña actualizada.');
+    authFlow.completeAuthFlow();
+    enterApp();
   };
 
   const signInWithEmail = async () => {
@@ -6031,6 +6100,7 @@ function AccountWorkspace({ session, lease }: { session: Session | null; lease: 
       return;
     }
     setAuthStatus('Sesión iniciada.');
+    authFlow.completeAuthFlow();
     enterApp();
   };
 
@@ -6508,6 +6578,14 @@ function AccountWorkspace({ session, lease }: { session: Session | null; lease: 
           setAuthConfirmPassword('');
           setLandingRoute('register');
         }}
+        onShowForgot={() => {
+          setAuthStatus('');
+          setAuthPassword('');
+          setAuthConfirmPassword('');
+          setLandingRoute('forgot');
+        }}
+        authConfigured={isSupabaseConfigured}
+        canUpdatePassword={Boolean(session?.user) && authFlow.passwordRecovery && !authFlow.callbackError}
         accountName={authName}
         setAccountName={setAuthName}
         authEmail={authEmail}
@@ -6520,6 +6598,8 @@ function AccountWorkspace({ session, lease }: { session: Session | null; lease: 
         authStatus={authStatus}
         onSignIn={signInWithEmail}
         onSignUp={signUpWithEmail}
+        onRequestPasswordReset={requestPasswordReset}
+        onUpdatePassword={updatePassword}
       />
     );
   }

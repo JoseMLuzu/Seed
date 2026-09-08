@@ -18,10 +18,11 @@ export type AuthEntryProps = {
   authStatus: string;
   onSignIn: () => Promise<void>;
   onSignUp: () => Promise<void>;
+  onForgotPassword: () => void;
 };
 
 export default function AuthEntryPage(props: AuthEntryProps) {
-  const { mode, onSwitchMode, accountName, setAccountName, authEmail, setAuthEmail, authPassword, setAuthPassword, authConfirmPassword, setAuthConfirmPassword, authDisabledReason, authStatus, onSignIn, onSignUp } = props;
+  const { mode, onSwitchMode, accountName, setAccountName, authEmail, setAuthEmail, authPassword, setAuthPassword, authConfirmPassword, setAuthConfirmPassword, authDisabledReason, authStatus, onSignIn, onSignUp, onForgotPassword } = props;
   const isRegister = mode === 'register';
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -71,6 +72,7 @@ export default function AuthEntryPage(props: AuthEntryProps) {
                   <input id="auth-password" name="password" type={showPassword ? 'text' : 'password'} value={authPassword} onChange={event => setAuthPassword(event.target.value)} placeholder="Contraseña" autoComplete={isRegister ? 'new-password' : 'current-password'} required minLength={6} aria-describedby={isRegister ? 'auth-password-rules' : undefined} />
                   <button type="button" className="auth-eye" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} aria-pressed={showPassword}>{showPassword ? <EyeOff size={20} /> : <Eye size={20} />}</button>
                 </div>
+                {!isRegister && <button type="button" className="auth-forgot" onClick={onForgotPassword}>¿Olvidaste tu contraseña?</button>}
                 {isRegister && <>
                   <label className={`auth-field${confirmMismatch ? ' auth-field-invalid' : ''}`}>
                     <LockKeyhole size={20} aria-hidden="true" /><span className="sr-only">Confirmar contraseña</span>

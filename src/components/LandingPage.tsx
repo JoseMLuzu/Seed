@@ -1,15 +1,24 @@
+import { useEffect, useRef } from 'react';
 import { ArrowRight, ChevronRight, Leaf, LockKeyhole } from 'lucide-react';
 import AuthEntryPage, { type AuthEntryProps } from './AuthEntryPage';
 import AuthWorld from './AuthWorld';
+import PasswordRecoveryPanel from './PasswordRecoveryPanel';
 import SocialAuthPreview from './SocialAuthPreview';
 import './auth.css';
 
-type LandingPageProps = Omit<AuthEntryProps, 'mode' | 'onSwitchMode'> & {
-  route: 'landing' | 'login' | 'register';
+export type AuthRoute = 'landing' | 'login' | 'register' | 'forgot' | 'reset';
+
+type LandingPageProps = Omit<AuthEntryProps, 'mode' | 'onSwitchMode' | 'onForgotPassword'> & {
+  route: AuthRoute;
   onEnter: () => void;
   onShowLanding: () => void;
   onShowLogin: () => void;
   onShowRegister: () => void;
+  onShowForgot: () => void;
+  authConfigured: boolean;
+  canUpdatePassword: boolean;
+  onRequestPasswordReset: () => Promise<void>;
+  onUpdatePassword: () => Promise<void>;
 };
 
 export default function LandingPage({
@@ -18,12 +27,23 @@ export default function LandingPage({
   onShowLanding,
   onShowLogin,
   onShowRegister,
+  onShowForgot,
+  authConfigured,
+  canUpdatePassword,
+  onRequestPasswordReset,
+  onUpdatePassword,
   ...authProps
 }: LandingPageProps) {
   const isLanding = route === 'landing';
+  const pageRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    pageRef.current?.scrollTo({ top: 0 });
+    pageRef.current?.querySelector<HTMLElement>('.auth-panel')?.scrollTo({ top: 0 });
+  }, [route]);
 
   return (
-    <main className="auth-page welcome-page">
+    <main ref={pageRef} className="auth-page welcome-page">
       <div className="auth-shell">
         <header className="auth-header">
           <button
@@ -57,12 +77,31 @@ export default function LandingPage({
               <SocialAuthPreview />
               <p className="auth-footnote"><LockKeyhole size={12} /> Un jardín personal para lo que te importa.</p>
             </section>
-          ) : (
+          ) : route === 'login' || route === 'register' ? (
             <AuthEntryPage
               key={route}
               mode={route}
               onSwitchMode={route === 'login' ? onShowRegister : onShowLogin}
+              onForgotPassword={onShowForgot}
               {...authProps}
+            />
+          ) : (
+            <PasswordRecoveryPanel
+              key={route}
+              mode={route}
+              email={authProps.authEmail}
+              setEmail={authProps.setAuthEmail}
+              password={authProps.authPassword}
+              setPassword={authProps.setAuthPassword}
+              confirmPassword={authProps.authConfirmPassword}
+              setConfirmPassword={authProps.setAuthConfirmPassword}
+              configured={authConfigured}
+              canUpdatePassword={canUpdatePassword}
+              status={authProps.authStatus}
+              onRequestReset={onRequestPasswordReset}
+              onUpdatePassword={onUpdatePassword}
+              onBackToLogin={onShowLogin}
+              onRequestAnotherLink={onShowForgot}
             />
           )}
         </div>

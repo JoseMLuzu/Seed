@@ -1,18 +1,27 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { AccountLease } from '../accountScope';
-import { supabase } from '../supabase';
+import { initialAuthCallbackError, initialAuthIntent, supabase } from '../supabase';
 import { invalidateNativeAccountTasks } from '../native/accountPrivacy';
 import { clearSeedNotifications } from '../native/notifications';
 import { stopFocusLiveActivity } from '../native/liveActivity';
 import { updateSeedWidget } from '../native/widget';
+import { consumeAuthCallback, getAuthIntent, isAuthCallbackUrl } from '../authFlow';
+
+export type AccountAuthFlow = {
+  passwordRecovery: boolean;
+  callbackError: string;
+  completeAuthFlow: () => void;
+};
 
 export default function AccountBoundary({ children }: {
-  children: (session: Session | null, lease: AccountLease) => ReactNode;
+  children: (session: Session | null, lease: AccountLease, authFlow: AccountAuthFlow) => ReactNode;
 }) {
   const [ready, setReady] = useState<{ session: Session | null; lease: AccountLease } | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const [passwordRecovery, setPasswordRecovery] = useState(() => initialAuthIntent === 'recovery');
+  const [callbackError, setCallbackError] = useState(initialAuthCallbackError);
 
   useEffect(() => {
     let disposed = false;
@@ -46,10 +55,37 @@ export default function AccountBoundary({ children }: {
     };
 
     if (!supabase) accept(null);
-    const subscription = supabase?.auth.onAuthStateChange((_event, session) => {
+    const subscription = supabase?.auth.onAuthStateChange((event, session) => {
       authEvents += 1;
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecovery(true);
+        setCallbackError('');
+      }
       accept(session);
     }).data.subscription;
+
+    const handleNativeUrl = (event: Event) => {
+      const url = (event as CustomEvent<{ url?: string }>).detail?.url || '';
+      if (!supabase || !isAuthCallbackUrl(url)) return;
+      setCallbackError('');
+      if (getAuthIntent(url) === 'recovery') {
+        setPasswordRecovery(true);
+      }
+      void consumeAuthCallback(supabase, url).catch(callbackError => {
+        console.error('Seeds auth callback failed', callbackError);
+        if (!disposed) {
+          setPasswordRecovery(getAuthIntent(url) === 'recovery');
+          setCallbackError('El enlace ya no es válido o expiró.');
+        }
+      });
+    };
+    window.addEventListener('seed:native-url', handleNativeUrl);
+    const seedWindow = window as Window & { __seedPendingAuthUrl?: string };
+    if (seedWindow.__seedPendingAuthUrl) {
+      const pendingUrl = seedWindow.__seedPendingAuthUrl;
+      delete seedWindow.__seedPendingAuthUrl;
+      handleNativeUrl(new CustomEvent('seed:native-url', { detail: { url: pendingUrl } }));
+    }
     const initialEvents = authEvents;
     void supabase?.auth.getSession().then(({ data, error }) => {
       if (disposed || initialEvents !== authEvents) return;
@@ -62,10 +98,18 @@ export default function AccountBoundary({ children }: {
       disposed = true;
       current?.revoke();
       subscription?.unsubscribe();
+      window.removeEventListener('seed:native-url', handleNativeUrl);
     };
   }, [attempt]);
 
-  if (ready) return children(ready.session, ready.lease);
+  if (ready) return children(ready.session, ready.lease, {
+    passwordRecovery,
+    callbackError,
+    completeAuthFlow: () => {
+      setPasswordRecovery(false);
+      setCallbackError('');
+    },
+  });
   return (
     <main className="grid min-h-dvh place-items-center bg-[#f5f7f1] p-6 text-center text-[#263324]">
       <section role="status" aria-live="polite" className="max-w-sm space-y-4">

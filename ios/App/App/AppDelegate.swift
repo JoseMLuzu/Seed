@@ -68,11 +68,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     private func dispatchSeedUrlToWebView(_ url: URL) {
         let action = url.absoluteString.lowercased().contains("today") ? "today" : "new-seed"
+        let isAuthCallback = url.host?.lowercased() == "auth"
         let escapedUrl = url.absoluteString
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
+        let pendingActionScript = isAuthCallback
+            ? "window.__seedPendingAuthUrl = '\(escapedUrl)';"
+            : "localStorage.setItem('seed-pending-action', '\(action)');"
         let script = """
-        localStorage.setItem('seed-pending-action', '\(action)');
+        \(pendingActionScript)
         window.dispatchEvent(new CustomEvent('seed:native-url', { detail: { url: '\(escapedUrl)' } }));
         """
 

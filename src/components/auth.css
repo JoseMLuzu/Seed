@@ -71,6 +71,7 @@
 .auth-field input { flex: 1; width: 100%; min-width: 0; height: 54px; background: transparent; color: var(--auth-ink); font-size: 16px; border: 0; border-radius: 0; padding: 0; }
 .auth-field input::placeholder { color: #959d98; opacity: 1; }
 .auth-eye { display: grid; place-items: center; min-width: 44px; min-height: 44px; margin-right: -11px; }
+.auth-forgot { align-self: flex-end; color: #546d42; font-size: 12px; font-weight: 600; padding: 3px 2px 5px; text-decoration: underline; text-underline-offset: 3px; }
 .auth-field-invalid { border-color: #bb7f6d; }
 .auth-field-error { color: #975842; font-size: 12px; padding: 0 3px; }
 .auth-password-rules { border-radius: 16px; background: #edf1e8; padding: 13px 17px; color: #7b8576; font-size: 12px; }
