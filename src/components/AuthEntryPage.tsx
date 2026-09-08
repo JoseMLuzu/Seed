@@ -1,15 +1,11 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, Check, ChevronRight, Eye, EyeOff, Leaf, LoaderCircle, LockKeyhole, Mail, Sprout, User } from 'lucide-react';
-import AuthWorld from './AuthWorld';
+import { ArrowRight, Check, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail, User } from 'lucide-react';
 import SocialAuthPreview from './SocialAuthPreview';
 import { passwordPolicyError, passwordRequirements } from '../authValidation';
-import './auth.css';
 
-type AuthEntryProps = {
+export type AuthEntryProps = {
   mode: 'login' | 'register';
-  onBack: () => void;
   onSwitchMode: () => void;
-  onEnter: () => void;
   accountName: string;
   setAccountName: (value: string) => void;
   authEmail: string;
@@ -25,10 +21,9 @@ type AuthEntryProps = {
 };
 
 export default function AuthEntryPage(props: AuthEntryProps) {
-  const { mode, onBack, onSwitchMode, onEnter, accountName, setAccountName, authEmail, setAuthEmail, authPassword, setAuthPassword, authConfirmPassword, setAuthConfirmPassword, authDisabledReason, authStatus, onSignIn, onSignUp } = props;
+  const { mode, onSwitchMode, accountName, setAccountName, authEmail, setAuthEmail, authPassword, setAuthPassword, authConfirmPassword, setAuthConfirmPassword, authDisabledReason, authStatus, onSignIn, onSignUp } = props;
   const isRegister = mode === 'register';
   const [showPassword, setShowPassword] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState('');
   const submissionRef = useRef(false);
@@ -52,32 +47,15 @@ export default function AuthEntryPage(props: AuthEntryProps) {
   const status = localError || authStatus || (attempted ? disabledReason : '');
 
   return (
-    <main className="auth-page">
-      <div className="auth-shell">
-        <header className="auth-header">
-          <button type="button" className="auth-brand" onClick={onBack} aria-label="Seeds: volver al inicio">
-            <span className="auth-brand-mark"><Leaf strokeWidth={1.5} /></span>
-            <span><strong>Seeds</strong><span className="auth-brand-tagline">GROW WHAT MATTERS</span></span>
-          </button>
-          <button type="button" className="auth-header-action" onClick={isRegister ? onSwitchMode : onEnter} disabled={submitting}>
-            {isRegister ? 'Ya tengo cuenta' : 'Explorar sin cuenta'}<ChevronRight size={14} />
-          </button>
-        </header>
+    <section className="auth-panel auth-panel-swap" aria-labelledby="auth-title">
+      <div className="auth-heading">
+        <p className="auth-eyebrow">{isRegister ? 'TODO EMPIEZA CON UNA SEMILLA' : 'TU JARDÍN TE ESPERA'}</p>
+        <h1 id="auth-title">{isRegister ? 'Crea tu universo.' : 'Vuelve a tu mundo.'}</h1>
+        <p>{isRegister ? 'Dale un lugar a tus ideas, conviértelas en proyectos y crece a tu ritmo.' : 'Tus ideas, proyectos y pequeños logros, en un solo lugar. Retoma lo que importa.'}</p>
+      </div>
 
-        <div className="auth-content">
-          <AuthWorld mode={mode} paused={editing} />
-
-          <section className="auth-panel" aria-labelledby="auth-title">
-            <div className="auth-heading">
-              <p className="auth-eyebrow">{isRegister ? 'TODO EMPIEZA CON UNA SEMILLA' : 'TU JARDÍN TE ESPERA'}</p>
-              <h1 id="auth-title">{isRegister ? 'Crea tu universo.' : 'Vuelve a tu mundo.'}</h1>
-              <p>{isRegister ? 'Dale un lugar a tus ideas, conviértelas en proyectos y crece a tu ritmo.' : 'Tus ideas, proyectos y pequeños logros, en un solo lugar. Retoma lo que importa.'}</p>
-            </div>
-
-            <form className="auth-form" onSubmit={submit} aria-busy={submitting}
-              onFocusCapture={event => { if (event.target instanceof HTMLInputElement) setEditing(true); }}
-              onBlurCapture={event => { if (!(event.relatedTarget instanceof HTMLInputElement)) setEditing(false); }}>
-              <fieldset disabled={submitting}>
+      <form className="auth-form" onSubmit={submit} aria-busy={submitting}>
+        <fieldset disabled={submitting}>
                 <legend className="sr-only">{isRegister ? 'Datos para crear tu cuenta' : 'Datos de inicio de sesión'}</legend>
                 {isRegister && <label className="auth-field">
                   <User size={20} aria-hidden="true" /><span className="sr-only">Tu nombre</span>
@@ -107,18 +85,13 @@ export default function AuthEntryPage(props: AuthEntryProps) {
                 <button type="submit" className="auth-submit" disabled={submitting}>
                   {submitting ? <><LoaderCircle className="auth-spinner" size={20} /><span>{isRegister ? 'Creando tu cuenta…' : 'Entrando a tu mundo…'}</span></> : <><span>{isRegister ? 'Crear cuenta' : 'Iniciar sesión'}</span><ArrowRight size={20} /></>}
                 </button>
-              </fieldset>
-              {status && <p className="auth-status" role="status" aria-live="polite">{status}</p>}
-            </form>
+        </fieldset>
+        {status && <p className="auth-status" role="status" aria-live="polite">{status}</p>}
+      </form>
 
-            <SocialAuthPreview disabled={submitting} />
-            <button type="button" className="auth-guest" onClick={onEnter} disabled={submitting}><Sprout size={18} /> Explorar mi jardín sin cuenta <ArrowRight size={16} /></button>
-            <p className="auth-switch">{isRegister ? '¿Ya tienes cuenta?' : '¿Aún no tienes cuenta?'}{' '}<button type="button" onClick={onSwitchMode} disabled={submitting}>{isRegister ? 'Iniciar sesión' : 'Crear cuenta'}</button></p>
-            <p className="auth-footnote"><LockKeyhole size={12} /> Un jardín personal para lo que te importa.</p>
-          </section>
-        </div>
-        <footer className="auth-footer"><button type="button" onClick={onBack}><ArrowLeft size={14} /> Conoce Seeds</button><span>Planta. Cuida. Crece.</span></footer>
-      </div>
-    </main>
+      <SocialAuthPreview disabled={submitting} />
+      <p className="auth-switch">{isRegister ? '¿Ya tienes cuenta?' : '¿Aún no tienes cuenta?'}{' '}<button type="button" onClick={onSwitchMode} disabled={submitting}>{isRegister ? 'Iniciar sesión' : 'Crear cuenta'}</button></p>
+      <p className="auth-footnote"><LockKeyhole size={12} /> Un jardín personal para lo que te importa.</p>
+    </section>
   );
 }

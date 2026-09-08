@@ -76,7 +76,6 @@ import { AccountLease } from './accountScope';
 import AccountBoundary from './components/AccountBoundary';
 import { assertLegacyRecoveryOwner, reserveLegacyRecovery, mergeLegacyGarden } from './legacyRecovery';
 import { migrateFocusNotesIntoSeeds, normalizeFocusNoteMap } from './focusNotes';
-import AuthEntryPage from './components/AuthEntryPage';
 import LandingPage from './components/LandingPage';
 import { passwordPolicyError } from './authValidation';
 
@@ -6489,40 +6488,38 @@ function AccountWorkspace({ session, lease }: { session: Session | null; lease: 
   }
 
   if (showLanding) {
-    if (landingRoute !== 'landing') {
-      return (
-        <AuthEntryPage
-          key={landingRoute}
-          mode={landingRoute}
-          onBack={() => setLandingRoute('landing')}
-          onSwitchMode={() => {
-            setAuthStatus('');
-            setAuthPassword('');
-            setAuthConfirmPassword('');
-            setLandingRoute(landingRoute === 'login' ? 'register' : 'login');
-          }}
-          onEnter={enterApp}
-          accountName={authName}
-          setAccountName={setAuthName}
-          authEmail={authEmail}
-          setAuthEmail={setAuthEmail}
-          authPassword={authPassword}
-          setAuthPassword={setAuthPassword}
-          authConfirmPassword={authConfirmPassword}
-          setAuthConfirmPassword={setAuthConfirmPassword}
-          authDisabledReason={authDisabledReason}
-          authStatus={authStatus}
-          onSignIn={signInWithEmail}
-          onSignUp={signUpWithEmail}
-        />
-      );
-    }
-
     return (
       <LandingPage
+        route={landingRoute}
         onEnter={enterApp}
-        onShowLogin={() => setLandingRoute('login')}
-        onShowRegister={() => setLandingRoute('register')}
+        onShowLanding={() => {
+          setAuthStatus('');
+          setLandingRoute('landing');
+        }}
+        onShowLogin={() => {
+          setAuthStatus('');
+          setAuthPassword('');
+          setAuthConfirmPassword('');
+          setLandingRoute('login');
+        }}
+        onShowRegister={() => {
+          setAuthStatus('');
+          setAuthPassword('');
+          setAuthConfirmPassword('');
+          setLandingRoute('register');
+        }}
+        accountName={authName}
+        setAccountName={setAuthName}
+        authEmail={authEmail}
+        setAuthEmail={setAuthEmail}
+        authPassword={authPassword}
+        setAuthPassword={setAuthPassword}
+        authConfirmPassword={authConfirmPassword}
+        setAuthConfirmPassword={setAuthConfirmPassword}
+        authDisabledReason={authDisabledReason}
+        authStatus={authStatus}
+        onSignIn={signInWithEmail}
+        onSignUp={signUpWithEmail}
       />
     );
   }
