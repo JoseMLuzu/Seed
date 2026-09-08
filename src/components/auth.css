@@ -105,6 +105,11 @@
 .welcome-login:hover { background: #edf2e7; }
 .welcome-footer { min-height: 40px; }
 @keyframes auth-spin { to { transform: rotate(360deg); } }
+@media (min-width: 700px) {
+  .auth-shell { height: 100dvh; min-height: 0; }
+  .auth-content { min-height: 0; grid-template-rows: minmax(0, 1fr); }
+  .auth-panel { max-height: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #cbd4c4 transparent; }
+}
 @media (max-width: 900px) {
   .auth-shell { padding-left: 28px; padding-right: 28px; }
   .auth-content { gap: 30px; }
