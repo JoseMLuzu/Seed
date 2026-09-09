@@ -65,13 +65,13 @@ import {
 } from 'lucide-react';
 import { Theme, SeedNote, Planet } from './types';
 import { addFocusMinutes, createDailyClosureNote, DAY_MS, daysSince, isDailyClosureForDate, toggleTaskForNote, wateringDue, waterNote as waterSeedNote } from './seedLogic';
-import { loadLegacyNotes, loadNotesFromDb, saveNotesToDb } from './storage';
+import { deleteNotesFromDb, loadLegacyNotes, loadNotesFromDb, saveNotesToDb } from './storage';
 import { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';
-import { deleteNoteFromSupabase, deletePlanetFromSupabase, pushGardenToSupabase, syncGardenWithSupabase } from './supabaseSync';
+import { deleteNoteFromSupabase, deleteOwnAccountFromSupabase, deletePlanetFromSupabase, pushGardenToSupabase, syncGardenWithSupabase } from './supabaseSync';
 import { normalizeNote, normalizeNotes } from './normalize';
 import { playSeedSound, preloadSeedSounds, unlockSeedAudio, type SeedSoundKind } from './sound';
-import { createAccountStorage, getStoredItem as getDeviceItem, removeStoredItem as removeDeviceItem } from './appStorage';
+import { clearAccountStorage, createAccountStorage, getStoredItem as getDeviceItem, removeStoredItem as removeDeviceItem } from './appStorage';
 import { AccountLease } from './accountScope';
 import AccountBoundary, { type AccountAuthFlow } from './components/AccountBoundary';
 import { assertLegacyRecoveryOwner, reserveLegacyRecovery, mergeLegacyGarden } from './legacyRecovery';
@@ -4349,6 +4349,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
   const [authPassword, setAuthPassword] = useState('');
   const [authConfirmPassword, setAuthConfirmPassword] = useState('');
   const [authStatus, setAuthStatus] = useState('');
+	  const [accountAction, setAccountAction] = useState<'signout' | 'delete' | null>(null);
 	  const [syncStatus, setSyncStatus] = useState('');
 	  const [isSyncing, setIsSyncing] = useState(false);
 	  const applyingRemoteSyncRef = useRef(false);
@@ -6105,7 +6106,8 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
   };
 
   const signOut = async () => {
-    if (!supabase) return;
+    if (!supabase || !session?.user || accountAction) return;
+    setAccountAction('signout');
     setSyncStatus('');
     setAuthStatus('Guardando el jardín antes de salir…');
     try {
@@ -6115,6 +6117,40 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
       if (error) throw error;
     } catch {
       if (lease.isActive()) setAuthStatus('No se pudo cerrar sesión con seguridad. Tus notas siguen en esta cuenta; vuelve a intentarlo.');
+      if (lease.isActive()) setAccountAction(null);
+    }
+  };
+
+  const deleteAccount = async () => {
+    if (!supabase || !session?.user || accountAction) return;
+    const identity = session.user.email || 'esta cuenta';
+    if (!window.confirm(`¿Eliminar permanentemente ${identity}? Se borrarán la cuenta, sus jardines, ideas y datos sincronizados.`)) return;
+    if (!window.confirm('Confirmación final: esta acción no se puede deshacer. Si quieres conservar algo, cancela y exporta un backup primero.')) return;
+
+    setAccountAction('delete');
+    setSyncStatus('');
+    setAuthStatus('Eliminando tu cuenta y sus datos…');
+    let remoteDeleted = false;
+    try {
+      await deleteOwnAccountFromSupabase(lease.syncAccess());
+      remoteDeleted = true;
+      // Prevent the account workspace cleanup from recreating its deleted note cache.
+      latestNotes.current = { notes: [], notesLoaded: false };
+      await deleteNotesFromDb(lease.scope);
+      if (!clearAccountStorage(lease.scope)) throw new Error('La cuenta se eliminó, pero no se pudieron limpiar todos sus datos de este dispositivo.');
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) throw error;
+    } catch (error) {
+      if (remoteDeleted) {
+        // The server-side deletion succeeded; always try to remove the now-invalid local session.
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+      }
+      if (lease.isActive()) {
+        setAuthStatus(remoteDeleted
+          ? 'La cuenta fue eliminada. Cierra y vuelve a abrir Seeds para completar la limpieza local.'
+          : error instanceof Error ? error.message : 'No se pudo eliminar la cuenta. Inténtalo de nuevo.');
+        setAccountAction(null);
+      }
     }
   };
 
@@ -8715,8 +8751,13 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
                                 </p>
                               </div>
                               {session?.user && (
-                                <button onClick={signOut} className="shrink-0 rounded-full bg-[var(--bg-app)] px-3 py-2 text-xs font-semibold text-[var(--sage)] ring-1 ring-[var(--border)]">
-                                  Salir
+                                <button
+                                  type="button"
+                                  onClick={signOut}
+                                  disabled={accountAction !== null}
+                                  className="shrink-0 rounded-full bg-[var(--bg-app)] px-3 py-2 text-xs font-semibold text-[var(--sage)] ring-1 ring-[var(--border)] disabled:opacity-45"
+                                >
+                                  {accountAction === 'signout' ? 'Saliendo…' : 'Cerrar sesión'}
                                 </button>
                               )}
                             </div>
@@ -8808,13 +8849,27 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
                         ))}
 
                         {renderSettingsSection('Zona sensible', (
-                          <button onClick={clearGardenData} className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold text-[var(--tone-danger)] transition-colors hover:bg-[var(--tone-danger-bg)]">
-                            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--tone-danger-bg)] text-[var(--tone-danger)]">
-                              <Trash2 size={15} />
-                            </span>
-                            <span className="min-w-0 flex-1">Borrar datos locales</span>
-                            <ChevronRight size={15} className="text-[var(--tone-danger)] opacity-55" />
-                          </button>
+                          <>
+                            <button onClick={clearGardenData} disabled={accountAction !== null} className="flex min-h-12 w-full items-center gap-3 border-b border-[var(--border)] px-4 py-2.5 text-left text-sm font-semibold text-[var(--tone-danger)] transition-colors last:border-b-0 hover:bg-[var(--tone-danger-bg)] disabled:opacity-45">
+                              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--tone-danger-bg)] text-[var(--tone-danger)]">
+                                <Trash2 size={15} />
+                              </span>
+                              <span className="min-w-0 flex-1">Borrar datos locales</span>
+                              <ChevronRight size={15} className="text-[var(--tone-danger)] opacity-55" />
+                            </button>
+                            {session?.user && (
+                              <button onClick={deleteAccount} disabled={accountAction !== null} className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold text-[var(--tone-danger)] transition-colors hover:bg-[var(--tone-danger-bg)] disabled:opacity-45">
+                                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--tone-danger-bg)] text-[var(--tone-danger)]">
+                                  <User size={15} />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block">{accountAction === 'delete' ? 'Eliminando cuenta…' : 'Eliminar cuenta'}</span>
+                                  <span className="mt-0.5 block text-[10px] font-medium opacity-70">Borra la cuenta y todos sus datos permanentemente</span>
+                                </span>
+                                <ChevronRight size={15} className="text-[var(--tone-danger)] opacity-55" />
+                              </button>
+                            )}
+                          </>
                         ))}
                       </motion.div>
                     )}
