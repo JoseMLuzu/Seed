@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fetchGardenFromSupabase, pushGardenToSupabase, syncGardenWithSupabase, deletePlanetFromSupabase } from './supabaseSync';
+import { deleteOwnAccountFromSupabase, fetchGardenFromSupabase, pushGardenToSupabase, syncGardenWithSupabase, deletePlanetFromSupabase } from './supabaseSync';
 import type { SyncAccess } from './accountScope';
 
 type Request = { table: string; operation: string; filters: Record<string, string>; headers: Record<string, string>; signal?: AbortSignal; rows?: unknown[] };
@@ -66,4 +66,30 @@ test('an already revoked account performs no requests', async () => {
   const { client, requests } = backend();
   await assert.rejects(fetchGardenFromSupabase(access(controller), client));
   assert.equal(requests.length, 0);
+});
+
+test('account deletion calls only the authenticated self-delete RPC with pinned access', async () => {
+  const request = { rpc: '', headers: {} as Record<string, string>, signal: undefined as AbortSignal | undefined };
+  const client = { rpc(name: string) {
+    request.rpc = name;
+    const query = {
+      setHeader(key: string, value: string) { request.headers[key] = value; return query; },
+      abortSignal(signal: AbortSignal) { request.signal = signal; return Promise.resolve({ data: true, error: null }); },
+    };
+    return query;
+  } } as unknown as NonNullable<Parameters<typeof deleteOwnAccountFromSupabase>[1]>;
+
+  await deleteOwnAccountFromSupabase(access(), client);
+  assert.equal(request.rpc, 'delete_own_account');
+  assert.equal(request.headers.Authorization, 'Bearer token-A');
+  assert.ok(request.signal);
+});
+
+test('account deletion is rejected before the RPC when its lease was revoked', async () => {
+  let called = false;
+  const client = { rpc() { called = true; throw new Error('must not run'); } } as unknown as NonNullable<Parameters<typeof deleteOwnAccountFromSupabase>[1]>;
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(deleteOwnAccountFromSupabase(access(controller), client));
+  assert.equal(called, false);
 });

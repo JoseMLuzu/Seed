@@ -57,6 +57,20 @@ export function setStoredJson(key: string, value: unknown) {
   return setStoredItem(key, JSON.stringify(value));
 }
 
+/** Removes every localStorage value owned by one account without touching other users or guest data. */
+export function clearAccountStorage(scope: AccountScope) {
+  const prefix = scopedStorageKey(scope, '');
+  try {
+    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith(prefix)) localStorage.removeItem(key);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Bound to an immutable owner, never to a mutable global current-user variable. */
 export function createAccountStorage(scope: AccountScope) {
   const keyFor = (key: string) => scopedStorageKey(scope, key);

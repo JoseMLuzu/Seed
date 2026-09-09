@@ -4,6 +4,7 @@ import { normalizeNote } from './normalize';
 import type { SyncAccess } from './accountScope';
 
 type GardenClient = Pick<NonNullable<typeof supabase>, 'from'>;
+type AccountClient = Pick<NonNullable<typeof supabase>, 'rpc'>;
 
 export type OwnedSyncSnapshot = SyncSnapshot & { ownerId: string };
 
@@ -178,4 +179,16 @@ export async function deletePlanetFromSupabase(id: string, access: SyncAccess, c
     .setHeader('Authorization', `Bearer ${access.accessToken}`).abortSignal(access.signal);
   checkAccess(access);
   if (error) throw error;
+}
+
+export async function deleteOwnAccountFromSupabase(access: SyncAccess, client: AccountClient | null = supabase) {
+  if (!client) throw new Error('Supabase no está configurado.');
+  checkAccess(access);
+  const { data, error } = await client
+    .rpc('delete_own_account')
+    .setHeader('Authorization', `Bearer ${access.accessToken}`)
+    .abortSignal(access.signal);
+  checkAccess(access);
+  if (error) throw error;
+  if (data !== true) throw new Error('Supabase no confirmó la eliminación de la cuenta.');
 }

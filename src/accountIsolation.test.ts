@@ -3,14 +3,16 @@ import { beforeEach, test } from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
 import type { Session } from '@supabase/supabase-js';
 import { AccountLease, accountScope, scopedStorageKey } from './accountScope';
-import { createAccountStorage } from './appStorage';
-import { loadLegacyNotes, loadNotesFromDb, saveNotesToDb } from './storage';
+import { clearAccountStorage, createAccountStorage } from './appStorage';
+import { deleteNotesFromDb, loadLegacyNotes, loadNotesFromDb, saveNotesToDb } from './storage';
 import { assertLegacyRecoveryOwner, reserveLegacyRecovery, mergeLegacyGarden } from './legacyRecovery';
 import { invalidateNativeAccountTasks, runNativeAccountTask } from './native/accountPrivacy';
 import type { SeedNote } from './types';
 
 class MemoryStorage {
   data = new Map<string, string>();
+  get length() { return this.data.size; }
+  key(index: number) { return [...this.data.keys()][index] ?? null; }
   getItem(key: string) { return this.data.get(key) ?? null; }
   setItem(key: string, value: string) { this.data.set(key, value); }
   removeItem(key: string) { this.data.delete(key); }
@@ -63,6 +65,20 @@ test('IndexedDB and fallback keep identical note ids independent between three o
     localStorage.removeItem(scopedStorageKey(scope, 'notes'));
     assert.equal((await loadNotesFromDb(scope))[0].title, title);
   }
+});
+
+test('account deletion clears only the selected identity from localStorage and IndexedDB', async () => {
+  createAccountStorage(a).setStoredItem('seed-account', 'A');
+  createAccountStorage(b).setStoredItem('seed-account', 'B');
+  await Promise.all([saveNotesToDb(a, [note('A')]), saveNotesToDb(b, [note('B')])]);
+
+  await deleteNotesFromDb(a);
+  assert.equal(clearAccountStorage(a), true);
+
+  assert.equal(createAccountStorage(a).getStoredItem('seed-account'), null);
+  assert.deepEqual(await loadNotesFromDb(a), []);
+  assert.equal(createAccountStorage(b).getStoredItem('seed-account'), 'B');
+  assert.equal((await loadNotesFromDb(b))[0].title, 'B');
 });
 
 test('late writes remain in their captured account, including immediate switch-back', async () => {

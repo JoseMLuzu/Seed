@@ -103,6 +103,20 @@ export function saveNotesToDb(scope: AccountScope, notes: SeedNote[]): Promise<v
   return write;
 }
 
+/** Permanently removes the note cache for exactly one account scope. */
+export async function deleteNotesFromDb(scope: AccountScope): Promise<void> {
+  await writeQueues.get(scope.key)?.catch(() => {});
+  localStorage.removeItem(scopedStorageKey(scope, 'notes'));
+  if (!hasIndexedDb()) return;
+
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(scopedStorageKey(scope, 'db'));
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error || new Error('No se pudo borrar el jardín local.'));
+    request.onblocked = () => reject(new Error('Cierra las otras ventanas de Seeds para borrar los datos locales.'));
+  });
+}
+
 /** Legacy unowned data is read only on an explicit recovery action, never at sign-in. */
 export async function loadLegacyNotes(): Promise<SeedNote[]> {
   const raw = localStorage.getItem('seed-notes');
