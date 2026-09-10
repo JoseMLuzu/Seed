@@ -2,7 +2,7 @@
 
 ## Alcance
 
-Este bloque separa el jardín invitado de cada cuenta y protege los cambios de sesión. No completa toda la fase P0: todavía faltan la cola de sincronización incremental, la resolución de conflictos, los registros de eliminación y la paginación de la nube.
+Este bloque separa el jardín invitado de cada cuenta y protege los cambios de sesión. P0.2 añade la cola incremental, revisiones del servidor, archivo de conflictos y registros de eliminación. Todavía faltan la paginación y una interfaz para inspeccionar o restaurar conflictos archivados.
 
 No cambia el diseño de acceso, no activa Google/Apple, no modifica las políticas SQL ni los identificadores de firma iOS.
 
@@ -15,6 +15,7 @@ No cambia el diseño de acceso, no activa Google/Apple, no modifica las polític
 | `src/appStorage.ts` | Preferencias vinculadas explícitamente a un espacio; conserva helpers globales para datos no personales. |
 | `src/storage.ts` | Bases IndexedDB independientes, respaldo local versionado y escrituras ordenadas por espacio. |
 | `src/supabaseSync.ts` | Propietario explícito, token capturado, filtros por usuario y cancelación en todas las operaciones. |
+| `src/syncQueue.ts` | Cola persistente por cuenta, compactación, diferencias entre snapshots y reintentos incrementales. |
 | `src/supabase.ts` | Cliente real; la lectura opcional de variables permite importar la lógica en pruebas Node sin configurar una cuenta. |
 | `src/legacyRecovery.ts` | Reserva de recuperación de datos anteriores y fusión que conserva registros existentes. |
 | `src/native/accountPrivacy.ts` | Serializa efectos nativos y descarta los pendientes de la identidad anterior. |
@@ -42,7 +43,7 @@ No cambia el diseño de acceso, no activa Google/Apple, no modifica las polític
 - Respaldo en localStorage: `<prefijo>notes`, objeto `{ revision, notes }`.
 - Preferencias: por ejemplo `<prefijo>seed-planets`, `<prefijo>seed-account` y `<prefijo>seed-daily-intention-YYYY-MM-DD`.
 
-La revisión local permite escoger la copia más reciente si IndexedDB falla y se guarda en el respaldo. No es una versión distribuida para resolver conflictos entre dispositivos. Las escrituras todavía reemplazan la colección completa; esa optimización corresponde al siguiente bloque.
+La revisión local permite escoger la copia más reciente si IndexedDB falla y se guarda en el respaldo. No es una versión distribuida para resolver conflictos entre dispositivos. La caché local de notas todavía escribe snapshots completos; la sincronización automática con Supabase ya opera por entidad mediante una cola persistente.
 
 `seed-pending-action` continúa siendo una clave global porque la escribe el puente nativo para abrir Hoy o crear una nota; no contiene texto de notas ni un perfil.
 
