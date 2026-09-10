@@ -36,6 +36,8 @@ export interface SeedNote {
   focusNote?: string;
   focusedMinutes?: number;
   harvestedAt?: number;
+  /** Server-assigned revision; local edits keep it as their optimistic base. */
+  syncVersion?: number;
 }
 
 export interface Planet {
@@ -45,6 +47,8 @@ export interface Planet {
   theme: Theme;
   createdAt: number;
   updatedAt?: number;
+  /** Server-assigned revision; local edits keep it as their optimistic base. */
+  syncVersion?: number;
 }
 
 export interface SyncSnapshot {

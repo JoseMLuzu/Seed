@@ -63,12 +63,13 @@ import {
   MoreHorizontal,
   type LucideIcon
 } from 'lucide-react';
-import { Theme, SeedNote, Planet } from './types';
+import { Theme, SeedNote, Planet, type SyncSnapshot } from './types';
 import { addFocusMinutes, createDailyClosureNote, DAY_MS, daysSince, isDailyClosureForDate, toggleTaskForNote, wateringDue, waterNote as waterSeedNote } from './seedLogic';
 import { deleteNotesFromDb, loadLegacyNotes, loadNotesFromDb, saveNotesToDb } from './storage';
 import { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';
-import { deleteNoteFromSupabase, deleteOwnAccountFromSupabase, deletePlanetFromSupabase, pushGardenToSupabase, syncGardenWithSupabase } from './supabaseSync';
+import { deleteOwnAccountFromSupabase, flushSyncQueue, syncGardenIncrementally } from './supabaseSync';
+import { applySyncTombstones, diffSyncSnapshots, enqueueSyncMutations, loadSyncQueue, mergeSyncSnapshots } from './syncQueue';
 import { normalizeNote, normalizeNotes } from './normalize';
 import { playSeedSound, preloadSeedSounds, unlockSeedAudio, type SeedSoundKind } from './sound';
 import { clearAccountStorage, createAccountStorage, getStoredItem as getDeviceItem, removeStoredItem as removeDeviceItem } from './appStorage';
@@ -356,6 +357,13 @@ function touchPlanet(planet: Planet, timestamp = Date.now()): Planet {
 
 function noteUpdatedAt(note: SeedNote) {
   return note.updatedAt || note.createdAt || 0;
+}
+
+function shouldAcceptSyncedEntity(current: SeedNote | Planet, incoming: SeedNote | Planet) {
+  if (current.syncVersion !== undefined && incoming.syncVersion !== undefined && current.syncVersion !== incoming.syncVersion) {
+    return incoming.syncVersion > current.syncVersion;
+  }
+  return (incoming.updatedAt || incoming.createdAt || 0) >= (current.updatedAt || current.createdAt || 0);
 }
 
 const SEED_TYPES: { id: NonNullable<SeedNote['seedType']>; label: string; task: string }[] = [
@@ -4352,8 +4360,14 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
 	  const [accountAction, setAccountAction] = useState<'signout' | 'delete' | null>(null);
 	  const [syncStatus, setSyncStatus] = useState('');
 	  const [isSyncing, setIsSyncing] = useState(false);
-	  const applyingRemoteSyncRef = useRef(false);
+	  const [pendingSyncCount, setPendingSyncCount] = useState(() => {
+	    if (!session?.user) return 0;
+	    try { return loadSyncQueue(lease.scope).length; } catch { return 0; }
+	  });
+	  const [syncRetryAt, setSyncRetryAt] = useState(0);
+	  const [syncQueueRevision, setSyncQueueRevision] = useState(0);
 	  const remoteSyncReadyRef = useRef(false);
+	  const syncSnapshotRef = useRef<SyncSnapshot | null>(null);
 	  const autoSyncTimerRef = useRef<number | null>(null);
 	  const mobileGardenFullscreenOpenedRef = useRef(false);
 	  const mobileMenuRef = useRef<HTMLElement | null>(null);
@@ -4901,30 +4915,63 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
     if (kind !== 'open') playMicroSound(kind, force);
   };
 
+	const flushQueuedChanges = useCallback(async (force = false) => {
+	  if (!session?.user || !lease.isActive()) return;
+	  setIsSyncing(true);
+	  try {
+	    const result = await flushSyncQueue(lease.scope, lease.syncAccess(), undefined, { force });
+	    if (!lease.isActive()) return;
+	    const currentQueue = loadSyncQueue(lease.scope);
+	    setPendingSyncCount(currentQueue.length);
+	    setSyncRetryAt(currentQueue[0]?.nextAttemptAt || result.nextRetryAt);
+	    if (currentQueue.length === 0) {
+	      setSyncStatus(result.conflicts > 0
+	        ? `${result.conflicts} ${result.conflicts === 1 ? 'conflicto fue protegido' : 'conflictos fueron protegidos'} en el historial de sincronización.`
+	        : result.processed > 0 ? 'Todos los cambios están guardados en la nube.' : 'Sin cambios pendientes.');
+	    } else {
+	      setSyncStatus(`Guardado localmente · ${currentQueue.length} ${currentQueue.length === 1 ? 'cambio pendiente' : 'cambios pendientes'}. Reintentaremos automáticamente.`);
+	    }
+	  } catch (error) {
+	    if (lease.isActive()) setSyncStatus(error instanceof Error ? error.message : 'No se pudieron enviar los cambios pendientes.');
+	  } finally {
+	    if (lease.isActive()) setIsSyncing(false);
+	  }
+	}, [lease, session?.user?.id]);
+
   useEffect(() => {
     if (!session?.user || !notesLoaded || !lease.isActive()) {
       remoteSyncReadyRef.current = false;
+	  syncSnapshotRef.current = notesLoaded ? { planets, notes } : null;
       return;
     }
 
     let cancelled = false;
+	remoteSyncReadyRef.current = true;
+	syncSnapshotRef.current = { planets, notes };
     setIsSyncing(true);
     setSyncStatus('Preparando sync entre dispositivos...');
 
-    syncGardenWithSupabase({ ownerId: lease.scope.userId!, planets, notes }, lease.syncAccess())
+	    syncGardenIncrementally(lease.scope, { ownerId: lease.scope.userId!, planets, notes }, lease.syncAccess())
       .then(synced => {
         if (cancelled || !lease.isActive()) return;
-        applyingRemoteSyncRef.current = true;
-        if (synced.planets.length > 0) setPlanets(synced.planets);
-        setNotes(synced.notes);
-        window.setTimeout(() => {
-          applyingRemoteSyncRef.current = false;
-          remoteSyncReadyRef.current = true;
-        }, 0);
-        setSyncStatus(`Sync activo: ${synced.notes.length} ideas en la nube.`);
+	        const reconciled = applySyncTombstones(mergeSyncSnapshots(syncSnapshotRef.current || { planets, notes }, synced), synced.tombstones);
+	        syncSnapshotRef.current = reconciled;
+	        if (reconciled.planets.length > 0) setPlanets(reconciled.planets);
+	        setNotes(reconciled.notes);
+	        const currentQueue = loadSyncQueue(lease.scope);
+	        setPendingSyncCount(currentQueue.length);
+	        setSyncRetryAt(currentQueue[0]?.nextAttemptAt || 0);
+	        setSyncStatus(synced.conflicts > 0
+	          ? `${synced.conflicts} ${synced.conflicts === 1 ? 'conflicto fue protegido' : 'conflictos fueron protegidos'} durante la sincronización.`
+	          : currentQueue.length > 0
+	          ? `Sync activo · ${currentQueue.length} ${currentQueue.length === 1 ? 'cambio pendiente' : 'cambios pendientes'}.`
+	          : `Sync activo: ${reconciled.notes.length} ideas en la nube.`);
       })
       .catch(error => {
-        if (!cancelled) setSyncStatus(error instanceof Error ? error.message : 'No se pudo preparar el sync.');
+	        if (!cancelled) {
+	          try { setPendingSyncCount(loadSyncQueue(lease.scope).length); } catch { /* The original error is more useful. */ }
+	          setSyncStatus(error instanceof Error ? error.message : 'No se pudo preparar el sync. Tus cambios siguen guardados localmente.');
+	        }
       })
       .finally(() => {
         if (!cancelled) setIsSyncing(false);
@@ -4936,24 +4983,24 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
   useEffect(() => {
     if (!supabase || !session?.user || !lease.isActive()) return;
     const userId = session.user.id;
-    const markRemoteApplyDone = () => window.setTimeout(() => { applyingRemoteSyncRef.current = false; }, 0);
 
     const handleNotePayload = (payload: SupabaseRealtimePayload) => {
       if (!lease.isActive()) return;
       const owner = payload.eventType === 'DELETE' ? payload.old?.user_id : payload.new?.user_id;
       if (owner !== lease.scope.userId) return;
-      applyingRemoteSyncRef.current = true;
       if (payload.eventType === 'DELETE') {
         const deletedId = typeof payload.old?.id === 'string' ? payload.old.id : undefined;
-        if (deletedId) setNotes(current => current.filter(note => note.id !== deletedId));
-        markRemoteApplyDone();
+	        if (deletedId) setNotes(current => {
+	          const next = current.filter(note => note.id !== deletedId);
+	          if (syncSnapshotRef.current) syncSnapshotRef.current = { ...syncSnapshotRef.current, notes: next };
+	          return next;
+	        });
         return;
       }
 
       const row = payload.new;
       const rowData = row?.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : null;
       if (!rowData?.id) {
-        markRemoteApplyDone();
         return;
       }
 
@@ -4961,37 +5008,38 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
         ...rowData,
         id: rowData.id || row?.id,
         planetId: rowData.planetId || row?.planet_id || DEFAULT_PLANET_ID,
+	      syncVersion: typeof row?.server_revision === 'number' ? row.server_revision : rowData.syncVersion,
       });
 
       if (!incoming) {
-        markRemoteApplyDone();
         return;
       }
 
       setNotes(current => {
         const existing = current.find(note => note.id === incoming.id);
-        if (existing && noteUpdatedAt(existing) > noteUpdatedAt(incoming)) return current;
-        if (existing) return current.map(note => note.id === incoming.id ? incoming : note);
-        return [incoming, ...current];
+	        if (existing && !shouldAcceptSyncedEntity(existing, incoming)) return current;
+	        const next = existing ? current.map(note => note.id === incoming.id ? incoming : note) : [incoming, ...current];
+	        if (syncSnapshotRef.current) syncSnapshotRef.current = { ...syncSnapshotRef.current, notes: next };
+	        return next;
       });
-      markRemoteApplyDone();
     };
 
     const handlePlanetPayload = (payload: SupabaseRealtimePayload) => {
       if (!lease.isActive()) return;
       const owner = payload.eventType === 'DELETE' ? payload.old?.user_id : payload.new?.user_id;
       if (owner !== lease.scope.userId) return;
-      applyingRemoteSyncRef.current = true;
       if (payload.eventType === 'DELETE') {
         const deletedId = typeof payload.old?.id === 'string' ? payload.old.id : undefined;
-        if (deletedId) setPlanets(current => current.filter(planet => planet.id !== deletedId));
-        markRemoteApplyDone();
+	        if (deletedId) setPlanets(current => {
+	          const next = current.filter(planet => planet.id !== deletedId);
+	          if (syncSnapshotRef.current) syncSnapshotRef.current = { ...syncSnapshotRef.current, planets: next };
+	          return next;
+	        });
         return;
       }
 
       const row = payload.new;
       if (typeof row?.id !== 'string' || typeof row.name !== 'string') {
-        markRemoteApplyDone();
         return;
       }
 
@@ -5001,14 +5049,16 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
         description: typeof row.description === 'string' ? row.description : '',
         theme: THEME_IDS.has(row.theme as Theme) ? row.theme as Theme : 'earth',
         createdAt: typeof row.created_at_ms === 'number' ? row.created_at_ms : Date.now(),
+	        updatedAt: typeof row.updated_at === 'string' ? Date.parse(row.updated_at) : undefined,
       };
 
       setPlanets(current => {
         const existing = current.find(planet => planet.id === incoming.id);
-        if (existing) return current.map(planet => planet.id === incoming.id ? { ...planet, ...incoming } : planet);
-        return [...current, incoming];
+	        if (existing && !shouldAcceptSyncedEntity(existing, incoming)) return current;
+	        const next = existing ? current.map(planet => planet.id === incoming.id ? { ...planet, ...incoming } : planet) : [...current, incoming];
+	        if (syncSnapshotRef.current) syncSnapshotRef.current = { ...syncSnapshotRef.current, planets: next };
+	        return next;
       });
-      markRemoteApplyDone();
     };
 
     const notesChannel = supabase
@@ -5036,20 +5086,38 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
   }, [session?.user?.id]);
 
   useEffect(() => {
-    if (!session?.user || !notesLoaded || !remoteSyncReadyRef.current || applyingRemoteSyncRef.current) return;
-    if (autoSyncTimerRef.current) window.clearTimeout(autoSyncTimerRef.current);
+	    if (!notesLoaded) return;
+	    const current: SyncSnapshot = { planets, notes };
+	    const previous = syncSnapshotRef.current;
+	    syncSnapshotRef.current = current;
+	    if (!session?.user || !remoteSyncReadyRef.current || !previous) return;
 
-    autoSyncTimerRef.current = window.setTimeout(() => {
-      if (!lease.isActive()) return;
-      pushGardenToSupabase({ ownerId: lease.scope.userId!, planets, notes }, lease.syncAccess())
-        .then(() => setSyncStatus('Cambios guardados en la nube.'))
-        .catch(error => setSyncStatus(error instanceof Error ? error.message : 'No se pudieron guardar los cambios en la nube.'));
-    }, 900);
+	    const mutations = diffSyncSnapshots(previous, current);
+	    if (mutations.length === 0) return;
+	    try {
+	      const queue = enqueueSyncMutations(lease.scope, mutations);
+	      setPendingSyncCount(queue.length);
+	      setSyncRetryAt(0);
+	      setSyncQueueRevision(value => value + 1);
+	      setSyncStatus(`Guardado localmente · ${queue.length} ${queue.length === 1 ? 'cambio pendiente' : 'cambios pendientes'}.`);
+	    } catch (error) {
+	      setSyncStatus(error instanceof Error ? error.message : 'No se pudo preparar la sincronización local.');
+	    }
+	  }, [planets, notes, notesLoaded, session?.user?.id]);
 
-    return () => {
-      if (autoSyncTimerRef.current) window.clearTimeout(autoSyncTimerRef.current);
-    };
-  }, [planets, notes, notesLoaded, session?.user?.id]);
+	  useEffect(() => {
+	    if (!session?.user || !notesLoaded || pendingSyncCount === 0 || isSyncing) return;
+	    if (autoSyncTimerRef.current) window.clearTimeout(autoSyncTimerRef.current);
+	    const delay = Math.max(900, syncRetryAt > 0 ? syncRetryAt - Date.now() : 0);
+	    autoSyncTimerRef.current = window.setTimeout(() => { void flushQueuedChanges(false); }, delay);
+	    const flushWhenOnline = () => { void flushQueuedChanges(true); };
+	    window.addEventListener('online', flushWhenOnline);
+
+	    return () => {
+	      if (autoSyncTimerRef.current) window.clearTimeout(autoSyncTimerRef.current);
+	      window.removeEventListener('online', flushWhenOnline);
+	    };
+	  }, [flushQueuedChanges, isSyncing, notesLoaded, pendingSyncCount, session?.user?.id, syncQueueRevision, syncRetryAt]);
 
   useEffect(() => {
     if (!notesLoaded) return;
@@ -5218,11 +5286,6 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
     if (!window.confirm(`Eliminar "${note?.title || 'esta semilla'}"? Esta acción no se puede deshacer.`)) return;
     setNotes(current => current.filter(n => n.id !== id));
     if (selectedNoteId === id) setSelectedNoteId(null);
-    if (session?.user) {
-      deleteNoteFromSupabase(id, lease.syncAccess()).catch(error => {
-        setSyncStatus(error instanceof Error ? error.message : 'No se pudo borrar la idea en la nube.');
-      });
-    }
   };
 
   const updateNote = (id: string, updates: Partial<SeedNote>) => {
@@ -5976,11 +6039,6 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
     const nextPlanet = planets.find(planet => planet.id !== activePlanet.id) || DEFAULT_PLANETS[0];
     setNotes(current => current.filter(note => (note.planetId || DEFAULT_PLANET_ID) !== activePlanet.id));
     setPlanets(current => current.filter(planet => planet.id !== activePlanet.id));
-    if (session?.user) {
-      deletePlanetFromSupabase(activePlanet.id, lease.syncAccess()).catch(error => {
-        setSyncStatus(error instanceof Error ? error.message : 'No se pudo borrar el jardín en la nube.');
-      });
-    }
     setShowPlanetSettings(false);
     switchPlanet(nextPlanet.id);
   };
@@ -6163,13 +6221,23 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
     setIsSyncing(true);
     setSyncStatus('Sincronizando jardín...');
     try {
-      const synced = await syncGardenWithSupabase({ ownerId: lease.scope.userId!, planets, notes }, lease.syncAccess());
+	      const synced = await syncGardenIncrementally(lease.scope, { ownerId: lease.scope.userId!, planets, notes }, lease.syncAccess());
       if (!lease.isActive()) return;
-      if (synced.planets.length > 0) setPlanets(synced.planets);
-      setNotes(synced.notes);
-      setSyncStatus(`Sincronizado: ${synced.planets.length} jardines y ${synced.notes.length} ideas.`);
+	      const reconciled = applySyncTombstones(mergeSyncSnapshots(syncSnapshotRef.current || { planets, notes }, synced), synced.tombstones);
+	      syncSnapshotRef.current = reconciled;
+	      if (reconciled.planets.length > 0) setPlanets(reconciled.planets);
+	      setNotes(reconciled.notes);
+	      const currentQueue = loadSyncQueue(lease.scope);
+	      setPendingSyncCount(currentQueue.length);
+	      setSyncRetryAt(currentQueue[0]?.nextAttemptAt || 0);
+	      setSyncStatus(synced.conflicts > 0
+	        ? `${synced.conflicts} ${synced.conflicts === 1 ? 'conflicto fue protegido' : 'conflictos fueron protegidos'} durante la sincronización.`
+	        : currentQueue.length > 0
+	        ? `Sincronización actualizada · ${currentQueue.length} ${currentQueue.length === 1 ? 'cambio pendiente' : 'cambios pendientes'}.`
+	        : `Sincronizado: ${reconciled.planets.length} jardines y ${reconciled.notes.length} ideas.`);
     } catch (error) {
-      setSyncStatus(error instanceof Error ? error.message : 'No se pudo sincronizar.');
+	      try { setPendingSyncCount(loadSyncQueue(lease.scope).length); } catch { /* Keep the sync error below. */ }
+	      setSyncStatus(error instanceof Error ? error.message : 'No se pudo sincronizar. Tus cambios siguen guardados localmente.');
     } finally {
       setIsSyncing(false);
     }
@@ -8811,7 +8879,11 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
                                 disabled={isSyncing}
                                 className="mt-4 h-11 w-full rounded-full bg-[var(--sage)] text-sm font-semibold text-[var(--on-sage)] disabled:opacity-50"
                               >
-                                {isSyncing ? 'Sincronizando...' : 'Sincronizar ahora'}
+	                                {isSyncing
+	                                  ? 'Sincronizando...'
+	                                  : pendingSyncCount > 0
+	                                    ? `Sincronizar ${pendingSyncCount} ${pendingSyncCount === 1 ? 'cambio' : 'cambios'}`
+	                                    : 'Sincronizar ahora'}
                               </button>
                             )}
 
