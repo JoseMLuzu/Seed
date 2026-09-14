@@ -42,6 +42,28 @@
   pointer-events: none;
 }
 
+.today-primary-card {
+  background: var(--surface-strong);
+  background:
+    radial-gradient(circle at 88% 5%, color-mix(in srgb, var(--sage) 14%, transparent), transparent 38%),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--surface-strong) 92%, var(--sage) 8%),
+      var(--surface-strong) 58%,
+      color-mix(in srgb, var(--surface-strong) 96%, var(--bg-app) 4%)
+    );
+}
+
+.today-primary-orb {
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.5), transparent 24%),
+    linear-gradient(145deg, color-mix(in srgb, var(--sage) 18%, transparent), transparent 72%);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--sage) 10%, transparent),
+    0 24px 60px color-mix(in srgb, var(--sage) 8%, transparent);
+}
+
 .font-serif {
   font-family: var(--font-sans) !important;
   letter-spacing: -0.01em;

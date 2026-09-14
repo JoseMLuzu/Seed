@@ -63,8 +63,8 @@ import {
   MoreHorizontal,
   type LucideIcon
 } from 'lucide-react';
-import { Theme, SeedNote, Planet, type SyncSnapshot } from './types';
-import { addFocusMinutes, createDailyClosureNote, DAY_MS, daysSince, isDailyClosureForDate, toggleTaskForNote, wateringDue, waterNote as waterSeedNote } from './seedLogic';
+import { Theme, SeedNote, Planet, type DailyIntentionOutcome, type DailyNextStep, type SyncSnapshot } from './types';
+import { addFocusMinutes, createDailyClosureNote, createDailyEntryNote, dailyEntryId, DAY_MS, daysSince, getDailyActivitySnapshot, getDailyEntryForDate, getSuggestedIntentionOutcome, isDailyClosureForDate, isDailyEntryNote, isSameLocalDay, toggleTaskForNote, updateDailyEntryFocus, wateringDue, waterNote as waterSeedNote } from './seedLogic';
 import { deleteNotesFromDb, loadLegacyNotes, loadNotesFromDb, saveNotesToDb } from './storage';
 import { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from './supabase';
@@ -80,6 +80,7 @@ import { migrateFocusNotesIntoSeeds, normalizeFocusNoteMap } from './focusNotes'
 import LandingPage, { type AuthRoute } from './components/LandingPage';
 import { passwordPolicyError } from './authValidation';
 import { getAuthRedirectUrl, isAuthCallbackUrl } from './authFlow';
+import { buildCalendarEvents, calendarEventsForDay, groupCalendarEventsByDay, isRecordedCalendarEvent, type CalendarEvent, type CalendarEventKind } from './calendarLogic';
 
 const Garden3D = lazy(() => import('./components/Garden3D'));
 
@@ -1205,96 +1206,67 @@ function GestureNoteSurface({
   );
 }
 
-function CalendarView({ 
-  currentMonth, 
-  setCurrentMonth, 
-  notes, 
+function CalendarView({
+  currentMonth,
+  setCurrentMonth,
+  notes,
   onSelectNote,
   onExit,
-}: { 
-  currentMonth: Date; 
-  setCurrentMonth: (d: Date) => void; 
-  notes: SeedNote[]; 
+}: {
+  currentMonth: Date;
+  setCurrentMonth: (d: Date) => void;
+  notes: SeedNote[];
   onSelectNote: (id: string) => void;
   onExit: () => void;
   key?: string;
 }) {
+  const copy = appLanguage === 'en' ? {
+    activity: 'Recorded activity', plan: 'Planned', reflection: 'Reflection', noActivity: 'No recorded activity',
+    quiet: 'A quiet day. Rest also belongs in your path.', focus: 'Focus session', task: 'Step completed',
+    planted: 'Idea planted', watered: 'Idea watered', harvested: 'Harvest completed', closed: 'Day closed', due: 'Target date',
+    activeDays: 'active days', streak: 'day streak', events: 'records', minute: 'min', steps: 'Steps', focusMinutes: 'Focus', harvests: 'Harvests',
+    today: 'Today', done: 'Done', previous: 'Previous month', next: 'Next month', planCount: 'planned', day: 'Day',
+  } : {
+    activity: 'Actividad registrada', plan: 'Planificado', reflection: 'Reflexión', noActivity: 'Sin actividad registrada',
+    quiet: 'Un día tranquilo. El descanso también forma parte de tu camino.', focus: 'Sesión de foco', task: 'Paso completado',
+    planted: 'Idea plantada', watered: 'Idea regada', harvested: 'Cosecha lograda', closed: 'Cierre del día', due: 'Fecha objetivo',
+    activeDays: 'días activos', streak: 'días de racha', events: 'registros', minute: 'min', steps: 'Pasos', focusMinutes: 'Foco', harvests: 'Cosechas',
+    today: 'Hoy', done: 'Listo', previous: 'Mes anterior', next: 'Mes siguiente', planCount: 'planificados', day: 'Día',
+  };
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(monthStart);
   const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
-  const mobileTodayRef = useRef<HTMLButtonElement | null>(null);
+  const mobileTodayRef = useRef<HTMLDivElement | null>(null);
   const [selectedDay, setSelectedDay] = useState(() => {
     const now = new Date();
     return isSameMonth(now, monthStart) ? now : monthStart;
   });
+  const allEvents = useMemo(() => buildCalendarEvents(notes), [notes]);
+  const eventsByDay = useMemo(() => groupCalendarEventsByDay(allEvents), [allEvents]);
+  const selectedEvents = calendarEventsForDay(eventsByDay, selectedDay);
+  const selectedRecorded = selectedEvents.filter(isRecordedCalendarEvent);
+  const selectedPlans = selectedEvents.filter(event => event.category === 'plan');
 
   const goToMonth = (date: Date) => {
     const nextMonth = startOfMonth(date);
     setCurrentMonth(nextMonth);
     setSelectedDay(nextMonth);
   };
-
   const goToToday = () => {
     const today = new Date();
     setCurrentMonth(today);
     setSelectedDay(today);
   };
 
-  const activityByDay = useMemo(() => {
-    type DayActivity = {
-      planted: SeedNote[];
-      watered: SeedNote[];
-      harvested: SeedNote[];
-      advanced: SeedNote[];
-      due: SeedNote[];
-    };
-
-    const map: Record<string, DayActivity> = {};
-    const ensureDay = (date: number | Date) => {
-      const key = format(date, 'yyyy-MM-dd');
-      if (!map[key]) map[key] = { planted: [], watered: [], harvested: [], advanced: [], due: [] };
-      return map[key];
-    };
-
-    notes.forEach(note => {
-      ensureDay(note.createdAt).planted.push(note);
-      if (note.lastWateredAt) ensureDay(note.lastWateredAt).watered.push(note);
-      if (note.harvestedAt) ensureDay(note.harvestedAt).harvested.push(note);
-      if (note.dueDate) ensureDay(note.dueDate).due.push(note);
-      if (note.updatedAt && !isSameDay(note.updatedAt, note.createdAt) && (!note.lastWateredAt || !isSameDay(note.updatedAt, note.lastWateredAt))) {
-        ensureDay(note.updatedAt).advanced.push(note);
-      }
-    });
-    return map;
-  }, [notes]);
-
-  const selectedKey = format(selectedDay, 'yyyy-MM-dd');
-  const selectedActivity = activityByDay[selectedKey] || { planted: [], watered: [], harvested: [], advanced: [], due: [] };
-  const buildDayEvents = (activity: typeof selectedActivity) => [
-    ...activity.planted.map(note => ({ note, type: 'planted', label: note.growthStage === 'seed' ? t('plantedSeed') : t('ideaCreated'), icon: Sprout, tone: 'bg-[var(--tone-seed-bg)] text-[var(--tone-seed)] border-[var(--tone-seed-border)]' })),
-    ...activity.watered.map(note => ({ note, type: 'watered', label: t('wateredIdea'), icon: Droplets, tone: 'bg-[var(--tone-water-bg)] text-[var(--tone-water)] border-[var(--tone-water-border)]' })),
-    ...activity.advanced.map(note => ({ note, type: 'advanced', label: t('advancedIdea'), icon: TrendingUp, tone: 'bg-[var(--tone-sprout-bg)] text-[var(--tone-sprout)] border-[var(--tone-sprout-border)]' })),
-    ...activity.harvested.map(note => ({ note, type: 'harvested', label: t('harvestDone'), icon: CheckCircle2, tone: 'bg-[var(--tone-harvest-bg)] text-[var(--tone-harvest)] border-[var(--tone-harvest-border)]' })),
-    ...activity.due.map(note => ({ note, type: 'due', label: t('dueDate'), icon: Target, tone: 'bg-[var(--surface-soft)] text-[var(--seed-accent)] border-[var(--border)]' })),
-  ];
-  const selectedEvents = buildDayEvents(selectedActivity);
-
-  const monthSummary = monthDays.reduce((summary, day) => {
-    const activity = activityByDay[format(day, 'yyyy-MM-dd')];
-    if (!activity) return summary;
-    return {
-      planted: summary.planted + activity.planted.length,
-      watered: summary.watered + activity.watered.length,
-      harvested: summary.harvested + activity.harvested.length,
-      activeDays: summary.activeDays + (activity.planted.length + activity.watered.length + activity.harvested.length + activity.advanced.length > 0 ? 1 : 0),
-    };
-  }, { planted: 0, watered: 0, harvested: 0, activeDays: 0 });
-  const activeDayKeys = new Set(monthDays
-    .filter(day => {
-      const activity = activityByDay[format(day, 'yyyy-MM-dd')];
-      return activity && activity.planted.length + activity.watered.length + activity.harvested.length + activity.advanced.length > 0;
-    })
-    .map(day => format(day, 'yyyy-MM-dd')));
+  const monthEvents = allEvents.filter(event => isSameMonth(new Date(event.at), monthStart));
+  const monthRecorded = monthEvents.filter(isRecordedCalendarEvent);
+  const activeDayKeys = new Set(monthRecorded.map(event => format(event.at, 'yyyy-MM-dd')));
+  const monthSummary = {
+    activeDays: activeDayKeys.size,
+    steps: monthRecorded.filter(event => event.kind === 'task-completed').length,
+    focusMinutes: monthRecorded.filter(event => event.kind === 'focus').reduce((total, event) => total + (event.minutes || 0), 0),
+    harvests: monthRecorded.filter(event => event.kind === 'harvested').length,
+  };
   const activeStreak = (() => {
     let cursor = new Date();
     if (!isSameMonth(cursor, monthStart)) return 0;
@@ -1305,49 +1277,128 @@ function CalendarView({
     }
     return streak;
   })();
-  const monthProgress = Math.round((monthSummary.activeDays / Math.max(1, monthDays.length)) * 100);
-  const daySummary = selectedEvents.length === 0
-    ? 'Un claro libre en tu jardín. Puedes usarlo para plantar algo nuevo o descansar sin culpa.'
-    : selectedActivity.harvested.length > 0
-      ? `Día de cosecha: cerraste ${selectedActivity.harvested.length} idea${selectedActivity.harvested.length === 1 ? '' : 's'} y dejaste evidencia de avance.`
-      : selectedActivity.watered.length > 0
-        ? `Día de cuidado: regaste ${selectedActivity.watered.length} idea${selectedActivity.watered.length === 1 ? '' : 's'} para que no se pierdan.`
-        : selectedActivity.planted.length > 0
-          ? `Día de siembra: plantaste ${selectedActivity.planted.length} semilla${selectedActivity.planted.length === 1 ? '' : 's'} nueva${selectedActivity.planted.length === 1 ? '' : 's'}.`
-          : `Día de avance: moviste ${selectedActivity.advanced.length} idea${selectedActivity.advanced.length === 1 ? '' : 's'} hacia adelante.`;
-  const weekLabels = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'];
+  const selectedFocusMinutes = selectedRecorded
+    .filter(event => event.kind === 'focus')
+    .reduce((total, event) => total + (event.minutes || 0), 0);
+  const selectedSteps = selectedRecorded.filter(event => event.kind === 'task-completed').length;
+
+  const eventMeta = (kind: CalendarEventKind): { label: string; icon: LucideIcon; tone: string; iconTone: string } => {
+    switch (kind) {
+      case 'planted': return { label: copy.planted, icon: Sprout, tone: 'border-[var(--tone-seed-border)] bg-[var(--tone-seed-bg)]', iconTone: 'text-[var(--tone-seed)]' };
+      case 'watered': return { label: copy.watered, icon: Droplets, tone: 'border-[var(--tone-water-border)] bg-[var(--tone-water-bg)]', iconTone: 'text-[var(--tone-water)]' };
+      case 'task-completed': return { label: copy.task, icon: CheckCircle2, tone: 'border-[var(--tone-sprout-border)] bg-[var(--tone-sprout-bg)]', iconTone: 'text-[var(--tone-sprout)]' };
+      case 'focus': return { label: copy.focus, icon: Clock, tone: 'border-[var(--border)] bg-[var(--surface-soft)]', iconTone: 'text-[var(--sage)]' };
+      case 'harvested': return { label: copy.harvested, icon: Sparkles, tone: 'border-[var(--tone-harvest-border)] bg-[var(--tone-harvest-bg)]', iconTone: 'text-[var(--tone-harvest)]' };
+      case 'daily-closed': return { label: copy.closed, icon: Leaf, tone: 'border-[var(--border)] bg-[var(--surface-soft)]', iconTone: 'text-[var(--sage)]' };
+      case 'due': return { label: copy.due, icon: Target, tone: 'border-dashed border-[var(--seed-accent)]/45 bg-[var(--surface-strong)]', iconTone: 'text-[var(--seed-accent)]' };
+    }
+  };
+  const strongestKind = (events: CalendarEvent[]): CalendarEventKind | undefined => {
+    const recorded = events.filter(isRecordedCalendarEvent);
+    return (['harvested', 'daily-closed', 'task-completed', 'focus', 'watered', 'planted'] as CalendarEventKind[])
+      .find(kind => recorded.some(event => event.kind === kind));
+  };
+  const eventDetail = (event: CalendarEvent) => {
+    if (event.kind === 'focus') return `${event.minutes || 0} ${copy.minute} · ${event.noteTitle}`;
+    if (event.kind === 'daily-closed') {
+      const outcome = event.detail === 'yes' ? (appLanguage === 'en' ? 'Intention completed' : 'Intención completada')
+        : event.detail === 'some' ? (appLanguage === 'en' ? 'Some progress' : 'Hubo algo de avance')
+          : event.detail === 'no' ? (appLanguage === 'en' ? 'Not today' : 'No fue hoy') : undefined;
+      return outcome;
+    }
+    return event.detail;
+  };
+  const renderEvent = (event: CalendarEvent) => {
+    const meta = eventMeta(event.kind);
+    const EventIcon = meta.icon;
+    const detail = eventDetail(event);
+    const canOpen = event.kind !== 'daily-closed';
+    return (
+      <button
+        key={event.id}
+        type="button"
+        disabled={!canOpen}
+        onClick={() => {
+          if (!canOpen) return;
+          onSelectNote(event.noteId);
+          onExit();
+        }}
+        className={`group/event flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-colors ${meta.tone} ${canOpen ? 'hover:border-[var(--sage)]' : 'cursor-default'}`}
+      >
+        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--surface-strong)] ${meta.iconTone}`}>
+          <EventIcon size={17} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-[var(--text-muted)]">{meta.label}</span>
+            <span className="shrink-0 text-[11px] font-semibold tabular-nums text-[var(--text-muted)]">
+              {event.category === 'plan' ? copy.plan : format(event.at, 'HH:mm')}
+            </span>
+          </span>
+          <span className="mt-0.5 block text-sm font-semibold leading-snug text-[var(--earth)]">{event.title}</span>
+          {detail && <span className="mt-1 block text-xs font-medium leading-relaxed text-[var(--text-muted)]">{detail}</span>}
+        </span>
+        {canOpen && <ChevronRight size={15} className="mt-3 shrink-0 text-[var(--text-muted)] transition-transform group-hover/event:translate-x-0.5" />}
+      </button>
+    );
+  };
+  const renderTimeline = (events: CalendarEvent[]) => {
+    const activity = events.filter(event => event.category === 'activity');
+    const reflections = events.filter(event => event.category === 'reflection');
+    const plans = events.filter(event => event.category === 'plan');
+    if (events.length === 0) {
+      return (
+        <div className="rounded-2xl bg-[var(--bg-app)] p-5 text-center">
+          <Leaf className="mx-auto text-[var(--sage)] opacity-45" size={22} />
+          <p className="mt-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{copy.quiet}</p>
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-4">
+        {activity.length > 0 && (
+          <section>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">{copy.activity}</p>
+            <div className="space-y-2">{activity.map(renderEvent)}</div>
+          </section>
+        )}
+        {reflections.length > 0 && (
+          <section>
+            <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--sage)]">
+              <Leaf size={13} /> {copy.reflection}
+            </p>
+            <div className="space-y-2">{reflections.map(renderEvent)}</div>
+          </section>
+        )}
+        {plans.length > 0 && (
+          <section>
+            <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--seed-accent)]">
+              <Target size={13} /> {copy.plan}
+            </p>
+            <div className="space-y-2">{plans.map(renderEvent)}</div>
+          </section>
+        )}
+      </div>
+    );
+  };
+
+  const weekLabels = appLanguage === 'en' ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] : ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   const monthStartOffset = (monthStart.getDay() + 6) % 7;
-  const calendarDays = [
-    ...Array.from({ length: monthStartOffset }, () => null),
-    ...monthDays,
-  ];
-  const calendarCells = [
-    ...calendarDays,
-    ...Array.from({ length: Math.ceil(calendarDays.length / 7) * 7 - calendarDays.length }, () => null),
-  ];
+  const calendarDays = [...Array.from({ length: monthStartOffset }, () => null), ...monthDays];
+  const calendarCells = [...calendarDays, ...Array.from({ length: Math.ceil(calendarDays.length / 7) * 7 - calendarDays.length }, () => null)];
   const calendarRows = Math.max(5, calendarCells.length / 7);
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
 
   useEffect(() => {
     const now = new Date();
     if (!isSameMonth(now, monthStart)) return;
-
-    const frame = window.requestAnimationFrame(() => {
-      mobileTodayRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    });
-
+    const frame = window.requestAnimationFrame(() => mobileTodayRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
     return () => window.cancelAnimationFrame(frame);
   }, [currentMonth]);
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      drag="x"
-      dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.08}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.08}
       onDragEnd={(_, info) => {
         if (info.offset.x > 70) goToMonth(subMonths(currentMonth, 1));
         if (info.offset.x < -70) goToMonth(addMonths(currentMonth, 1));
@@ -1355,152 +1406,75 @@ function CalendarView({
       className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-[var(--bg-app)] text-[var(--text-main)]"
     >
       <header className="relative z-20 shrink-0 border-b border-[var(--border)] bg-[var(--surface-strong)]/88 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-2xl sm:px-6">
-        <div className="mb-3 flex items-center justify-end sm:hidden">
-          <button
-            onClick={onExit}
-            className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-app)]/80 px-3.5 text-sm font-semibold text-[var(--sage)] shadow-sm backdrop-blur-xl transition-colors active:bg-[var(--surface-soft)]"
-            aria-label="Cerrar calendario"
-          >
-            <X size={14} />
-            <span>{appLanguage === 'en' ? 'Done' : 'Listo'}</span>
+        <div className="flex items-center gap-3">
+          <button onClick={() => goToMonth(subMonths(currentMonth, 1))} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)] transition-colors hover:bg-[var(--surface-hover)]" aria-label={copy.previous}>
+            <ChevronLeft size={18} />
+          </button>
+          <div className="min-w-0 flex-1 text-center">
+            <h3 className="truncate text-xl font-semibold capitalize tracking-tight text-[var(--earth)] sm:text-3xl">{formatMonthYear(currentMonth)}</h3>
+            <div className="mt-1 flex items-center justify-center gap-2 text-xs font-medium text-[var(--text-muted)]">
+              <span>{monthSummary.activeDays} {copy.activeDays}</span><span>·</span><span>{activeStreak} {copy.streak}</span>
+              <button onClick={goToToday} className="rounded-full bg-[var(--bg-app)] px-2 py-1 font-semibold text-[var(--sage)]">{copy.today}</button>
+            </div>
+          </div>
+          <button onClick={() => goToMonth(addMonths(currentMonth, 1))} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)] transition-colors hover:bg-[var(--surface-hover)]" aria-label={copy.next}>
+            <ChevronRight size={18} />
+          </button>
+          <button onClick={onExit} className="hidden h-10 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-app)] px-3.5 text-sm font-semibold text-[var(--sage)] transition-colors hover:bg-[var(--surface-soft)] sm:inline-flex" aria-label={copy.done}>
+            <X size={16} /><span className="hidden lg:inline">{copy.done}</span>
           </button>
         </div>
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center justify-between gap-3">
-              <button
-                onClick={() => goToMonth(subMonths(currentMonth, 1))}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)] transition-colors hover:bg-[var(--surface-hover)]"
-                aria-label="Mes anterior"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <h3 className="min-w-0 truncate text-center text-xl font-semibold capitalize tracking-tight text-[var(--earth)] sm:text-3xl">
-                {formatMonthYear(currentMonth)}
-              </h3>
-              <button
-                onClick={() => goToMonth(addMonths(currentMonth, 1))}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--bg-app)] text-[var(--sage)] transition-colors hover:bg-[var(--surface-hover)]"
-                aria-label="Mes siguiente"
-              >
-                <ChevronRight size={18} />
-              </button>
+        <div className="mt-3 hidden items-center justify-center gap-2 sm:flex">
+          {[
+            { label: copy.activeDays, value: monthSummary.activeDays, icon: CalendarIcon, tone: 'text-[var(--sage)]' },
+            { label: copy.steps, value: monthSummary.steps, icon: CheckCircle2, tone: 'text-[var(--tone-sprout)]' },
+            { label: copy.focusMinutes, value: `${monthSummary.focusMinutes}m`, icon: Clock, tone: 'text-[var(--sage)]' },
+            { label: copy.harvests, value: monthSummary.harvests, icon: Sparkles, tone: 'text-[var(--tone-harvest)]' },
+          ].map(item => (
+            <div key={item.label} className="flex h-9 items-center gap-2 rounded-full bg-[var(--bg-app)] px-3">
+              <item.icon size={14} className={item.tone} /><span className="text-base font-semibold text-[var(--earth)]">{item.value}</span><span className="text-[10px] font-semibold text-[var(--text-muted)]">{item.label}</span>
             </div>
-            <div className="mt-2 flex items-center justify-center gap-2 text-xs font-medium text-[var(--text-muted)]">
-              <span>{monthSummary.activeDays} {t('activeDays')}</span>
-              <span>·</span>
-              <span>{activeStreak} {t('streak')}</span>
-              <button onClick={goToToday} className="ml-1 rounded-full bg-[var(--bg-app)] px-2 py-1 text-xs font-semibold text-[var(--sage)]">{t('today')}</button>
-            </div>
-          </div>
-          <div className="hidden items-center gap-2 overflow-x-auto pb-0.5 app-scrollbar sm:flex xl:flex-wrap xl:overflow-visible">
-            {[
-              { label: 'Dias', value: monthSummary.activeDays, icon: CalendarIcon, tone: 'text-[var(--sage)]' },
-              { label: 'Plantadas', value: monthSummary.planted, icon: Sprout, tone: 'text-[var(--tone-seed)]' },
-              { label: 'Riegos', value: monthSummary.watered, icon: Droplets, tone: 'text-[var(--tone-water)]' },
-              { label: 'Cosechas', value: monthSummary.harvested, icon: CheckCircle2, tone: 'text-[var(--tone-harvest)]' },
-            ].map(item => (
-              <div key={item.label} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[var(--bg-app)] px-2.5 sm:h-10 sm:gap-2 sm:px-3">
-                <item.icon size={14} className={item.tone} />
-                <span className="font-serif text-lg font-black text-[var(--earth)] sm:text-xl">{item.value}</span>
-                <span className="text-[8px] font-black uppercase tracking-widest text-[var(--text-muted)] sm:text-[9px]">{item.label}</span>
-              </div>
-            ))}
-            <div className="ml-auto flex shrink-0 items-center gap-1.5 xl:ml-2 xl:gap-2">
-              <button
-                onClick={onExit}
-                className="grid h-9 w-9 place-items-center rounded-full border border-[var(--border)] bg-[var(--bg-app)]/80 text-[var(--sage)] shadow-sm transition-colors hover:bg-[var(--surface-soft)] sm:h-10 sm:w-10"
-                aria-label="Cerrar mapa"
-              >
-                <X size={18} />
-              </button>
-            </div>
-          </div>
+          ))}
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 sm:grid sm:grid-cols-1 sm:grid-rows-[minmax(0,1fr)_auto] sm:gap-0 xl:grid-cols-[minmax(0,1fr)_24rem] xl:grid-rows-1">
+      <div className="min-h-0 flex-1 sm:grid sm:grid-rows-[minmax(0,1fr)_auto] xl:grid-cols-[minmax(0,1fr)_24rem] xl:grid-rows-1">
         <div className="h-full overflow-y-auto px-4 py-3 app-scrollbar sm:hidden">
-          <div className="space-y-2 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+          <div className="space-y-2 pb-[calc(env(safe-area-inset-bottom)+5rem)]">
             {monthDays.map(day => {
-              const dateKey = format(day, 'yyyy-MM-dd');
-              const activity = activityByDay[dateKey] || { planted: [], watered: [], harvested: [], advanced: [], due: [] };
-              const dayEvents = buildDayEvents(activity);
-              const activityCount = dayEvents.length;
-              const isTodayDay = isToday(day);
+              const events = calendarEventsForDay(eventsByDay, day);
+              const recorded = events.filter(isRecordedCalendarEvent);
+              const plans = events.filter(event => event.category === 'plan');
+              const kind = strongestKind(events);
+              const meta = kind ? eventMeta(kind) : null;
+              const DayIcon = meta?.icon || Leaf;
               const isSelected = isSameDay(day, selectedDay);
-              const isPastQuietDay = activityCount === 0 && day.getTime() < todayStart.getTime();
-              const strongest =
-                activity.harvested.length > 0 ? 'harvested' :
-                activity.watered.length > 0 ? 'watered' :
-                activity.advanced.length > 0 ? 'advanced' :
-                activity.planted.length > 0 ? 'planted' :
-                activity.due.length > 0 ? 'due' : 'empty';
-              const DayIcon =
-                strongest === 'harvested' ? CheckCircle2 :
-                strongest === 'watered' ? Droplets :
-                strongest === 'advanced' ? TrendingUp :
-                strongest === 'planted' ? Sprout :
-                strongest === 'due' ? Target :
-                Leaf;
-              const iconTone =
-                strongest === 'harvested' ? 'bg-[var(--tone-harvest-bg)] text-[var(--tone-harvest)]' :
-                strongest === 'watered' ? 'bg-[var(--tone-water-bg)] text-[var(--tone-water)]' :
-                strongest === 'advanced' ? 'bg-[var(--tone-sprout-bg)] text-[var(--tone-sprout)]' :
-                strongest === 'planted' ? 'bg-[var(--tone-seed-bg)] text-[var(--tone-seed)]' :
-                strongest === 'due' ? 'bg-[var(--surface-soft)] text-[var(--seed-accent)]' :
-                isPastQuietDay ? 'bg-[var(--tone-harvest-bg)] text-[var(--tone-harvest)]' :
-                'bg-[var(--bg-app)] text-[var(--text-muted)]';
-
+              const isTodayDay = isToday(day);
               return (
-                <motion.button
-                  key={dateKey}
-                  ref={isTodayDay ? mobileTodayRef : undefined}
-                  type="button"
-                  onClick={() => setSelectedDay(day)}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`w-full rounded-[1.35rem] border p-3 text-left shadow-sm transition-colors ${
-                    isSelected
-                      ? 'border-[var(--sage)] bg-[var(--surface-strong)] ring-2 ring-[var(--sage)]/12'
-                      : 'border-[var(--border)] bg-[var(--surface-strong)]'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-12 shrink-0 text-center">
-                      <p className="text-[10px] font-semibold uppercase text-[var(--text-muted)]">{format(day, 'EEE', { locale: appDateLocale })}</p>
-                      <p className={`mt-1 text-2xl font-semibold leading-none ${isTodayDay ? 'text-[var(--sage)]' : 'text-[var(--earth)]'}`}>{format(day, 'd')}</p>
-                    </div>
-                    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${iconTone}`}>
-                      <DayIcon size={17} />
+                <motion.div key={format(day, 'yyyy-MM-dd')} ref={isTodayDay ? mobileTodayRef : undefined} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className={`overflow-hidden rounded-[1.35rem] border bg-[var(--surface-strong)] shadow-sm ${isSelected ? 'border-[var(--sage)] ring-2 ring-[var(--sage)]/12' : 'border-[var(--border)]'}`}>
+                  <button type="button" onClick={() => setSelectedDay(day)} className="flex w-full items-center gap-3 p-3 text-left">
+                    <span className="w-12 shrink-0 text-center">
+                      <span className="block text-[11px] font-semibold uppercase text-[var(--text-muted)]">{format(day, 'EEE', { locale: appDateLocale })}</span>
+                      <span className={`mt-1 block text-2xl font-semibold leading-none ${isTodayDay ? 'text-[var(--sage)]' : 'text-[var(--earth)]'}`}>{format(day, 'd')}</span>
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-sm font-semibold capitalize text-[var(--earth)]">{formatDayMonth(day)}</p>
-                        {activityCount > 0 && (
-                          <span className="shrink-0 rounded-full bg-[var(--bg-app)] px-2 py-0.5 text-[10px] font-semibold text-[var(--sage)]">{activityCount}</span>
-                        )}
-                      </div>
-                      {dayEvents.length === 0 ? (
-                        <p className={`mt-1 text-sm font-medium ${isPastQuietDay ? 'text-[var(--tone-harvest)]' : 'text-[var(--text-muted)]'}`}>
-                          {isPastQuietDay ? t('quietDay') : t('noActivity')}
-                        </p>
-                      ) : (
-                        <div className="mt-1 space-y-1">
-                          {dayEvents.slice(0, 2).map((event, index) => (
-                            <div key={`${event.type}-${event.note.id}-${index}`} className="flex min-w-0 items-center gap-2">
-                              <event.icon size={12} className="shrink-0 opacity-70" />
-                              <p className="truncate text-sm font-medium text-[var(--text-muted)]">{event.label}: {event.note.title}</p>
-                            </div>
-                          ))}
-                          {dayEvents.length > 2 && (
-                            <p className="text-xs font-medium text-[var(--sage)]">+{dayEvents.length - 2} más</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </motion.button>
+                    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${meta?.tone || 'bg-[var(--bg-app)]'} ${meta?.iconTone || 'text-[var(--text-muted)]'}`}><DayIcon size={17} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold capitalize text-[var(--earth)]">{formatDayMonth(day)}</span>
+                      <span className="mt-1 flex flex-wrap items-center gap-2 text-xs font-medium text-[var(--text-muted)]">
+                        <span>{recorded.length > 0 ? `${recorded.length} ${copy.events}` : copy.noActivity}</span>
+                        {plans.length > 0 && <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[var(--seed-accent)]">{plans.length} {copy.planCount}</span>}
+                      </span>
+                    </span>
+                    <ChevronDown size={16} className={`shrink-0 text-[var(--text-muted)] transition-transform ${isSelected ? 'rotate-180' : ''}`} />
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {isSelected && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                        <div className="border-t border-[var(--border)] px-3 pb-3 pt-3">{renderTimeline(events)}</div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
               );
             })}
           </div>
@@ -1509,108 +1483,34 @@ function CalendarView({
         <div className="relative hidden min-h-0 overflow-hidden p-3 sm:flex sm:p-4">
           <div className="mx-auto flex h-full w-full max-w-7xl min-w-0 flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] p-2 sm:p-4">
             <div className="grid shrink-0 grid-cols-7 gap-1 sm:gap-2">
-              {weekLabels.map(label => (
-                <div key={label} className="px-1 py-1 text-center text-[10px] font-semibold text-[var(--text-muted)] sm:px-2 sm:py-2">
-                  {label}
-                </div>
-              ))}
+              {weekLabels.map(label => <div key={label} className="px-1 py-2 text-center text-[11px] font-semibold text-[var(--text-muted)]">{label}</div>)}
             </div>
-
-            <div
-              className="mt-1 grid min-h-0 flex-1 grid-cols-7 gap-1 sm:mt-2 sm:gap-2"
-              style={{ gridTemplateRows: `repeat(${calendarRows}, minmax(0, 1fr))` }}
-            >
+            <div className="mt-1 grid min-h-0 flex-1 grid-cols-7 gap-1 sm:gap-2" style={{ gridTemplateRows: `repeat(${calendarRows}, minmax(0, 1fr))` }}>
               {calendarCells.map((day, index) => {
-                if (!day) {
-                  return (
-                    <div
-                      key={`empty-${index}`}
-	                      className="min-h-0 rounded-xl bg-[var(--bg-app)]/45 sm:rounded-2xl"
-                    />
-                  );
-                }
-
-                const dateKey = format(day, 'yyyy-MM-dd');
-                const activity = activityByDay[dateKey] || { planted: [], watered: [], harvested: [], advanced: [], due: [] };
-                const activityCount = activity.planted.length + activity.watered.length + activity.harvested.length + activity.advanced.length;
-                const hasActivity = activityCount > 0;
+                if (!day) return <div key={`empty-${index}`} className="min-h-0 rounded-xl bg-[var(--bg-app)]/45 sm:rounded-2xl" />;
+                const events = calendarEventsForDay(eventsByDay, day);
+                const recorded = events.filter(isRecordedCalendarEvent);
+                const plans = events.filter(event => event.category === 'plan');
+                const kind = strongestKind(events);
+                const meta = kind ? eventMeta(kind) : null;
+                const DayIcon = meta?.icon || Leaf;
                 const isSelected = isSameDay(day, selectedDay);
                 const isTodayDay = isToday(day);
-                const isPastQuietDay = activityCount === 0 && day.getTime() < todayStart.getTime();
-                const strongest =
-                  activity.harvested.length > 0 ? 'harvested' :
-                  activity.watered.length > 0 ? 'watered' :
-                  activity.advanced.length > 0 ? 'advanced' :
-                  activity.planted.length > 0 ? 'planted' : 'empty';
-                const NodeIcon =
-                  strongest === 'harvested' ? CheckCircle2 :
-                  strongest === 'watered' ? Droplets :
-                  strongest === 'advanced' ? TrendingUp :
-                  strongest === 'planted' ? Sprout :
-                  Leaf;
-
                 return (
-                  <button
-                    key={dateKey}
-                    type="button"
-                    onClick={() => setSelectedDay(day)}
-	                    className={`group relative flex min-h-0 flex-col items-center justify-center overflow-hidden rounded-xl border p-0.5 text-center transition-colors sm:rounded-2xl sm:p-2 ${
-                      isSelected
-	                        ? 'border-[var(--sage)] bg-[var(--bg-app)] ring-2 ring-[var(--sage)]/18'
-                        : isTodayDay
-	                          ? 'border-[var(--earth)]/20 bg-[var(--bg-app)]'
-                          : hasActivity
-	                            ? 'border-[var(--border)] bg-[var(--surface-strong)]/70'
-	                            : 'border-transparent bg-transparent hover:bg-[var(--bg-app)]'
-                    }`}
-                    aria-label={`Dia ${format(day, 'd')}`}
-                  >
-	                    <span className="absolute left-1.5 top-1.5 text-[10px] font-semibold text-[var(--text-muted)] sm:left-2 sm:top-2 sm:text-xs">
-                      {format(day, 'd')}
+                  <button key={format(day, 'yyyy-MM-dd')} type="button" onClick={() => setSelectedDay(day)} aria-label={`${copy.day} ${format(day, 'd')}`} className={`group relative flex min-h-0 flex-col items-center justify-center overflow-hidden rounded-xl border p-1 text-center transition-colors sm:rounded-2xl sm:p-2 ${isSelected ? 'border-[var(--sage)] bg-[var(--bg-app)] ring-2 ring-[var(--sage)]/18' : isTodayDay ? 'border-[var(--earth)]/20 bg-[var(--bg-app)]' : recorded.length > 0 ? 'border-[var(--border)] bg-[var(--surface-strong)]/70' : 'border-transparent hover:bg-[var(--bg-app)]'}`}>
+                    <span className="absolute left-2 top-2 text-xs font-semibold text-[var(--text-muted)]">{format(day, 'd')}</span>
+                    {isTodayDay && <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-[var(--earth)]" />}
+                    <span className={`relative grid h-[clamp(1.8rem,4.5vh,3.25rem)] w-[clamp(1.8rem,4.5vh,3.25rem)] place-items-center rounded-full ${isSelected ? 'bg-[var(--sage)] text-[var(--on-sage)]' : recorded.length > 0 ? `${meta?.tone || 'bg-[var(--surface-soft)]'} ${meta?.iconTone || 'text-[var(--sage)]'}` : 'bg-[var(--bg-app)] text-[var(--text-muted)]'}`}>
+                      <DayIcon size={17} />
+                      {plans.length > 0 && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--surface-strong)] bg-[var(--seed-accent)]" />}
                     </span>
-                    {isTodayDay && (
-	                      <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[var(--earth)] sm:right-2 sm:top-2" />
-                    )}
-
-	                    <span className={`relative grid h-[clamp(1.65rem,4vh,3.2rem)] w-[clamp(1.65rem,4vh,3.2rem)] place-items-center rounded-full sm:h-[clamp(2rem,5vh,3.5rem)] sm:w-[clamp(2rem,5vh,3.5rem)] ${
-                      isSelected
-	                        ? 'bg-[var(--sage)] text-[var(--on-sage)]'
-                        : isTodayDay
-	                          ? 'bg-[var(--earth)] text-[var(--on-earth)]'
-                          : strongest === 'harvested'
-	                            ? 'bg-[var(--tone-harvest)] text-[var(--on-sage)]'
-                            : strongest === 'watered'
-	                              ? 'bg-[var(--tone-water)] text-[var(--on-sage)]'
-                              : strongest === 'advanced'
-	                                ? 'bg-[var(--tone-sprout)] text-[var(--on-sage)]'
-                                : strongest === 'planted'
-                                  ? 'bg-[var(--tone-seed)] text-[var(--on-sage)]'
-		                                  : isPastQuietDay
-                                    ? 'bg-[var(--tone-harvest-bg)] text-[var(--tone-harvest)]'
-                                    : 'bg-[var(--bg-app)] text-[var(--text-muted)]'
-                    }`}>
-	                      <NodeIcon size={13} className="sm:h-5 sm:w-5" />
-                      {activity.due.length > 0 && (
-                        <span className="absolute -left-0.5 top-0.5 h-2 w-2 rounded-full bg-[var(--seed-accent)] sm:h-3 sm:w-3" />
-                      )}
-                      {(activity.harvested.length > 0 || activityCount >= 3) && (
-	                        <span className="absolute -right-1 bottom-0 grid h-3.5 w-3.5 place-items-center rounded-full bg-[var(--accent)] text-[var(--on-accent)] sm:h-5 sm:w-5">
-                          <Sparkles size={9} />
-                        </span>
-                      )}
+                    <span className="mt-2 hidden max-w-full truncate rounded-full bg-[var(--surface-soft)] px-2 py-1 text-[9px] font-semibold text-[var(--text-muted)] min-[720px]:inline-flex">
+                      {recorded.length > 0 ? `${recorded.length} ${copy.events}` : plans.length > 0 ? `${plans.length} ${copy.planCount}` : appLanguage === 'en' ? 'Open' : 'Libre'}
                     </span>
-
-	                    <span className={`mt-1 hidden max-w-full truncate rounded-full px-1.5 py-0.5 text-[7px] font-semibold min-[430px]:inline-flex sm:mt-2 sm:px-2.5 sm:py-1 sm:text-[9px] ${
-                      hasActivity ? 'bg-[var(--surface-strong)] text-[var(--earth)]' : 'bg-[var(--surface-soft)] text-[var(--text-muted)]'
-                    }`}>
-                      {hasActivity ? `${activityCount} evento${activityCount === 1 ? '' : 's'}` : 'Libre'}
-                    </span>
-
-                    <span className="mt-0.5 hidden h-3 justify-center gap-0.5 min-[430px]:flex sm:mt-1.5 sm:h-4 sm:gap-1">
-                      {activity.planted.length > 0 && <Sprout size={10} className="text-[var(--tone-seed)] sm:h-3 sm:w-3" />}
-                      {activity.watered.length > 0 && <Droplets size={10} className="text-[var(--tone-water)] sm:h-3 sm:w-3" />}
-                      {activity.advanced.length > 0 && <TrendingUp size={10} className="text-[var(--tone-sprout)] sm:h-3 sm:w-3" />}
-                      {activity.harvested.length > 0 && <CheckCircle2 size={10} className="text-[var(--tone-harvest)] sm:h-3 sm:w-3" />}
+                    <span className="mt-1 flex h-2 items-center justify-center gap-1">
+                      {events.some(event => event.kind === 'task-completed') && <span className="h-1.5 w-1.5 rounded-full bg-[var(--tone-sprout)]" />}
+                      {events.some(event => event.kind === 'focus') && <span className="h-1.5 w-1.5 rounded-full bg-[var(--sage)]" />}
+                      {events.some(event => event.kind === 'harvested') && <span className="h-1.5 w-1.5 rounded-full bg-[var(--tone-harvest)]" />}
                     </span>
                   </button>
                 );
@@ -1619,57 +1519,24 @@ function CalendarView({
           </div>
         </div>
 
-        <aside className="hidden max-h-[30vh] min-h-0 overflow-y-auto border-t border-[var(--border)] bg-[var(--surface-strong)] p-4 app-scrollbar sm:block sm:max-h-[34vh] sm:p-5 xl:max-h-none xl:border-l xl:border-t-0">
-          <h4 className="text-xl font-semibold capitalize tracking-tight text-[var(--earth)] sm:text-2xl">
-            {formatDayMonth(selectedDay)}
-          </h4>
-          <p className="mt-1 line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)] sm:line-clamp-none">{daySummary}</p>
-
-          <div className="mt-3 grid grid-cols-4 gap-1.5 text-center sm:gap-2">
+        <aside className="hidden max-h-[34vh] min-h-0 overflow-y-auto border-t border-[var(--border)] bg-[var(--surface-strong)] p-5 app-scrollbar sm:block xl:max-h-none xl:border-l xl:border-t-0">
+          <h4 className="text-2xl font-semibold capitalize tracking-tight text-[var(--earth)]">{formatDayMonth(selectedDay)}</h4>
+          <p className="mt-1 text-sm font-medium leading-relaxed text-[var(--text-muted)]">
+            {selectedRecorded.length > 0 ? `${selectedRecorded.length} ${copy.events} · ${selectedPlans.length} ${copy.planCount}` : selectedPlans.length > 0 ? `${selectedPlans.length} ${copy.planCount} · ${copy.noActivity.toLowerCase()}` : copy.quiet}
+          </p>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
             {[
-              { label: 'Plant', value: selectedActivity.planted.length, tone: 'text-[var(--tone-seed)]' },
-              { label: 'Riego', value: selectedActivity.watered.length, tone: 'text-[var(--tone-water)]' },
-              { label: 'Avance', value: selectedActivity.advanced.length, tone: 'text-[var(--tone-sprout)]' },
-              { label: 'Cosecha', value: selectedActivity.harvested.length, tone: 'text-[var(--tone-harvest)]' },
-            ].map(item => (
-              <div key={item.label} className="rounded-xl bg-[var(--bg-app)] px-2 py-2">
-                <p className={`text-sm font-semibold sm:text-base ${item.tone}`}>{item.value}</p>
-                <p className="mt-0.5 text-[9px] font-medium text-[var(--text-muted)]">{item.label}</p>
-              </div>
-            ))}
+              { label: copy.events, value: selectedRecorded.length, tone: 'text-[var(--sage)]' },
+              { label: copy.steps, value: selectedSteps, tone: 'text-[var(--tone-sprout)]' },
+              { label: copy.focusMinutes, value: `${selectedFocusMinutes}m`, tone: 'text-[var(--earth)]' },
+            ].map(item => <div key={item.label} className="rounded-xl bg-[var(--bg-app)] px-2 py-2.5"><p className={`text-base font-semibold ${item.tone}`}>{item.value}</p><p className="mt-0.5 text-[10px] font-medium text-[var(--text-muted)]">{item.label}</p></div>)}
           </div>
-
-          <div className="mt-3 space-y-2">
-            {selectedEvents.length === 0 ? (
-              <div className="rounded-2xl bg-[var(--bg-app)] p-4 text-center">
-                <Leaf className="mx-auto text-[var(--sage)] opacity-45" size={22} />
-                <p className="mt-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">Sin actividad este día.</p>
-              </div>
-            ) : selectedEvents.map((event, index) => (
-              <button
-                key={`${event.type}-${event.note.id}-${index}`}
-                type="button"
-                onClick={() => {
-                  onSelectNote(event.note.id);
-                  onExit();
-                }}
-	                className={`w-full rounded-2xl border p-3 text-left transition-colors ${event.tone}`}
-              >
-                <div className="flex items-start gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--surface-strong)]/80">
-                    <event.icon size={17} />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold opacity-70">{event.label}</p>
-                    <p className="mt-0.5 truncate text-sm font-semibold">{event.note.title}</p>
-                    <p className="mt-0.5 text-xs font-medium opacity-70">{STAGE_META[event.note.growthStage].shortLabel}</p>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
+          <div className="mt-5">{renderTimeline(selectedEvents)}</div>
         </aside>
       </div>
+      <button onClick={onExit} className="absolute bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-30 inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-4 text-sm font-semibold text-[var(--sage)] shadow-lg backdrop-blur-xl sm:hidden">
+        <X size={16} /> {copy.done}
+      </button>
     </motion.div>
   );
 }
@@ -1687,6 +1554,9 @@ function TodayView({
   onFocusNote,
   onStartPlanting,
   onCloseDay,
+  onSaveDailyFocus,
+  onContinuePrevious,
+  onDismissPrevious,
   onNavigate,
   onShowWateringQueue,
   todayWidgets,
@@ -1694,7 +1564,9 @@ function TodayView({
   wateringStreak,
   getProgress,
   dailyIntention,
-  setDailyIntention,
+  dailyIntentionNoteId,
+  currentDailyEntry,
+  previousDailyEntry,
 }: {
   accountName: string;
   notes: SeedNote[];
@@ -1707,7 +1579,10 @@ function TodayView({
   onToggleTask: (noteId: string, taskId: string) => void;
   onFocusNote: (id: string) => void;
   onStartPlanting: () => void;
-  onCloseDay: (reflection: string, intention: string, intentionOutcome?: 'yes' | 'some' | 'no' | '') => void;
+  onCloseDay: (reflection: string, intention: string, intentionOutcome?: DailyIntentionOutcome, nextStep?: DailyNextStep) => void;
+  onSaveDailyFocus: (intention: string, linkedNoteId?: string) => void;
+  onContinuePrevious: (entry: SeedNote) => void;
+  onDismissPrevious: (entryId: string) => void;
   onNavigate: (view: AppView) => void;
   onShowWateringQueue: () => void;
   todayWidgets: TodayWidgetId[];
@@ -1715,16 +1590,20 @@ function TodayView({
   wateringStreak: number;
   getProgress: (note: SeedNote) => number;
   dailyIntention: string;
-  setDailyIntention: (value: string) => void;
+  dailyIntentionNoteId: string;
+  currentDailyEntry?: SeedNote;
+  previousDailyEntry?: SeedNote;
 }) {
   const [showTodayMore, setShowTodayMore] = useState(false);
   const [showDaySummary, setShowDaySummary] = useState(false);
   const [dayReflection, setDayReflection] = useState('');
   const [intentionDraft, setIntentionDraft] = useState(dailyIntention);
   const [isEditingIntention, setIsEditingIntention] = useState(!dailyIntention.trim());
-  const [intentionOutcome, setIntentionOutcome] = useState<'yes' | 'some' | 'no' | ''>('');
+  const [intentionOutcome, setIntentionOutcome] = useState<DailyIntentionOutcome>('');
+  const [nextDayChoice, setNextDayChoice] = useState<DailyNextStep>('');
   const todayData = useMemo(() => {
     const today = new Date();
+    const dailyActivity = getDailyActivitySnapshot(notes, today.getTime());
     const activeNotes = notes.filter(note => note.growthStage !== 'bloom' && note.growthStage !== 'withered' && !note.paused);
     const allThirstyNotes = activeNotes
       .filter(note => wateringDue(note))
@@ -1756,11 +1635,6 @@ function TodayView({
       if (!note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom') summary.sproutCount += 1;
       if (!note.inbox && note.growthStage === 'bloom') summary.harvestCount += 1;
       if (!note.inbox && note.paused && note.growthStage !== 'bloom') summary.shedCount += 1;
-      if (note.harvestedAt && isToday(note.harvestedAt)) summary.completedToday += 1;
-      if (isToday(note.createdAt)) summary.plantedToday += 1;
-      if (note.lastWateredAt && isToday(note.lastWateredAt)) summary.wateredTodayCount += 1;
-      if (note.updatedAt && isToday(note.updatedAt) && note.tasks.some(task => task.completed)) summary.stepsToday += 1;
-      if (!summary.dayClosure && isDailyClosureForDate(note)) summary.dayClosure = note;
       if (note.growthStage === 'bloom' && (note.reflection?.trim() || note.takeaway?.trim())) {
         const noteMemoryDate = note.harvestedAt || note.updatedAt || note.createdAt;
         const currentMemoryDate = summary.learningMemory
@@ -1774,20 +1648,18 @@ function TodayView({
       return summary;
     }, {
       activeDays: new Set<string>(),
-      completedToday: 0,
-      dayClosure: undefined as SeedNote | undefined,
+      completedToday: dailyActivity.harvests,
       harvestCount: 0,
       inboxCount: 0,
       learningMemory: undefined as SeedNote | undefined,
-      plantedToday: 0,
+      plantedToday: dailyActivity.planted,
       shedCount: 0,
       sproutCount: 0,
-      stepsToday: 0,
-      wateredTodayCount: 0,
+      stepsToday: dailyActivity.steps,
+      wateredTodayCount: dailyActivity.watered,
     });
     const {
       completedToday,
-      dayClosure,
       harvestCount,
       inboxCount,
       learningMemory,
@@ -1799,6 +1671,7 @@ function TodayView({
     } = todaySummary;
     const activeDaysThisMonth = todaySummary.activeDays.size;
     const hour = today.getHours();
+    const shouldEmphasizeClosure = hour >= 18 || completedToday > 0 || stepsToday > 0 || dailyActivity.focusMinutes > 0;
     const greeting = hour < 12 ? t('goodMorning') : hour < 19 ? t('goodAfternoon') : t('goodEvening');
     const firstName = accountName.trim().split(/\s+/)[0] || (appLanguage === 'en' ? 'there' : 'jardinero');
     const todayWeekday = format(today, 'EEEE', { locale: appDateLocale });
@@ -1960,8 +1833,9 @@ function TodayView({
       allThirstyNotes,
       completedToday,
       contextualPhrase,
-      dayAlreadyClosed: Boolean(dayClosure),
+      dayAlreadyClosed: Boolean(currentDailyEntry && isDailyClosureForDate(currentDailyEntry)),
       doneTodayText,
+      firstInboxNote,
       firstWatering,
       gardenMood,
       greeting,
@@ -1979,15 +1853,17 @@ function TodayView({
       secondaryActionLabel,
       shedCount,
       shedReview,
+      shouldEmphasizeClosure,
       sproutCount,
       stepsToday,
       todayDate,
       todayPlan,
       todayWeekday,
       wateredTodayCount,
+      focusMinutesToday: dailyActivity.focusMinutes,
       firstName,
     };
-  }, [accountName, notes, wateredToday, wateringStreak]);
+  }, [accountName, currentDailyEntry, notes, wateredToday, wateringStreak]);
   const {
     activeDaysThisMonth,
     allThirstyNotes,
@@ -1995,6 +1871,7 @@ function TodayView({
     contextualPhrase,
     dayAlreadyClosed,
     doneTodayText,
+    firstInboxNote,
     firstWatering,
     gardenMood,
     greeting,
@@ -2012,14 +1889,35 @@ function TodayView({
     secondaryActionLabel,
     shedCount,
     shedReview,
+    shouldEmphasizeClosure,
     sproutCount,
     stepsToday,
     todayDate,
     todayPlan,
     todayWeekday,
     wateredTodayCount,
+    focusMinutesToday,
     firstName,
   } = todayData;
+  const activityHighlights = [
+    stepsToday > 0
+      ? appLanguage === 'en' ? `${stepsToday} step${stepsToday === 1 ? '' : 's'} completed` : `${stepsToday} paso${stepsToday === 1 ? '' : 's'} completado${stepsToday === 1 ? '' : 's'}`
+      : '',
+    focusMinutesToday > 0
+      ? appLanguage === 'en' ? `${focusMinutesToday} focused min` : `${focusMinutesToday} min de foco`
+      : '',
+    wateredTodayCount > 0
+      ? appLanguage === 'en' ? `${wateredTodayCount} idea${wateredTodayCount === 1 ? '' : 's'} watered` : `${wateredTodayCount} idea${wateredTodayCount === 1 ? '' : 's'} regada${wateredTodayCount === 1 ? '' : 's'}`
+      : '',
+    completedToday > 0
+      ? appLanguage === 'en' ? `${completedToday} harvested` : `${completedToday} cosechada${completedToday === 1 ? '' : 's'}`
+      : '',
+  ].filter(Boolean);
+  const activityHeadline = activityHighlights.length > 0
+    ? activityHighlights.join(' · ')
+    : appLanguage === 'en'
+      ? 'A quiet day also counts. You can close it without guilt.'
+      : 'Un día tranquilo también cuenta. Puedes cerrarlo sin culpa.';
   const GardenMoodIcon = gardenMood.icon;
   const primaryCardEyebrow = appLanguage === 'en' ? 'One thing for today' : 'Una cosa para hoy';
   const primaryStats = [
@@ -2107,8 +2005,8 @@ function TodayView({
       eyebrow: t('path'),
       title: appLanguage === 'en' ? `${activeDaysThisMonth} active days this month` : `${activeDaysThisMonth} días activos este mes`,
       detail: appLanguage === 'en'
-        ? `${plantedToday} planted · ${wateredTodayCount} watered · ${completedToday} closed today`
-        : `${plantedToday} plantadas · ${wateredTodayCount} riegos · ${completedToday} cierres hoy`,
+        ? `${plantedToday} planted · ${wateredTodayCount} watered · ${completedToday} harvested today`
+        : `${plantedToday} plantadas · ${wateredTodayCount} riegos · ${completedToday} cosechas hoy`,
       metric: String(activeDaysThisMonth),
       action: appLanguage === 'en' ? 'Calendar' : 'Calendario',
       onClick: () => onNavigate('calendar'),
@@ -2155,20 +2053,53 @@ function TodayView({
   };
   const savedIntention = dailyIntention.trim();
   const cleanIntentionDraft = intentionDraft.trim();
+  const suggestedIntentionNote = firstWatering || nextAction?.note || firstInboxNote || shedReview;
+  const linkedIntentionNote = dailyIntentionNoteId
+    ? notes.find(note => note.id === dailyIntentionNoteId)
+    : undefined;
+  const linkedIntentionProgress = linkedIntentionNote ? getProgress(linkedIntentionNote) : 0;
+  const previousEntryData = previousDailyEntry?.dailyEntry;
+  const previousLinkedNote = previousEntryData?.linkedNoteId
+    ? notes.find(note => note.id === previousEntryData.linkedNoteId)
+    : undefined;
   const saveIntention = () => {
-    setDailyIntention(cleanIntentionDraft);
+    onSaveDailyFocus(cleanIntentionDraft);
     setIsEditingIntention(!cleanIntentionDraft);
+  };
+  const useSuggestedIntention = () => {
+    if (!suggestedIntentionNote) return;
+    onSaveDailyFocus(suggestedIntentionNote.title, suggestedIntentionNote.id);
+    setIntentionDraft(suggestedIntentionNote.title);
+    setIsEditingIntention(false);
+  };
+  const continueIntention = () => {
+    if (!linkedIntentionNote) return;
+    if (wateringDue(linkedIntentionNote) && linkedIntentionNote.growthStage !== 'bloom' && !linkedIntentionNote.paused) {
+      onOpenWatering(linkedIntentionNote.id);
+      return;
+    }
+    if (linkedIntentionNote.isGrowth && linkedIntentionNote.tasks.some(task => !task.completed)) {
+      onFocusNote(linkedIntentionNote.id);
+      return;
+    }
+    onSelectNote(linkedIntentionNote.id);
   };
   const closeDaySummary = () => {
     setShowDaySummary(false);
     setIntentionOutcome('');
+    setNextDayChoice('');
   };
   const handleCloseDayClick = () => {
     if (dayAlreadyClosed) {
-      onNavigate('harvest');
+      setDayReflection(currentDailyEntry?.dailyEntry?.reflection || '');
+      setIntentionOutcome(currentDailyEntry?.dailyEntry?.outcome || '');
+      setNextDayChoice(currentDailyEntry?.dailyEntry?.nextStep || '');
+      setShowDaySummary(true);
       return;
     }
-    setIntentionOutcome('');
+    const suggestedOutcome = getSuggestedIntentionOutcome(linkedIntentionNote);
+    setIntentionOutcome(suggestedOutcome);
+    setNextDayChoice(suggestedOutcome === 'some' || suggestedOutcome === 'no' ? 'garden' : '');
     setShowDaySummary(true);
   };
 
@@ -2183,201 +2114,294 @@ function TodayView({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }}
-      className="space-y-4 pb-2 md:pb-8"
+      className="mx-auto w-full max-w-3xl space-y-4 pb-2 md:pb-8"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium capitalize text-[var(--text-muted)]">{todayWeekday} · {todayDate}</p>
-          <h3 className="mt-0.5 truncate text-3xl font-semibold tracking-tight text-[var(--earth)]">{greeting}, {firstName}</h3>
-          <p className="mt-1 max-w-[22rem] text-sm font-medium leading-relaxed text-[var(--text-muted)]">{todayPlan}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <span className="rounded-full bg-[var(--surface-strong)] px-3 py-1 text-[11px] font-semibold text-[var(--sage)] shadow-sm ring-1 ring-[var(--border)]">{doneTodayText}</span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface-strong)] px-3 py-1 text-[11px] font-semibold text-[var(--text-muted)] shadow-sm ring-1 ring-[var(--border)]">
+          <p className="text-xs font-semibold capitalize tracking-[0.04em] text-[var(--text-muted)] sm:text-sm">{todayWeekday} · {todayDate}</p>
+          <h3 className="mt-1 truncate text-3xl font-semibold tracking-[-0.035em] text-[var(--earth)] sm:text-4xl">{greeting}, {firstName}</h3>
+          <p className="mt-2 max-w-[32rem] text-sm font-medium leading-relaxed text-[var(--text-muted)]">{todayPlan}</p>
+          <div className="mt-3">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[var(--surface-strong)] px-3 py-1.5 text-[11px] font-semibold text-[var(--text-muted)] shadow-sm ring-1 ring-[var(--border)]">
               <GardenMoodIcon size={12} className={gardenMood.tone} />
               {gardenMood.label}
+              <span aria-hidden="true" className="h-1 w-1 rounded-full bg-[var(--border-strong)]" />
+              <span>{gardenMood.detail}</span>
             </span>
-            {completedToday > 0 && (
-              <span className="rounded-full bg-[var(--tone-harvest-bg)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-harvest)] ring-1 ring-[var(--tone-harvest-border)]">
-                {appLanguage === 'en'
-                  ? `${completedToday} closure${completedToday === 1 ? '' : 's'} today`
-                  : `${completedToday} cierre${completedToday === 1 ? '' : 's'} hoy`}
-              </span>
-            )}
           </div>
         </div>
         <button
           type="button"
           onClick={handleCloseDayClick}
-          className={`mt-1 inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-semibold ring-1 transition-colors sm:h-10 sm:px-4 sm:text-sm ${
+          className={`mt-1 inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors sm:h-10 sm:px-4 sm:text-sm ${
             dayAlreadyClosed
-              ? 'bg-[var(--tone-harvest-bg)] text-[var(--tone-harvest)] ring-[var(--tone-harvest-border)]'
-              : 'bg-[var(--surface-strong)] text-[var(--sage)] shadow-sm ring-[var(--border)] hover:bg-[var(--surface-hover)]'
+              ? 'bg-[var(--tone-harvest-bg)] text-[var(--tone-harvest)] ring-1 ring-[var(--tone-harvest-border)]'
+              : shouldEmphasizeClosure
+                ? 'bg-[var(--surface-strong)] text-[var(--sage)] shadow-sm ring-1 ring-[var(--border)] hover:bg-[var(--surface-hover)]'
+                : 'bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--sage)]'
           }`}
         >
           {dayAlreadyClosed ? <CheckCircle2 size={14} /> : <Archive size={14} />}
-          <span className="hidden sm:inline">
+          <span className={shouldEmphasizeClosure || dayAlreadyClosed ? 'hidden sm:inline' : 'hidden lg:inline'}>
             {dayAlreadyClosed
               ? appLanguage === 'en' ? 'Day closed' : 'Día cerrado'
               : appLanguage === 'en' ? 'Close day' : 'Cerrar día'}
           </span>
-          <span className="sm:hidden">
-            {dayAlreadyClosed
-              ? appLanguage === 'en' ? 'Closed' : 'Cerrado'
-              : appLanguage === 'en' ? 'Close' : 'Cerrar'}
-          </span>
         </button>
       </div>
 
-      <section className="rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)]/82 p-3 shadow-sm">
-        {isEditingIntention ? (
-          <form
-            className="flex items-center gap-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              saveIntention();
-            }}
-          >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)]">
-              <Target size={17} />
-            </span>
-            <label className="min-w-0 flex-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                {appLanguage === 'en' ? 'Choose a small direction' : 'Elige una dirección pequeña'}
-              </span>
-              <input
-                value={intentionDraft}
-                onChange={(event) => setIntentionDraft(event.target.value)}
-                placeholder={appLanguage === 'en' ? 'Today I want to care for...' : 'Hoy quiero cuidar...'}
-                className="mt-0.5 h-8 w-full bg-transparent text-base font-semibold text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/62"
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={!cleanIntentionDraft}
-              className="h-9 shrink-0 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold text-[var(--on-sage)] shadow-sm transition disabled:bg-[var(--bg-app)] disabled:text-[var(--text-muted)] disabled:shadow-none"
-            >
-              {appLanguage === 'en' ? 'Save' : 'Guardar'}
-            </button>
-          </form>
-        ) : (
+      {previousDailyEntry && previousEntryData && !previousEntryData.dismissedAt && !previousEntryData.continuedAt && (previousEntryData.intention || previousEntryData.reflection) && (
+        <section className="rounded-[1.6rem] border border-[var(--tone-harvest-border)] bg-[var(--tone-harvest-bg)]/70 p-4 shadow-sm">
           <div className="flex items-start gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)]">
-              <CheckCircle2 size={17} />
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--surface-strong)] text-[var(--tone-harvest)] shadow-sm">
+              <CalendarIcon size={17} />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                {appLanguage === 'en' ? 'Today you are caring for' : 'Hoy estás cuidando'}
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--tone-harvest)]">
+                {appLanguage === 'en' ? 'From yesterday' : 'Desde ayer'}
               </p>
-              <p className="mt-1 line-clamp-2 text-base font-semibold leading-snug text-[var(--earth)]">{savedIntention}</p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setIsEditingIntention(true)}
-                className="h-8 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)] ring-1 ring-[var(--border)]"
-              >
-                {appLanguage === 'en' ? 'Edit' : 'Cambiar'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDailyIntention('');
-                  setIntentionDraft('');
-                }}
-                className="grid h-8 w-8 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-app)] hover:text-[var(--earth)]"
-                aria-label={appLanguage === 'en' ? 'Clear today intention' : 'Borrar intención de hoy'}
-              >
-                <X size={14} />
-              </button>
+              <p className="mt-1 line-clamp-1 text-sm font-semibold text-[var(--earth)]">
+                {previousEntryData.intention || (appLanguage === 'en' ? 'Yesterday reflection' : 'Reflexión de ayer')}
+              </p>
+              {previousEntryData.reflection && (
+                <p className="mt-1 line-clamp-2 text-xs font-medium leading-relaxed text-[var(--text-muted)]">{previousEntryData.reflection}</p>
+              )}
             </div>
           </div>
-        )}
-      </section>
+          <div className="mt-3 flex flex-wrap gap-2 pl-[3.25rem]">
+            {previousEntryData.nextStep === 'tomorrow' && (
+              <button
+                type="button"
+                onClick={() => onContinuePrevious(previousDailyEntry)}
+                className="h-9 rounded-full bg-[var(--sage)] px-4 text-xs font-semibold text-[var(--on-sage)] shadow-sm"
+              >
+                {previousLinkedNote
+                  ? appLanguage === 'en' ? 'Continue in the garden' : 'Continuar en el jardín'
+                  : appLanguage === 'en' ? 'Use as today focus' : 'Usar como foco de hoy'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onDismissPrevious(previousDailyEntry.id)}
+              className="h-9 rounded-full bg-[var(--surface-strong)] px-4 text-xs font-semibold text-[var(--text-muted)] ring-1 ring-[var(--border)]"
+            >
+              {appLanguage === 'en' ? 'Hide' : 'Ocultar'}
+            </button>
+          </div>
+        </section>
+      )}
 
-      <form
-        className="flex min-h-[3.25rem] items-center gap-3 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface-strong)]/86 px-3 py-2 shadow-sm"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onQuickCapture();
-        }}
-      >
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)]">
-          <Leaf size={16} />
-        </span>
-        <input
-          value={quickNote}
-          onChange={(event) => setQuickNote(event.target.value)}
-          placeholder={appLanguage === 'en' ? 'Plant a quick seed...' : 'Planta una semilla rápida...'}
-          className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/62"
-        />
-        <button
-          type="submit"
-          disabled={!quickNote.trim()}
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--sage)] text-[var(--on-sage)] shadow-sm transition disabled:bg-[var(--bg-app)] disabled:text-[var(--text-muted)] disabled:shadow-none"
-          aria-label={appLanguage === 'en' ? 'Plant quick seed' : 'Plantar semilla rápida'}
-        >
-          <Plus size={17} />
-        </button>
-      </form>
+      <section className="today-primary-card relative overflow-hidden rounded-[2rem] border border-[var(--border)] p-4 shadow-[0_18px_48px_rgba(31,54,38,0.10)] sm:p-6">
+        <span aria-hidden="true" className="today-primary-orb absolute -right-12 -top-16 h-48 w-48 rounded-full" />
+        <span aria-hidden="true" className="absolute right-8 top-16 h-2 w-2 rounded-full bg-[var(--sage)]/15" />
+        <span aria-hidden="true" className="absolute right-20 top-9 h-1.5 w-1.5 rounded-full bg-[var(--sage)]/20" />
 
-      <section className="overflow-hidden rounded-[1.8rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[0_14px_34px_rgba(15,23,18,0.055)] sm:p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="relative mb-5 flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
-            <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] ring-1 ring-[var(--border)] ${primaryAccent}`}>
+            <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[var(--surface-strong)]/80 shadow-sm ring-1 ring-[var(--border)] ${primaryAccent}`}>
               <PrimaryIcon size={19} />
             </span>
             <div className="min-w-0">
               <p className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">{primaryCardEyebrow}</p>
-              <p className="mt-0.5 truncate text-xs font-semibold text-[var(--sage)]">{primaryEyebrow}</p>
+              <p className="mt-1 truncate text-xs font-semibold text-[var(--sage)]">{primaryEyebrow}</p>
             </div>
           </div>
-          <span className="hidden shrink-0 rounded-full bg-[var(--bg-app)] px-3 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] ring-1 ring-[var(--border)] sm:inline-flex">
+          <span className="relative hidden shrink-0 rounded-full bg-[var(--surface-strong)]/72 px-3 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] ring-1 ring-[var(--border)] sm:inline-flex">
             {gardenMood.detail}
           </span>
         </div>
 
-        <button type="button" onClick={primaryClick} className="group block w-full rounded-[1.35rem] text-left transition-colors hover:bg-[var(--surface-hover)]">
+        <button type="button" onClick={primaryClick} className="group relative block w-full rounded-[1.35rem] text-left transition-colors">
           <span className="block px-1 py-1">
-            <span className="block text-[1.45rem] font-semibold leading-tight tracking-tight text-[var(--earth)] sm:text-[1.65rem]">{primaryTitle}</span>
-            <span className="mt-2 block line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{primaryDetail}</span>
+            <span className="block max-w-[34rem] text-[1.65rem] font-semibold leading-[1.08] tracking-[-0.03em] text-[var(--earth)] sm:text-[2rem]">{primaryTitle}</span>
+            <span className="mt-2 block max-w-[32rem] line-clamp-2 text-sm font-medium leading-relaxed text-[var(--text-muted)]">{primaryDetail}</span>
           </span>
         </button>
 
-        <div className="mt-5 grid grid-cols-[1.35fr_1fr] gap-2">
+        <div className="relative mt-6 grid grid-cols-[1.35fr_1fr] gap-2">
           <button
+            type="button"
             onClick={primaryClick}
-            className="flex h-11 items-center justify-center rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] shadow-sm active:translate-y-px soft-interaction"
+            className="flex h-12 items-center justify-center rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] shadow-[0_8px_20px_rgba(52,92,63,0.16)] active:translate-y-px soft-interaction"
           >
             {primaryActionLabel}
           </button>
           <button
+            type="button"
             onClick={secondaryClick}
-            className="flex h-11 items-center justify-center rounded-full bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--sage)] ring-1 ring-[var(--border)] active:translate-y-px soft-interaction"
+            className="flex h-12 items-center justify-center rounded-full bg-[var(--surface-strong)]/72 px-4 text-sm font-semibold text-[var(--sage)] ring-1 ring-[var(--border)] active:translate-y-px soft-interaction"
           >
             {secondaryActionLabel}
           </button>
         </div>
 
-        <div className="mt-4 rounded-[1.25rem] bg-[var(--bg-app)] px-3 py-2.5 ring-1 ring-[var(--border)]">
-          <div className="flex items-start gap-2">
+        <div className="relative mt-4 flex flex-col gap-2 border-t border-[var(--border)]/80 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-2">
             <Leaf size={14} className="mt-0.5 shrink-0 text-[var(--sage)]" />
-            <p className="text-xs font-semibold leading-relaxed text-[var(--text-muted)]">{contextualPhrase}</p>
+            <p className="max-w-[31rem] text-xs font-semibold leading-relaxed text-[var(--text-muted)]">{contextualPhrase}</p>
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[var(--border)] pt-3">
-            {primaryStats.map(item => (
-              <div key={item.label} className="min-w-0">
-                <p className="text-base font-semibold leading-none text-[var(--earth)]">{item.value}</p>
-                <p className="mt-1 truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">{item.label}</p>
-              </div>
-            ))}
-          </div>
+          <span className="shrink-0 pl-5 text-[10px] font-semibold text-[var(--sage)] sm:pl-0">{doneTodayText}</span>
         </div>
+      </section>
+
+      <section className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)]/86 p-3 shadow-sm">
+          {dayAlreadyClosed && !savedIntention ? (
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--tone-harvest-bg)] text-[var(--tone-harvest)]">
+                <CheckCircle2 size={17} />
+              </span>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {appLanguage === 'en' ? 'Day complete' : 'Día completo'}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-[var(--earth)]">
+                  {appLanguage === 'en' ? 'You closed today without a fixed focus.' : 'Cerraste hoy sin necesitar un foco fijo.'}
+                </p>
+              </div>
+            </div>
+          ) : isEditingIntention ? (
+            <div>
+              <form
+                className="flex items-center gap-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  saveIntention();
+                }}
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)]">
+                  <Target size={17} />
+                </span>
+                <label className="min-w-0 flex-1">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {appLanguage === 'en' ? 'Today focus' : 'Foco de hoy'}
+                  </span>
+                  <input
+                    value={intentionDraft}
+                    onChange={(event) => setIntentionDraft(event.target.value)}
+                    placeholder={appLanguage === 'en' ? 'What matters today?' : '¿Qué importa hoy?'}
+                    className="mt-0.5 h-8 w-full bg-transparent text-sm font-semibold text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/62"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={!cleanIntentionDraft}
+                  className="h-9 shrink-0 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold text-[var(--on-sage)] shadow-sm transition disabled:bg-[var(--bg-app)] disabled:text-[var(--text-muted)] disabled:shadow-none"
+                >
+                  {appLanguage === 'en' ? 'Save' : 'Guardar'}
+                </button>
+              </form>
+              {suggestedIntentionNote && (
+                <button
+                  type="button"
+                  onClick={useSuggestedIntention}
+                  className="mt-2 flex w-full items-center gap-2 rounded-xl bg-[var(--bg-app)] px-3 py-2 text-left text-xs font-semibold text-[var(--sage)] transition-colors hover:bg-[var(--surface-hover)]"
+                >
+                  <Sparkles size={13} className="shrink-0" />
+                  <span className="truncate">
+                    {appLanguage === 'en' ? 'Use today suggestion:' : 'Usar la sugerencia de hoy:'} {suggestedIntentionNote.title}
+                  </span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)]">
+                  <CheckCircle2 size={17} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {appLanguage === 'en' ? 'Today focus' : 'Foco de hoy'}
+                  </p>
+                  <p className="mt-1 line-clamp-2 text-sm font-semibold leading-snug text-[var(--earth)]">{savedIntention}</p>
+                  {linkedIntentionNote && (
+                    <p className="mt-1 text-[10px] font-semibold text-[var(--text-muted)]">
+                      {linkedIntentionNote.isGrowth && linkedIntentionNote.tasks.length > 0
+                        ? appLanguage === 'en'
+                          ? `${linkedIntentionProgress}% complete`
+                          : `${linkedIntentionProgress}% completado`
+                        : appLanguage === 'en' ? 'Linked to your garden' : 'Conectado con tu jardín'}
+                    </p>
+                  )}
+                </div>
+                {dayAlreadyClosed ? (
+                  <span className="inline-flex h-8 shrink-0 items-center rounded-full bg-[var(--tone-harvest-bg)] px-3 text-xs font-semibold text-[var(--tone-harvest)] ring-1 ring-[var(--tone-harvest-border)]">
+                    {appLanguage === 'en' ? 'Closed' : 'Cerrado'}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingIntention(true)}
+                    className="h-8 shrink-0 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--sage)] ring-1 ring-[var(--border)]"
+                  >
+                    {appLanguage === 'en' ? 'Edit' : 'Cambiar'}
+                  </button>
+                )}
+              </div>
+
+              {!dayAlreadyClosed && <div className={`mt-2 grid gap-2 ${linkedIntentionNote ? 'grid-cols-[1fr_auto]' : 'grid-cols-1'}`}>
+                {linkedIntentionNote && (
+                  <button
+                    type="button"
+                    onClick={continueIntention}
+                    className="h-9 rounded-full bg-[var(--sage)] px-3 text-xs font-semibold text-[var(--on-sage)] shadow-sm"
+                  >
+                    {appLanguage === 'en' ? 'Continue' : 'Continuar'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSaveDailyFocus('');
+                    setIntentionDraft('');
+                  }}
+                  className={`h-9 rounded-full bg-[var(--bg-app)] px-3 text-xs font-semibold text-[var(--text-muted)] ring-1 ring-[var(--border)] transition-colors hover:text-[var(--earth)] ${linkedIntentionNote ? '' : 'justify-self-start'}`}
+                  aria-label={appLanguage === 'en' ? 'Clear today intention' : 'Borrar intención de hoy'}
+                >
+                  {appLanguage === 'en' ? 'Clear focus' : 'Quitar foco'}
+                </button>
+              </div>}
+            </div>
+          )}
+        </div>
+
+        <form
+          className="flex min-h-[4.15rem] items-center gap-3 rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface-strong)]/86 p-3 shadow-sm"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onQuickCapture();
+          }}
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--bg-app)] text-[var(--sage)]">
+            <Leaf size={16} />
+          </span>
+          <label className="min-w-0 flex-1">
+            <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {appLanguage === 'en' ? 'Quick capture' : 'Captura rápida'}
+            </span>
+            <input
+              value={quickNote}
+              onChange={(event) => setQuickNote(event.target.value)}
+              placeholder={appLanguage === 'en' ? 'Plant a new idea...' : 'Planta una nueva idea...'}
+              className="mt-0.5 h-8 w-full bg-transparent text-sm font-semibold text-[var(--earth)] outline-none placeholder:text-[var(--text-muted)]/62"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={!quickNote.trim()}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--sage)] text-[var(--on-sage)] shadow-sm transition disabled:bg-[var(--bg-app)] disabled:text-[var(--text-muted)] disabled:shadow-none"
+            aria-label={appLanguage === 'en' ? 'Plant quick seed' : 'Plantar semilla rápida'}
+          >
+            <Plus size={17} />
+          </button>
+        </form>
       </section>
 
       <button
         type="button"
         onClick={() => setShowTodayMore(value => !value)}
-        className="mx-auto flex h-9 items-center gap-1.5 rounded-full bg-[var(--surface-strong)] px-4 text-xs font-semibold text-[var(--text-muted)] ring-1 ring-[var(--border)] transition-colors hover:text-[var(--sage)]"
+        className="mx-auto flex h-9 items-center gap-1.5 rounded-full px-4 text-xs font-semibold text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--sage)]"
       >
         {showTodayMore
           ? appLanguage === 'en' ? 'Hide garden state' : 'Ocultar estado'
@@ -2393,6 +2417,15 @@ function TodayView({
             exit={{ opacity: 0, y: -6 }}
             className="space-y-3"
           >
+            <section className="grid grid-cols-3 gap-2 rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-strong)] p-2 shadow-sm">
+              {primaryStats.map(item => (
+                <div key={item.label} className="min-w-0 rounded-[1rem] bg-[var(--bg-app)] px-3 py-3 text-center">
+                  <p className="text-xl font-semibold leading-none text-[var(--earth)]">{item.value}</p>
+                  <p className="mt-1 truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">{item.label}</p>
+                </div>
+              ))}
+            </section>
+
             {todayWidgets.includes('summary') && (
               <section className="grid grid-cols-4 gap-1.5 rounded-[1.35rem] border border-[var(--border)] bg-[var(--surface-strong)] p-1.5 shadow-sm">
                 {todayRoutes.map(item => (
@@ -2462,7 +2495,7 @@ function TodayView({
               exit={{ opacity: 0, y: 12, scale: 0.98 }}
               transition={{ type: 'spring', stiffness: 520, damping: 40 }}
               onClick={(event) => event.stopPropagation()}
-              className="w-full max-w-md overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.24)]"
+              className="max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.24)]"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -2483,19 +2516,33 @@ function TodayView({
                 </button>
               </div>
 
+              <div className="mt-4 flex items-start gap-2 rounded-2xl bg-[var(--tone-harvest-bg)] px-4 py-3 text-[var(--tone-harvest)] ring-1 ring-[var(--tone-harvest-border)]">
+                <Sparkles size={15} className="mt-0.5 shrink-0" />
+                <p className="text-xs font-semibold leading-relaxed">{activityHeadline}</p>
+              </div>
+
               {dailyIntention.trim() && (
                 <div className="mt-4 rounded-2xl bg-[var(--bg-app)] px-4 py-3">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                     {appLanguage === 'en' ? 'Intention' : 'Intención'}
                   </p>
                   <p className="mt-1 text-sm font-semibold leading-relaxed text-[var(--earth)]">{dailyIntention}</p>
+                  {linkedIntentionNote && (
+                    <p className="mt-1 text-[10px] font-semibold text-[var(--text-muted)]">
+                      {linkedIntentionNote.isGrowth && linkedIntentionNote.tasks.length > 0
+                        ? appLanguage === 'en'
+                          ? `${linkedIntentionProgress}% complete in your garden`
+                          : `${linkedIntentionProgress}% completado en tu jardín`
+                        : appLanguage === 'en' ? 'Connected to your garden activity' : 'Conectado con la actividad de tu jardín'}
+                    </p>
+                  )}
                 </div>
               )}
 
               {savedIntention && (
                 <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] p-3">
                   <p className="text-xs font-semibold text-[var(--text-muted)]">
-                    {appLanguage === 'en' ? 'Did you move your intention?' : '¿Lograste mover tu intención?'}
+                    {appLanguage === 'en' ? 'How did your focus go?' : '¿Cómo fue con tu foco?'}
                   </p>
                   <div className="mt-2 grid grid-cols-3 gap-2">
                     {[
@@ -2506,7 +2553,12 @@ function TodayView({
                       <button
                         key={option.id}
                         type="button"
-                        onClick={() => setIntentionOutcome(option.id as 'yes' | 'some' | 'no')}
+                        disabled={dayAlreadyClosed}
+                        onClick={() => {
+                          const outcome = option.id as Exclude<DailyIntentionOutcome, ''>;
+                          setIntentionOutcome(outcome);
+                          setNextDayChoice(outcome === 'yes' ? '' : 'garden');
+                        }}
                         className={`h-10 rounded-full px-2 text-xs font-semibold transition ${
                           intentionOutcome === option.id
                             ? 'bg-[var(--sage)] text-[var(--on-sage)] shadow-sm'
@@ -2520,12 +2572,48 @@ function TodayView({
                 </div>
               )}
 
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {savedIntention && (intentionOutcome === 'some' || intentionOutcome === 'no') && (
+                <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] p-3">
+                  <p className="text-xs font-semibold text-[var(--text-muted)]">
+                    {appLanguage === 'en' ? 'What should happen next?' : '¿Qué hacemos con este foco?'}
+                  </p>
+                  <div className={`mt-2 grid gap-2 ${linkedIntentionNote ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                    {[
+                      { id: 'tomorrow', icon: CalendarIcon, label: appLanguage === 'en' ? 'Tomorrow' : 'Mañana' },
+                      { id: 'garden', icon: Leaf, label: appLanguage === 'en' ? 'Garden' : 'Jardín' },
+                      ...(linkedIntentionNote ? [{ id: 'shed', icon: Archive, label: appLanguage === 'en' ? 'Shed' : 'Cobertizo' }] : []),
+                    ].map(option => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        disabled={dayAlreadyClosed}
+                        onClick={() => setNextDayChoice(option.id as DailyNextStep)}
+                        className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-2 text-[10px] font-semibold transition ${
+                          nextDayChoice === option.id
+                            ? 'bg-[var(--sage)] text-[var(--on-sage)] shadow-sm'
+                            : 'bg-[var(--surface-strong)] text-[var(--text-muted)] ring-1 ring-[var(--border)]'
+                        }`}
+                      >
+                        <option.icon size={14} />
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[10px] font-medium leading-relaxed text-[var(--text-muted)]">
+                    {appLanguage === 'en'
+                      ? 'No streaks are lost. This only helps Seeds prepare tomorrow.'
+                      : 'No pierdes ninguna racha. Esto solo ayuda a Seeds a preparar mañana.'}
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5">
                 {[
                   { label: appLanguage === 'en' ? 'Planted' : 'Plantadas', value: plantedToday, icon: Leaf },
                   { label: appLanguage === 'en' ? 'Watered' : 'Riegos', value: wateredTodayCount, icon: Droplets },
                   { label: appLanguage === 'en' ? 'Moved' : 'Avances', value: stepsToday, icon: Target },
                   { label: appLanguage === 'en' ? 'Harvests' : 'Cosechas', value: completedToday, icon: Archive },
+                  { label: appLanguage === 'en' ? 'Focus min' : 'Min foco', value: focusMinutesToday, icon: Clock },
                 ].map(item => (
                   <div key={item.label} className="rounded-2xl bg-[var(--bg-app)] p-3 text-center">
                     <item.icon size={16} className="mx-auto text-[var(--sage)]" />
@@ -2539,8 +2627,8 @@ function TodayView({
                 <span className="text-xs font-semibold text-[var(--text-muted)]">
                   {dailyIntention.trim()
                     ? appLanguage === 'en'
-                      ? `What did "${dailyIntention}" leave you today?`
-                      : `¿Qué te dejó "${dailyIntention}" hoy?`
+                      ? 'What do you want to remember tomorrow?'
+                      : '¿Qué quieres recordar mañana?'
                     : appLanguage === 'en'
                       ? 'One last reflection'
                       : 'Una última reflexión'}
@@ -2548,35 +2636,47 @@ function TodayView({
                 <textarea
                   value={dayReflection}
                   onChange={(event) => setDayReflection(event.target.value)}
+                  readOnly={dayAlreadyClosed}
                   rows={4}
                   className="mt-2 w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-4 py-3 text-sm font-medium leading-relaxed text-[var(--earth)] outline-none focus:border-[var(--border)]"
-                  placeholder={appLanguage === 'en' ? 'Write one sentence...' : 'Escribe una frase...'}
+                  placeholder={appLanguage === 'en' ? 'One useful sentence for tomorrow...' : 'Una frase útil para mañana...'}
                 />
               </label>
 
-              <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
+              {dayAlreadyClosed ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    onCloseDay(dayReflection, dailyIntention, intentionOutcome);
-                    setDayReflection('');
-                    closeDaySummary();
-                  }}
-                  className="h-11 rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] shadow-sm"
+                  onClick={closeDaySummary}
+                  className="mt-4 h-11 w-full rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] shadow-sm"
                 >
-                  {appLanguage === 'en' ? 'Save closure' : 'Guardar cierre'}
+                  {appLanguage === 'en' ? 'Done' : 'Listo'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDayReflection('');
-                    closeDaySummary();
-                  }}
-                  className="h-11 rounded-full bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--text-muted)] ring-1 ring-[var(--border)]"
-                >
-                  {appLanguage === 'en' ? 'Not now' : 'Ahora no'}
-                </button>
-              </div>
+              ) : (
+                <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
+                  <button
+                    type="button"
+                    disabled={Boolean(savedIntention && (!intentionOutcome || ((intentionOutcome === 'some' || intentionOutcome === 'no') && !nextDayChoice)))}
+                    onClick={() => {
+                      onCloseDay(dayReflection, dailyIntention, intentionOutcome, nextDayChoice);
+                      setDayReflection('');
+                      closeDaySummary();
+                    }}
+                    className="h-11 rounded-full bg-[var(--sage)] px-4 text-sm font-semibold text-[var(--on-sage)] shadow-sm disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    {appLanguage === 'en' ? 'Save closure' : 'Guardar cierre'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDayReflection('');
+                      closeDaySummary();
+                    }}
+                    className="h-11 rounded-full bg-[var(--bg-app)] px-4 text-sm font-semibold text-[var(--text-muted)] ring-1 ring-[var(--border)]"
+                  >
+                    {appLanguage === 'en' ? 'Not now' : 'Ahora no'}
+                  </button>
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}
@@ -4268,6 +4368,7 @@ export default function App() {
 function AccountWorkspace({ session, lease, authFlow }: { session: Session | null; lease: AccountLease; authFlow: AccountAuthFlow }) {
   const { getStoredItem, setStoredItem, removeStoredItem, getStoredBoolean, getStoredNumber } = useMemo(() => createAccountStorage(lease.scope), [lease]);
   const [notes, setNotes] = useState<SeedNote[]>([]);
+  const gardenNotes = useMemo(() => notes.filter(note => !isDailyEntryNote(note)), [notes]);
   const [notesLoaded, setNotesLoaded] = useState(false);
   const [storageError, setStorageError] = useState('');
   const [recoveringLegacy, setRecoveringLegacy] = useState(false);
@@ -4279,7 +4380,12 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
     }
   }, [lease]);
   const todayKey = format(new Date(), 'yyyy-MM-dd');
-  const [dailyIntention, setDailyIntention] = useState(() => getStoredItem(`seed-daily-intention-${todayKey}`) || '');
+  const legacyDailyFocusRef = useRef({
+    intention: getStoredItem(`seed-daily-intention-${todayKey}`) || '',
+    linkedNoteId: getStoredItem(`seed-daily-intention-note-${todayKey}`) || '',
+  });
+  const [dailyIntention, setDailyIntention] = useState(legacyDailyFocusRef.current.intention);
+  const [dailyIntentionNoteId, setDailyIntentionNoteId] = useState(legacyDailyFocusRef.current.linkedNoteId);
   const [showLanding, setShowLanding] = useState(() => authFlow.passwordRecovery || (!session && getStoredItem('seed-welcome-v2-seen') !== 'true'));
   const [landingRoute, setLandingRoute] = useState<AuthRoute>(() => authFlow.passwordRecovery ? 'reset' : 'landing');
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -4439,7 +4545,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
     }
   };
   const profileStats = useMemo(() => {
-    const stats = notes.reduce((total, note) => {
+    const stats = gardenNotes.reduce((total, note) => {
       total.totalFocus += note.focusedMinutes || 0;
       if (note.inbox) total.seeds += 1;
       if (!note.inbox && note.growthStage === 'bloom') total.harvests += 1;
@@ -4456,16 +4562,16 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
           ? 'Temporada de riego'
           : 'Temporada de siembra';
     return { totalFocus, seeds, harvests, active, needsWater, season };
-  }, [notes]);
+  }, [gardenNotes]);
   const profileAchievements = useMemo(() => [
-    { label: 'Primera semilla', active: notes.length > 0 },
+    { label: 'Primera semilla', active: gardenNotes.length > 0 },
     { label: 'Primera cosecha', active: profileStats.harvests > 0 },
     { label: 'Racha de 3 días', active: wateringRitual.streak >= 3 },
     { label: '60 min de enfoque', active: profileStats.totalFocus >= 60 },
-  ], [notes.length, profileStats.harvests, profileStats.totalFocus, wateringRitual.streak]);
+  ], [gardenNotes.length, profileStats.harvests, profileStats.totalFocus, wateringRitual.streak]);
   useEffect(() => {
     if (!notesLoaded) return;
-    const activeNotes = notes.filter(note => note.growthStage !== 'bloom' && note.growthStage !== 'withered' && !note.paused);
+    const activeNotes = gardenNotes.filter(note => note.growthStage !== 'bloom' && note.growthStage !== 'withered' && !note.paused);
     const thirstyNotes = activeNotes
       .filter(note => wateringDue(note))
       .sort((a, b) => {
@@ -4473,12 +4579,12 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
         const bAge = daysSince(b.lastWateredAt || b.createdAt);
         return (priorityWeight(b) + bAge + (b.inbox ? 2 : 0)) - (priorityWeight(a) + aAge + (a.inbox ? 2 : 0));
       });
-    const nextStepNote = notes
+    const nextStepNote = gardenNotes
       .filter(note => !note.inbox && note.isGrowth && !note.paused && note.growthStage !== 'bloom' && !wateringDue(note))
       .map(note => ({ note, task: note.tasks.find(task => !task.completed) }))
       .filter((item): item is { note: SeedNote; task: NonNullable<typeof item.task> } => Boolean(item.task))
       .sort((a, b) => priorityWeight(b.note) - priorityWeight(a.note))[0];
-    const firstSeed = notes
+    const firstSeed = gardenNotes
       .filter(note => note.inbox)
       .sort((a, b) => b.createdAt - a.createdAt)[0];
     const widgetTitle = thirstyNotes[0]?.title || nextStepNote?.note.title || firstSeed?.title || 'Planta una semilla';
@@ -4508,7 +4614,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
       streak: wateringRitual.streak,
       updatedAt: Date.now(),
     });
-  }, [dailyIntention, notes, notesLoaded, profileStats.active, profileStats.harvests, profileStats.seeds, wateringRitual.streak]);
+  }, [dailyIntention, gardenNotes, notesLoaded, profileStats.active, profileStats.harvests, profileStats.seeds, wateringRitual.streak]);
   const authDisabledReason = !isSupabaseConfigured
     ? 'El acceso con cuenta aún no está disponible en esta versión. Puedes explorar tu jardín sin cuenta.'
     : !authEmail.trim()
@@ -4878,10 +4984,6 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
   }, [account]);
 
   useEffect(() => {
-    setStoredItem(`seed-daily-intention-${todayKey}`, dailyIntention);
-  }, [dailyIntention, todayKey]);
-
-  useEffect(() => {
     setStoredItem('seed-watering-ritual', JSON.stringify(wateringRitual));
   }, [wateringRitual]);
 
@@ -4965,7 +5067,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
 	          ? `${synced.conflicts} ${synced.conflicts === 1 ? 'conflicto fue protegido' : 'conflictos fueron protegidos'} durante la sincronización.`
 	          : currentQueue.length > 0
 	          ? `Sync activo · ${currentQueue.length} ${currentQueue.length === 1 ? 'cambio pendiente' : 'cambios pendientes'}.`
-	          : `Sync activo: ${reconciled.notes.length} ideas en la nube.`);
+	          : `Sync activo: ${reconciled.notes.filter(note => !isDailyEntryNote(note)).length} ideas en la nube.`);
       })
       .catch(error => {
 	        if (!cancelled) {
@@ -5126,12 +5228,12 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
       return;
     }
 
-    scheduleSeedReminders({ notes, reminderHour, language: appLanguage }).catch(error => {
+    scheduleSeedReminders({ notes: gardenNotes, reminderHour, language: appLanguage }).catch(error => {
       console.warn('Seed native reminders could not be scheduled.', error);
     });
 
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    const dueNotes = notes.filter(note => !note.inbox && !note.paused && note.growthStage !== 'bloom' && wateringDue(note));
+    const dueNotes = gardenNotes.filter(note => !note.inbox && !note.paused && note.growthStage !== 'bloom' && wateringDue(note));
     if (dueNotes.length === 0) return;
 
     const todayKey = format(Date.now(), 'yyyy-MM-dd');
@@ -5148,7 +5250,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
     }, delay);
 
     return () => window.clearTimeout(timeout);
-  }, [appLanguage, notes, notesLoaded, notificationsEnabled, reminderHour]);
+  }, [appLanguage, gardenNotes, notesLoaded, notificationsEnabled, reminderHour]);
 
   // Check for withered seeds periodically
   useEffect(() => {
@@ -5199,7 +5301,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
 	      .filter(Boolean);
 	    const sproutTasks = parsedTasks.length > 0
 	      ? activeProjectTodos.length > 0
-	        ? activeProjectTodos.map(todo => ({ id: crypto.randomUUID(), text: todo.text, completed: todo.completed }))
+	        ? activeProjectTodos.map(todo => ({ id: crypto.randomUUID(), text: todo.text, completed: todo.completed, completedAt: todo.completed ? Date.now() : undefined }))
 	        : parsedTasks.map(text => ({ id: crypto.randomUUID(), text, completed: false }))
 	      : [{ id: crypto.randomUUID(), text: firstStep, completed: false }];
 	    const now = Date.now();
@@ -5229,7 +5331,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
 	      planetId: targetPlanetId,
 	    };
     
-	    const isFirstUserSeed = notes.length === 0 && !isSprout && !isJournal;
+    const isFirstUserSeed = gardenNotes.length === 0 && !isSprout && !isJournal;
 	    setNotes([touchNote(note), ...notes]);
 	    setActivePlanetId(targetPlanetId);
 	    setNewNote({ title: '', content: '', dueDate: '', seedType: 'idea', priority: 'normal', planetId: targetPlanetId });
@@ -5272,7 +5374,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
       planetId: activePlanetId,
     };
 
-    const isFirstUserSeed = notes.length === 0;
+    const isFirstUserSeed = gardenNotes.length === 0;
     setNotes([touchNote(note), ...notes]);
     setQuickNote('');
     feel('plant');
@@ -5347,7 +5449,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
       .filter(todo => todo.text);
     const fallbackStep = 'Dar el primer paso de 5 minutos';
     const tasksToAdd = cleanTodos.length > 0
-      ? cleanTodos.map(todo => ({ id: crypto.randomUUID(), text: todo.text, completed: todo.completed }))
+      ? cleanTodos.map(todo => ({ id: crypto.randomUUID(), text: todo.text, completed: todo.completed, completedAt: todo.completed ? Date.now() : undefined }))
       : [{ id: crypto.randomUUID(), text: fallbackStep, completed: false }];
     if (note?.isGrowth) {
       setNotes(current => current.map(n => n.id === sproutPromptNoteId ? touchNote({
@@ -5447,8 +5549,14 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
     window.setTimeout(() => setCelebration(null), 1500);
   };
 
-  const closeDayWithReflection = (reflection: string, intention: string, intentionOutcome: 'yes' | 'some' | 'no' | '' = '') => {
-    if (notes.some(note => isDailyClosureForDate(note))) {
+  const closeDayWithReflection = (
+    reflection: string,
+    intention: string,
+    intentionOutcome: DailyIntentionOutcome = '',
+    nextStep: DailyNextStep = '',
+  ) => {
+    const alreadyClosedEntry = getDailyEntryForDate(notes, Date.now(), activePlanetId);
+    if (alreadyClosedEntry && isDailyClosureForDate(alreadyClosedEntry)) {
       setCelebration(appLanguage === 'en' ? 'Day already closed' : 'El día ya está cerrado');
       window.setTimeout(() => setCelebration(null), 1500);
       setView('harvest');
@@ -5456,12 +5564,16 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
     }
 
     const now = Date.now();
+    const existingEntry = getDailyEntryForDate(notes, now, activePlanetId);
     const note = createDailyClosureNote({
-      id: crypto.randomUUID(),
+      id: existingEntry?.id || dailyEntryId(activePlanetId, now),
       notes,
       reflection,
       intention,
       intentionOutcome,
+      linkedNoteId: dailyIntentionNoteId || existingEntry?.dailyEntry?.linkedNoteId,
+      nextStep,
+      existingEntry,
       defaultWateringInterval,
       planetId: activePlanetId,
       language: appLanguage,
@@ -5469,12 +5581,37 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
     });
 
     setNotes(current => {
-      if (current.some(existing => isDailyClosureForDate(existing, now))) return current;
-      return [touchNote(note), ...current];
+      const currentDayEntry = getDailyEntryForDate(current, now, activePlanetId);
+      if (currentDayEntry && isDailyClosureForDate(currentDayEntry, now)) return current;
+      const linkedNoteId = note.dailyEntry?.linkedNoteId;
+      const next = current.map(existing => {
+        if (existing.id === note.id) return touchNote(note, now);
+        if (nextStep === 'shed' && linkedNoteId && existing.id === linkedNoteId) {
+          return touchNote({
+            ...existing,
+            paused: true,
+            inbox: false,
+            lastWateringNote: appLanguage === 'en'
+              ? 'Moved to the shed while closing the day.'
+              : 'Movida al cobertizo al cerrar el día.',
+          }, now);
+        }
+        if (nextStep === 'garden' && linkedNoteId && existing.id === linkedNoteId && existing.paused) {
+          return touchNote({
+            ...existing,
+            paused: false,
+            inbox: false,
+            lastWateringNote: appLanguage === 'en'
+              ? 'Returned to the garden while closing the day.'
+              : 'Devuelta al jardín al cerrar el día.',
+          }, now);
+        }
+        return existing;
+      });
+      return existingEntry ? next : [touchNote(note, now), ...next];
     });
     setCelebration(appLanguage === 'en' ? 'Day closed' : 'Día cerrado');
     window.setTimeout(() => setCelebration(null), 1500);
-    setView('harvest');
   };
 
   const harvestFromWatering = (id: string) => {
@@ -5591,7 +5728,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
       setNotificationsEnabled(true);
       setCelebration(appLanguage === 'en' ? 'Reminders enabled' : 'Recordatorios activados');
       window.setTimeout(() => setCelebration(null), 1500);
-      await scheduleSeedReminders({ notes, reminderHour, language: appLanguage });
+      await scheduleSeedReminders({ notes: gardenNotes, reminderHour, language: appLanguage });
       return;
     }
 
@@ -5705,10 +5842,131 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
     return planets.find(planet => planet.id === activePlanetId) || planets[0] || DEFAULT_PLANETS[0];
   }, [activePlanetId, planets]);
 
-  const planetNotes = useMemo(() => {
-    return notes.filter(note => (note.planetId || DEFAULT_PLANET_ID) === activePlanet.id);
+  const currentDailyEntry = useMemo(
+    () => getDailyEntryForDate(notes, Date.now(), activePlanet.id),
+    [activePlanet.id, notes],
+  );
+  const previousDailyEntry = useMemo(() => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return getDailyEntryForDate(notes, yesterday.getTime(), activePlanet.id);
   }, [activePlanet.id, notes]);
 
+  const saveDailyFocus = (intention: string, linkedNoteId?: string) => {
+    if (currentDailyEntry?.dailyEntry?.closedAt) return;
+    const cleanedIntention = intention.trim();
+    const now = Date.now();
+    setDailyIntention(cleanedIntention);
+    setDailyIntentionNoteId(linkedNoteId || '');
+    setNotes(current => {
+      const existing = getDailyEntryForDate(current, now, activePlanet.id);
+      if (existing?.dailyEntry?.closedAt) return current;
+      if (!cleanedIntention) return existing ? current.filter(note => note.id !== existing.id) : current;
+      const nextEntry = existing
+        ? updateDailyEntryFocus(existing, cleanedIntention, linkedNoteId, now)
+        : createDailyEntryNote({
+            id: dailyEntryId(activePlanet.id, now),
+            intention: cleanedIntention,
+            linkedNoteId,
+            planetId: activePlanet.id,
+            language: appLanguage,
+            now,
+          });
+      return existing
+        ? current.map(note => note.id === existing.id ? nextEntry : note)
+        : [nextEntry, ...current];
+    });
+  };
+
+  const continuePreviousDailyEntry = (entry: SeedNote) => {
+    const entryData = entry.dailyEntry;
+    if (!entryData?.intention) return;
+    const linkedNoteId = entryData.linkedNoteId && gardenNotes.some(note => note.id === entryData.linkedNoteId)
+      ? entryData.linkedNoteId
+      : undefined;
+    const now = Date.now();
+    setDailyIntention(entryData.intention);
+    setDailyIntentionNoteId(linkedNoteId || '');
+    setNotes(current => {
+      const existingToday = getDailyEntryForDate(current, now, activePlanet.id);
+      const todayEntry = existingToday
+        ? updateDailyEntryFocus(existingToday, entryData.intention, linkedNoteId, now)
+        : createDailyEntryNote({
+            id: dailyEntryId(activePlanet.id, now),
+            intention: entryData.intention,
+            linkedNoteId,
+            planetId: activePlanet.id,
+            language: appLanguage,
+            now,
+          });
+      const updated = current.map(note => {
+        if (note.id === entry.id) {
+          return touchNote({
+            ...note,
+            dailyEntry: note.dailyEntry ? { ...note.dailyEntry, continuedAt: now } : note.dailyEntry,
+          }, now);
+        }
+        if (linkedNoteId && note.id === linkedNoteId && note.paused) {
+          return touchNote({
+            ...note,
+            paused: false,
+            inbox: false,
+            lastWateringNote: appLanguage === 'en'
+              ? 'Returned to the garden to continue today.'
+              : 'Devuelta al jardín para continuar hoy.',
+          }, now);
+        }
+        return existingToday && note.id === existingToday.id ? todayEntry : note;
+      });
+      return existingToday ? updated : [todayEntry, ...updated];
+    });
+  };
+
+  const dismissPreviousDailyEntry = (entryId: string) => {
+    const now = Date.now();
+    setNotes(current => current.map(note => note.id === entryId && note.dailyEntry
+      ? touchNote({ ...note, dailyEntry: { ...note.dailyEntry, dismissedAt: now } }, now)
+      : note));
+  };
+
+  useEffect(() => {
+    if (!notesLoaded) return;
+    if (currentDailyEntry?.dailyEntry) {
+      setDailyIntention(currentDailyEntry.dailyEntry.intention);
+      setDailyIntentionNoteId(currentDailyEntry.dailyEntry.linkedNoteId || '');
+      legacyDailyFocusRef.current = { intention: '', linkedNoteId: '' };
+      removeStoredItem(`seed-daily-intention-${todayKey}`);
+      removeStoredItem(`seed-daily-intention-note-${todayKey}`);
+      return;
+    }
+
+    const legacyFocus = legacyDailyFocusRef.current;
+    if (legacyFocus.intention.trim()) {
+      const linkedNoteId = legacyFocus.linkedNoteId && gardenNotes.some(note => note.id === legacyFocus.linkedNoteId)
+        ? legacyFocus.linkedNoteId
+        : undefined;
+      legacyDailyFocusRef.current = { intention: '', linkedNoteId: '' };
+      setNotes(current => getDailyEntryForDate(current, Date.now(), activePlanet.id)
+        ? current
+        : [createDailyEntryNote({
+            id: dailyEntryId(activePlanet.id),
+            intention: legacyFocus.intention,
+            linkedNoteId,
+            planetId: activePlanet.id,
+            language: appLanguage,
+          }), ...current]);
+      removeStoredItem(`seed-daily-intention-${todayKey}`);
+      removeStoredItem(`seed-daily-intention-note-${todayKey}`);
+      return;
+    }
+
+    setDailyIntention('');
+    setDailyIntentionNoteId('');
+  }, [activePlanet.id, currentDailyEntry?.id, currentDailyEntry?.updatedAt, notesLoaded]);
+
+  const planetNotes = useMemo(() => {
+    return gardenNotes.filter(note => (note.planetId || DEFAULT_PLANET_ID) === activePlanet.id);
+  }, [activePlanet.id, gardenNotes]);
   const filteredNotes = useMemo(() => {
     const normalizedSearch = search.toLowerCase().trim();
     return planetNotes.filter(n => {
@@ -5778,12 +6036,12 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
 
   const planetNoteCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const note of notes) {
+    for (const note of gardenNotes) {
       const id = note.planetId || DEFAULT_PLANET_ID;
       counts.set(id, (counts.get(id) || 0) + 1);
     }
     return counts;
-  }, [notes]);
+  }, [gardenNotes]);
 
   const getProgress = useCallback((note: SeedNote) => {
     if (!note.tasks.length) return 0;
@@ -6032,7 +6290,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
       return;
     }
 
-    const ideasInPlanet = notes.filter(note => (note.planetId || DEFAULT_PLANET_ID) === activePlanet.id).length;
+    const ideasInPlanet = gardenNotes.filter(note => (note.planetId || DEFAULT_PLANET_ID) === activePlanet.id).length;
     if (!window.confirm(`Borrar el jardín "${activePlanet.name}"? Se eliminarán ${ideasInPlanet} ideas de este espacio. Esta acción no se puede deshacer.`)) return;
     if (!window.confirm('Confirmación final: borrar este jardín y sus ideas permanentemente?')) return;
 
@@ -6234,7 +6492,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
 	        ? `${synced.conflicts} ${synced.conflicts === 1 ? 'conflicto fue protegido' : 'conflictos fueron protegidos'} durante la sincronización.`
 	        : currentQueue.length > 0
 	        ? `Sincronización actualizada · ${currentQueue.length} ${currentQueue.length === 1 ? 'cambio pendiente' : 'cambios pendientes'}.`
-	        : `Sincronizado: ${reconciled.planets.length} jardines y ${reconciled.notes.length} ideas.`);
+	        : `Sincronizado: ${reconciled.planets.length} jardines y ${reconciled.notes.filter(note => !isDailyEntryNote(note)).length} ideas.`);
     } catch (error) {
 	      try { setPendingSyncCount(loadSyncQueue(lease.scope).length); } catch { /* Keep the sync error below. */ }
 	      setSyncStatus(error instanceof Error ? error.message : 'No se pudo sincronizar. Tus cambios siguen guardados localmente.');
@@ -7071,7 +7329,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
       <main className="app-main flex-1 flex flex-col md:flex-row overflow-hidden relative">
         <section className={`app-content ${selectedNoteId ? 'app-content-has-detail' : ''} flex-1 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${view === 'calendar' ? 'px-3 pb-3 pt-[var(--safe-top-space)] sm:px-5 sm:pb-5 md:p-6' : 'px-4 pb-[var(--safe-bottom-space)] pt-[var(--safe-top-space)] sm:px-6 md:p-10'} ${selectedNoteId ? 'md:mr-[400px]' : ''}`}>
           <div className={`app-content-inner ${view === 'calendar' ? 'mx-auto max-w-[100rem]' : 'max-w-4xl mx-auto'}`}>
-            <header className={`app-page-header mb-6 flex-col md:mb-10 md:flex-row justify-between items-start gap-4 md:gap-6 ${view === 'today' ? 'hidden md:flex' : 'flex'}`}>
+            <header className={`app-page-header mb-6 flex-col md:mb-10 md:flex-row justify-between items-start gap-4 md:gap-6 ${view === 'today' ? 'hidden' : 'flex'}`}>
               <div className="w-full">
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -7160,6 +7418,9 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
                   onFocusNote={openFocusMode}
                   onStartPlanting={startPlanting}
                   onCloseDay={closeDayWithReflection}
+                  onSaveDailyFocus={saveDailyFocus}
+                  onContinuePrevious={continuePreviousDailyEntry}
+                  onDismissPrevious={dismissPreviousDailyEntry}
                   onNavigate={navigateToView}
                   onShowWateringQueue={showWateringQueue}
                   todayWidgets={todayWidgets}
@@ -7167,7 +7428,9 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
                   wateringStreak={wateringRitual.streak}
                   getProgress={getProgress}
                   dailyIntention={dailyIntention}
-                  setDailyIntention={setDailyIntention}
+                  dailyIntentionNoteId={dailyIntentionNoteId}
+                  currentDailyEntry={currentDailyEntry}
+                  previousDailyEntry={previousDailyEntry}
                 />
               ) : view === 'inbox' ? (
                 <InboxView
@@ -8497,7 +8760,7 @@ function AccountWorkspace({ session, lease, authFlow }: { session: Session | nul
                           </button>
                           <div className="grid grid-cols-4 border-t border-[var(--border)] bg-[var(--surface-strong)]/42">
                             {[
-                              { label: 'Ideas', value: notes.length },
+                              { label: 'Ideas', value: gardenNotes.length },
                               { label: t('sprouts'), value: profileStats.active },
                               { label: 'Racha', value: wateringRitual.streak },
                               { label: 'Min', value: profileStats.totalFocus },
