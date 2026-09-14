@@ -1,7 +1,8 @@
-import { SeedNote } from './types';
+import { DailyActivitySnapshot, DailyIntentionOutcome, DailyNextStep, SeedNote } from './types';
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const DAILY_CLOSURE_TAG = 'daily-closure';
+export const DAILY_ENTRY_TAG = 'daily-entry';
 
 export function daysSince(timestamp: number | undefined, now = Date.now()) {
   if (!timestamp) return Infinity;
@@ -21,7 +22,9 @@ export function waterNote(note: SeedNote, message = 'Revisada: sigue viva', now 
 }
 
 export function toggleTaskForNote(note: SeedNote, taskId: string, now = Date.now()): SeedNote {
-  const tasks = note.tasks.map(task => task.id === taskId ? { ...task, completed: !task.completed } : task);
+  const tasks = note.tasks.map(task => task.id === taskId
+    ? { ...task, completed: !task.completed, completedAt: task.completed ? undefined : now }
+    : task);
   const allCompleted = tasks.length > 0 && tasks.every(task => task.completed);
   return {
     ...note,
@@ -33,14 +36,20 @@ export function toggleTaskForNote(note: SeedNote, taskId: string, now = Date.now
 }
 
 export function addFocusMinutes(note: SeedNote, minutes: number, now = Date.now()): SeedNote {
+  const safeMinutes = Math.max(0, Math.round(minutes));
   return {
     ...note,
-    focusedMinutes: (note.focusedMinutes || 0) + minutes,
+    focusedMinutes: (note.focusedMinutes || 0) + safeMinutes,
+    focusHistory: safeMinutes > 0 ? [...(note.focusHistory || []), {
+      startedAt: now - safeMinutes * 60 * 1000,
+      endedAt: now,
+      minutes: safeMinutes,
+    }] : note.focusHistory,
     lastWateredAt: now,
   };
 }
 
-function dateKey(timestamp: number) {
+export function localDateKey(timestamp: number) {
   const date = new Date(timestamp);
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -48,8 +57,104 @@ function dateKey(timestamp: number) {
   return `${year}-${month}-${day}`;
 }
 
+export function dailyEntryId(planetId: string, timestamp = Date.now()) {
+  return `daily-entry:${encodeURIComponent(planetId)}:${localDateKey(timestamp)}`;
+}
+
 export function isSameLocalDay(left: number | undefined, right = Date.now()) {
-  return Boolean(left) && dateKey(left) === dateKey(right);
+  return Boolean(left) && localDateKey(left) === localDateKey(right);
+}
+
+export function isDailyEntryNote(note: SeedNote) {
+  return note.systemKind === 'daily-entry' || note.tags?.includes(DAILY_ENTRY_TAG) || note.tags?.includes(DAILY_CLOSURE_TAG);
+}
+
+export function getDailyEntryForDate(notes: SeedNote[], date = Date.now(), planetId?: string) {
+  const targetDate = localDateKey(date);
+  return notes
+    .filter(note => isDailyEntryNote(note))
+    .filter(note => !planetId || note.planetId === planetId)
+    .filter(note => note.dailyEntry?.date === targetDate || (!note.dailyEntry && isSameLocalDay(note.harvestedAt || note.createdAt, date)))
+    .sort((left, right) => (right.updatedAt || right.createdAt) - (left.updatedAt || left.createdAt))[0];
+}
+
+export function getDailyActivitySnapshot(notes: SeedNote[], now = Date.now()): DailyActivitySnapshot {
+  const gardenNotes = notes.filter(note => !isDailyEntryNote(note));
+  return {
+    planted: gardenNotes.filter(note => isSameLocalDay(note.createdAt, now)).length,
+    watered: gardenNotes.filter(note => isSameLocalDay(note.lastWateredAt, now)).length,
+    steps: gardenNotes.reduce((total, note) => total + note.tasks.filter(task => isSameLocalDay(task.completedAt, now)).length, 0),
+    harvests: gardenNotes.filter(note => isSameLocalDay(note.harvestedAt, now)).length,
+    focusMinutes: gardenNotes.reduce((total, note) => total + (note.focusHistory || [])
+      .filter(session => isSameLocalDay(session.endedAt, now))
+      .reduce((minutes, session) => minutes + session.minutes, 0), 0),
+  };
+}
+
+export function createDailyEntryNote({
+  id,
+  intention,
+  linkedNoteId,
+  planetId,
+  language,
+  now = Date.now(),
+}: {
+  id: string;
+  intention: string;
+  linkedNoteId?: string;
+  planetId: string;
+  language: 'en' | 'es';
+  now?: number;
+}): SeedNote {
+  const cleanedIntention = intention.trim();
+  return {
+    id,
+    planetId,
+    title: language === 'en' ? `Daily plan · ${localDateKey(now)}` : `Plan diario · ${localDateKey(now)}`,
+    content: cleanedIntention,
+    createdAt: now,
+    updatedAt: now,
+    tags: [DAILY_ENTRY_TAG],
+    isGrowth: false,
+    tasks: [],
+    growthStage: 'seed',
+    wateringIntervalDays: 36500,
+    inbox: false,
+    paused: false,
+    seedType: 'learning',
+    priority: 'normal',
+    systemKind: 'daily-entry',
+    dailyEntry: {
+      version: 1,
+      date: localDateKey(now),
+      intention: cleanedIntention,
+      linkedNoteId,
+      startedAt: now,
+    },
+  };
+}
+
+export function updateDailyEntryFocus(note: SeedNote, intention: string, linkedNoteId: string | undefined, now = Date.now()): SeedNote {
+  const cleanedIntention = intention.trim();
+  return {
+    ...note,
+    content: cleanedIntention,
+    updatedAt: now,
+    dailyEntry: {
+      version: 1,
+      date: note.dailyEntry?.date || localDateKey(now),
+      intention: cleanedIntention,
+      linkedNoteId,
+      startedAt: note.dailyEntry?.startedAt || note.createdAt || now,
+      outcome: note.dailyEntry?.outcome,
+      reflection: note.dailyEntry?.reflection,
+      nextStep: note.dailyEntry?.nextStep,
+      activity: note.dailyEntry?.activity,
+      closedAt: note.dailyEntry?.closedAt,
+      dismissedAt: note.dailyEntry?.dismissedAt,
+      continuedAt: note.dailyEntry?.continuedAt,
+    },
+  };
 }
 
 export function isDailyClosureForDate(note: SeedNote, date = Date.now()) {
@@ -63,18 +168,24 @@ export function isDailyClosureForDate(note: SeedNote, date = Date.now()) {
   );
 }
 
+export function getSuggestedIntentionOutcome(note: SeedNote | undefined, now = Date.now()): DailyIntentionOutcome {
+  if (!note) return '';
+  if (isSameLocalDay(note.harvestedAt, now)) return 'yes';
+  if (
+    isSameLocalDay(note.lastWateredAt, now) ||
+    isSameLocalDay(note.updatedAt, now) ||
+    note.tasks.some(task => isSameLocalDay(task.completedAt, now)) ||
+    (note.focusHistory || []).some(session => isSameLocalDay(session.endedAt, now))
+  ) return 'some';
+  return 'no';
+}
+
 export function getDailyActivitySummary(notes: SeedNote[], language: 'en' | 'es', now = Date.now()) {
-  const todayNotes = notes.filter(note => isSameLocalDay(note.createdAt, now));
-  const todayWatered = notes.filter(note => isSameLocalDay(note.lastWateredAt, now));
-  const todayHarvests = notes.filter(note => isSameLocalDay(note.harvestedAt, now));
-  const todaySteps = notes.filter(note =>
-    isSameLocalDay(note.updatedAt, now) &&
-    note.tasks.some(task => task.completed)
-  );
+  const activity = getDailyActivitySnapshot(notes, now);
 
   return language === 'en'
-    ? `${todayNotes.length} planted · ${todayWatered.length} watered · ${todaySteps.length} moved · ${todayHarvests.length} harvested`
-    : `${todayNotes.length} plantadas · ${todayWatered.length} riegos · ${todaySteps.length} avances · ${todayHarvests.length} cosechas`;
+    ? `${activity.planted} planted · ${activity.watered} watered · ${activity.steps} steps · ${activity.harvests} harvested · ${activity.focusMinutes} min focused`
+    : `${activity.planted} plantadas · ${activity.watered} riegos · ${activity.steps} pasos · ${activity.harvests} cosechas · ${activity.focusMinutes} min de foco`;
 }
 
 export function createDailyClosureNote({
@@ -83,6 +194,9 @@ export function createDailyClosureNote({
   reflection,
   intention,
   intentionOutcome = '',
+  linkedNoteId,
+  nextStep = '',
+  existingEntry,
   defaultWateringInterval,
   planetId,
   language,
@@ -92,7 +206,10 @@ export function createDailyClosureNote({
   notes: SeedNote[];
   reflection: string;
   intention: string;
-  intentionOutcome?: 'yes' | 'some' | 'no' | '';
+  intentionOutcome?: DailyIntentionOutcome;
+  linkedNoteId?: string;
+  nextStep?: DailyNextStep;
+  existingEntry?: SeedNote;
   defaultWateringInterval: number;
   planetId: string;
   language: 'en' | 'es';
@@ -108,6 +225,7 @@ export function createDailyClosureNote({
         ? language === 'en' ? 'Intention moved: not today' : 'Intención lograda: no hoy'
         : '';
   const summary = getDailyActivitySummary(notes, language, now);
+  const activity = getDailyActivitySnapshot(notes, now);
   const content = [
     cleanedIntention
       ? language === 'en'
@@ -120,12 +238,13 @@ export function createDailyClosureNote({
   ].filter(Boolean).join('\n\n');
 
   return {
-    id,
+    ...existingEntry,
+    id: existingEntry?.id || id,
     title: language === 'en' ? 'Today closure' : 'Cierre del día',
     content,
-    createdAt: now,
+    createdAt: existingEntry?.createdAt || now,
     updatedAt: now,
-    tags: [DAILY_CLOSURE_TAG],
+    tags: [DAILY_ENTRY_TAG, DAILY_CLOSURE_TAG],
     isGrowth: false,
     tasks: [],
     growthStage: 'bloom',
@@ -135,8 +254,21 @@ export function createDailyClosureNote({
     seedType: 'learning',
     priority: 'normal',
     reflection: cleanedReflection || content,
-    takeaway: outcomeText || cleanedIntention || summary,
+    takeaway: cleanedReflection || outcomeText || cleanedIntention || summary,
     harvestedAt: now,
     planetId,
+    systemKind: 'daily-entry',
+    dailyEntry: {
+      version: 1,
+      date: localDateKey(now),
+      intention: cleanedIntention,
+      linkedNoteId,
+      outcome: intentionOutcome,
+      reflection: cleanedReflection,
+      nextStep,
+      activity,
+      startedAt: existingEntry?.dailyEntry?.startedAt || existingEntry?.createdAt || now,
+      closedAt: now,
+    },
   };
 }

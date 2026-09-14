@@ -9,6 +9,39 @@ export interface Task {
   id: string;
   text: string;
   completed: boolean;
+  completedAt?: number;
+}
+
+export type DailyIntentionOutcome = 'yes' | 'some' | 'no' | '';
+export type DailyNextStep = 'tomorrow' | 'garden' | 'shed' | '';
+
+export interface DailyActivitySnapshot {
+  planted: number;
+  watered: number;
+  steps: number;
+  harvests: number;
+  focusMinutes: number;
+}
+
+export interface DailyEntryData {
+  version: 1;
+  date: string;
+  intention: string;
+  linkedNoteId?: string;
+  outcome?: DailyIntentionOutcome;
+  reflection?: string;
+  nextStep?: DailyNextStep;
+  activity?: DailyActivitySnapshot;
+  startedAt: number;
+  closedAt?: number;
+  dismissedAt?: number;
+  continuedAt?: number;
+}
+
+export interface FocusSession {
+  startedAt: number;
+  endedAt: number;
+  minutes: number;
 }
 
 export interface SeedNote {
@@ -35,7 +68,10 @@ export interface SeedNote {
   takeaway?: string;
   focusNote?: string;
   focusedMinutes?: number;
+  focusHistory?: FocusSession[];
   harvestedAt?: number;
+  systemKind?: 'daily-entry';
+  dailyEntry?: DailyEntryData;
   /** Server-assigned revision; local edits keep it as their optimistic base. */
   syncVersion?: number;
 }

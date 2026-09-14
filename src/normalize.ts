@@ -33,6 +33,7 @@ export function normalizeNote(value: unknown): SeedNote | null {
           id: taskId,
           text: asString(record.text) || '',
           completed: Boolean(record.completed),
+          completedAt: asNumber(record.completedAt),
         }];
       })
     : [];
@@ -67,7 +68,47 @@ export function normalizeNote(value: unknown): SeedNote | null {
     takeaway: asString(raw.takeaway),
     focusNote: asString(raw.focusNote),
     focusedMinutes: Math.max(0, asNumber(raw.focusedMinutes) || 0),
+    focusHistory: Array.isArray(raw.focusHistory)
+      ? raw.focusHistory.flatMap(value => {
+          const entry = asRecord(value);
+          const legacyAt = asNumber(entry?.at);
+          const startedAt = asNumber(entry?.startedAt) || legacyAt;
+          const endedAt = asNumber(entry?.endedAt) || legacyAt;
+          const minutes = asNumber(entry?.minutes);
+          return startedAt && endedAt && minutes && minutes > 0 ? [{ startedAt, endedAt, minutes }] : [];
+        })
+      : undefined,
     harvestedAt: asNumber(raw.harvestedAt),
+    systemKind: raw.systemKind === 'daily-entry' ? 'daily-entry' : undefined,
+    dailyEntry: (() => {
+      const entry = asRecord(raw.dailyEntry);
+      const date = asString(entry?.date);
+      const startedAt = asNumber(entry?.startedAt);
+      if (!entry || !date || !startedAt) return undefined;
+      const rawActivity = asRecord(entry.activity);
+      const rawOutcome = asString(entry.outcome);
+      const rawNextStep = asString(entry.nextStep);
+      return {
+        version: 1 as const,
+        date,
+        intention: asString(entry.intention) || '',
+        linkedNoteId: asString(entry.linkedNoteId),
+        outcome: rawOutcome === 'yes' || rawOutcome === 'some' || rawOutcome === 'no' ? rawOutcome : '',
+        reflection: asString(entry.reflection),
+        nextStep: rawNextStep === 'tomorrow' || rawNextStep === 'garden' || rawNextStep === 'shed' ? rawNextStep : '',
+        activity: rawActivity ? {
+          planted: Math.max(0, asNumber(rawActivity.planted) || 0),
+          watered: Math.max(0, asNumber(rawActivity.watered) || 0),
+          steps: Math.max(0, asNumber(rawActivity.steps) || 0),
+          harvests: Math.max(0, asNumber(rawActivity.harvests) || 0),
+          focusMinutes: Math.max(0, asNumber(rawActivity.focusMinutes) || 0),
+        } : undefined,
+        startedAt,
+        closedAt: asNumber(entry.closedAt),
+        dismissedAt: asNumber(entry.dismissedAt),
+        continuedAt: asNumber(entry.continuedAt),
+      };
+    })(),
   };
 }
 
