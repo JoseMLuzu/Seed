@@ -25,3 +25,5 @@ View your app in AI Studio: https://ai.studio/apps/e0a9b1dc-2b30-46d5-b57d-f47de
 - [Account isolation](docs/account-isolation.md)
 - [Incremental sync queue](docs/sync-queue.md)
 - [iOS and Capacitor](docs/ios-capacitor.md)
+- [Garden board](docs/garden-board.md)
+- [Gardener language](docs/gardener-language.md)
