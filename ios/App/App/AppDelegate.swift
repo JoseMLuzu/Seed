@@ -53,8 +53,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 
-    private func configureRootWebViewScrolling() {
-        guard let bridgeViewController = window?.rootViewController as? CAPBridgeViewController else {
+    fileprivate func configureRootWebViewScrolling(in sceneWindow: UIWindow? = nil) {
+        guard let bridgeViewController = (sceneWindow ?? activeWindow)?.rootViewController as? CAPBridgeViewController else {
             return
         }
 
@@ -64,6 +64,30 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         bridgeViewController.webView?.scrollView.contentInsetAdjustmentBehavior = .never
         bridgeViewController.webView?.backgroundColor = appBackground
         bridgeViewController.webView?.scrollView.backgroundColor = appBackground
+    }
+
+    fileprivate func handleOpenUrl(_ url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        if url.scheme == "seed" {
+            dispatchSeedUrlToWebView(url)
+        }
+
+        return ApplicationDelegateProxy.shared.application(UIApplication.shared, open: url, options: options) || url.scheme == "seed"
+    }
+
+    fileprivate func handleUserActivity(_ userActivity: NSUserActivity) -> Bool {
+        ApplicationDelegateProxy.shared.application(
+            UIApplication.shared,
+            continue: userActivity,
+            restorationHandler: { _ in }
+        )
+    }
+
+    private var activeWindow: UIWindow? {
+        let sceneWindows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+
+        return sceneWindows.first(where: \.isKeyWindow) ?? sceneWindows.first ?? window
     }
 
     private func dispatchSeedUrlToWebView(_ url: URL) {
@@ -81,7 +105,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         """
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            guard let bridgeViewController = self?.window?.rootViewController as? CAPBridgeViewController else {
+            guard let bridgeViewController = self?.activeWindow?.rootViewController as? CAPBridgeViewController else {
                 return
             }
 
@@ -89,6 +113,62 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
     }
 
+}
+
+class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+
+    private var appDelegate: AppDelegate? {
+        UIApplication.shared.delegate as? AppDelegate
+    }
+
+    func scene(
+        _ scene: UIScene,
+        willConnectTo session: UISceneSession,
+        options connectionOptions: UIScene.ConnectionOptions
+    ) {
+        guard scene is UIWindowScene else { return }
+
+        appDelegate?.configureRootWebViewScrolling(in: window)
+
+        connectionOptions.urlContexts.forEach { context in
+            _ = appDelegate?.handleOpenUrl(context.url, options: openUrlOptions(from: context.options))
+        }
+
+        connectionOptions.userActivities.forEach { userActivity in
+            _ = appDelegate?.handleUserActivity(userActivity)
+        }
+    }
+
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        appDelegate?.configureRootWebViewScrolling(in: window)
+    }
+
+    func scene(_ scene: UIScene, openURLContexts urlContexts: Set<UIOpenURLContext>) {
+        urlContexts.forEach { context in
+            _ = appDelegate?.handleOpenUrl(context.url, options: openUrlOptions(from: context.options))
+        }
+    }
+
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        _ = appDelegate?.handleUserActivity(userActivity)
+    }
+
+    private func openUrlOptions(from options: UIScene.OpenURLOptions) -> [UIApplication.OpenURLOptionsKey: Any] {
+        var result: [UIApplication.OpenURLOptionsKey: Any] = [
+            .openInPlace: options.openInPlace
+        ]
+
+        if let sourceApplication = options.sourceApplication {
+            result[.sourceApplication] = sourceApplication
+        }
+
+        if let annotation = options.annotation {
+            result[.annotation] = annotation
+        }
+
+        return result
+    }
 }
 
 class SeedBridgeViewController: CAPBridgeViewController {
