@@ -37,6 +37,18 @@ export function buildCalendarEvents(notes: SeedNote[]): CalendarEvent[] {
 
   for (const note of notes) {
     if (isDailyEntryNote(note)) {
+      for (const session of note.focusHistory || []) {
+        events.push({
+          id: `${note.id}:focus:${session.endedAt}`,
+          kind: 'focus',
+          category: 'activity',
+          at: session.endedAt,
+          noteId: note.id,
+          noteTitle: note.dailyEntry?.intention || note.title,
+          title: note.dailyEntry?.intention || note.title,
+          minutes: session.minutes,
+        });
+      }
       const closedAt = note.dailyEntry?.closedAt || (note.tags.includes('daily-closure') ? note.harvestedAt : undefined);
       if (closedAt) {
         events.push({

@@ -93,6 +93,8 @@ export function normalizeNote(value: unknown): SeedNote | null {
         date,
         intention: asString(entry.intention) || '',
         linkedNoteId: asString(entry.linkedNoteId),
+        ...(asString(entry.linkedTaskId) ? { linkedTaskId: asString(entry.linkedTaskId) } : {}),
+        ...(asNumber(entry.focusCompletedAt) ? { focusCompletedAt: asNumber(entry.focusCompletedAt) } : {}),
         outcome: rawOutcome === 'yes' || rawOutcome === 'some' || rawOutcome === 'no' ? rawOutcome : '',
         reflection: asString(entry.reflection),
         nextStep: rawNextStep === 'tomorrow' || rawNextStep === 'garden' || rawNextStep === 'shed' ? rawNextStep : '',
@@ -107,6 +109,9 @@ export function normalizeNote(value: unknown): SeedNote | null {
         closedAt: asNumber(entry.closedAt),
         dismissedAt: asNumber(entry.dismissedAt),
         continuedAt: asNumber(entry.continuedAt),
+        journalMood: entry.journalMood === 'clear' || entry.journalMood === 'calm' || entry.journalMood === 'rain' || entry.journalMood === 'beginnings' ? entry.journalMood : undefined,
+        journalLinkedNoteId: asString(entry.journalLinkedNoteId),
+        journalUpdatedAt: asNumber(entry.journalUpdatedAt),
       };
     })(),
   };

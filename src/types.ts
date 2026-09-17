@@ -14,6 +14,7 @@ export interface Task {
 
 export type DailyIntentionOutcome = 'yes' | 'some' | 'no' | '';
 export type DailyNextStep = 'tomorrow' | 'garden' | 'shed' | '';
+export type JournalMood = 'clear' | 'calm' | 'rain' | 'beginnings';
 
 export interface DailyActivitySnapshot {
   planted: number;
@@ -28,6 +29,8 @@ export interface DailyEntryData {
   date: string;
   intention: string;
   linkedNoteId?: string;
+  linkedTaskId?: string;
+  focusCompletedAt?: number;
   outcome?: DailyIntentionOutcome;
   reflection?: string;
   nextStep?: DailyNextStep;
@@ -36,6 +39,9 @@ export interface DailyEntryData {
   closedAt?: number;
   dismissedAt?: number;
   continuedAt?: number;
+  journalMood?: JournalMood;
+  journalLinkedNoteId?: string;
+  journalUpdatedAt?: number;
 }
 
 export interface FocusSession {

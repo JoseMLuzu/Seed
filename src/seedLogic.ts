@@ -85,7 +85,7 @@ export function getDailyActivitySnapshot(notes: SeedNote[], now = Date.now()): D
     watered: gardenNotes.filter(note => isSameLocalDay(note.lastWateredAt, now)).length,
     steps: gardenNotes.reduce((total, note) => total + note.tasks.filter(task => isSameLocalDay(task.completedAt, now)).length, 0),
     harvests: gardenNotes.filter(note => isSameLocalDay(note.harvestedAt, now)).length,
-    focusMinutes: gardenNotes.reduce((total, note) => total + (note.focusHistory || [])
+    focusMinutes: notes.reduce((total, note) => total + (note.focusHistory || [])
       .filter(session => isSameLocalDay(session.endedAt, now))
       .reduce((minutes, session) => minutes + session.minutes, 0), 0),
   };
@@ -134,17 +134,21 @@ export function createDailyEntryNote({
   };
 }
 
-export function updateDailyEntryFocus(note: SeedNote, intention: string, linkedNoteId: string | undefined, now = Date.now()): SeedNote {
+export function updateDailyEntryFocus(note: SeedNote, intention: string, linkedNoteId: string | undefined, now = Date.now(), linkedTaskId?: string): SeedNote {
   const cleanedIntention = intention.trim();
+  const changed = cleanedIntention !== note.dailyEntry?.intention || linkedNoteId !== note.dailyEntry?.linkedNoteId || linkedTaskId !== note.dailyEntry?.linkedTaskId;
   return {
     ...note,
     content: cleanedIntention,
     updatedAt: now,
     dailyEntry: {
+      ...note.dailyEntry,
       version: 1,
       date: note.dailyEntry?.date || localDateKey(now),
       intention: cleanedIntention,
       linkedNoteId,
+      linkedTaskId: cleanedIntention ? linkedTaskId : undefined,
+      focusCompletedAt: changed ? undefined : note.dailyEntry?.focusCompletedAt,
       startedAt: note.dailyEntry?.startedAt || note.createdAt || now,
       outcome: note.dailyEntry?.outcome,
       reflection: note.dailyEntry?.reflection,
@@ -259,6 +263,7 @@ export function createDailyClosureNote({
     planetId,
     systemKind: 'daily-entry',
     dailyEntry: {
+      ...existingEntry?.dailyEntry,
       version: 1,
       date: localDateKey(now),
       intention: cleanedIntention,
