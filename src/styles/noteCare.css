@@ -1,0 +1,5 @@
+.note-care-status { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; vertical-align: middle; border-radius: 999px; padding: 4px 8px; min-height: 26px; font-size: 10px; font-weight: 550; white-space: nowrap; color: var(--text-muted); background: color-mix(in srgb, var(--care-color) 8%, var(--surface-strong)); }
+.note-care-status svg { flex-shrink: 0; color: var(--care-color); fill: color-mix(in srgb, var(--care-color) 22%, transparent); }
+.note-care-water { --care-color: #368ee0; }
+.note-care-sun { --care-color: #e5ac24; }
+.note-care-compact { padding: 4px; width: 26px; justify-content: center; }

@@ -5,6 +5,7 @@ import { AdaptiveDpr, OrbitControls, Environment, Html, Line, Sparkles, Stars, T
 import * as THREE from 'three';
 import { SeedNote, Theme } from '../types';
 import { daysSince, wateringDue } from '../seedLogic';
+import { gardenName, gardenStageName, gardenTypeName } from '../gardenVocabulary';
 
 const PLANET_RADIUS = 15;
 type GardenFilter = 'all' | 'water' | 'progress' | 'harvest';
@@ -2449,19 +2450,13 @@ function formatWatered(note: SeedNote) {
 }
 
 function stageLabel(note: SeedNote) {
-  if (note.paused) return 'Pausada';
-  if (wateringDue(note) && note.growthStage !== 'bloom') return 'Pide riego';
-  if (note.growthStage === 'bloom') return note.isGrowth ? 'Árbol logrado' : 'Flor lograda';
-  if (note.growthStage === 'sprout') return 'En crecimiento';
-  if (note.growthStage === 'withered') return 'Marchita';
-  return 'Semilla nueva';
+  if (note.paused) return gardenName('rest', 'es');
+  if (wateringDue(note) && note.growthStage !== 'bloom') return gardenName('attention', 'es');
+  return gardenStageName(note.growthStage, 'es');
 }
 
 function seedTypeLabel(note: SeedNote) {
-  if (note.seedType === 'project') return 'Proyecto';
-  if (note.seedType === 'goal') return 'Meta';
-  if (note.seedType === 'learning') return 'Aprendizaje';
-  return 'Idea';
+  return gardenTypeName(note.seedType || 'idea', 'es');
 }
 
 export default function Garden3D({

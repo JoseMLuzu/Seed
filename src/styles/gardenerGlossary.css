@@ -1,0 +1,10 @@
+.gardener-glossary { padding: 16px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface-strong); color: var(--earth); }
+.gardener-glossary summary { min-height: 44px; cursor: pointer; font-size: 15px; font-weight: 600; }
+.gardener-glossary summary:focus-visible { outline: 2px solid var(--sage); outline-offset: 4px; border-radius: 8px; }
+.gardener-glossary > p { font-size: 12px; line-height: 1.7; color: var(--text-muted); }
+.gardener-glossary section { margin-top: 24px; }
+.gardener-glossary h3 { margin-bottom: 8px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--sage); }
+.gardener-glossary dl > div { padding: 12px 0; border-top: 1px solid var(--border); }
+.gardener-glossary dt { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.gardener-glossary dt span { padding: 3px 8px; border-radius: 12px; background: var(--bg-app); color: var(--text-muted); font-size: 10px; font-weight: 500; }
+.gardener-glossary dd { margin: 5px 0 0; font-size: 12px; line-height: 1.65; color: var(--text-muted); overflow-wrap: anywhere; }

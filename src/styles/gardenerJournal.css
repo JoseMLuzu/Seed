@@ -1,0 +1,55 @@
+.gardener-journal-card { position: relative; border: 1px solid var(--border); border-radius: 25px; padding: 25px; background: linear-gradient(135deg, var(--surface-strong), color-mix(in srgb, var(--tone-harvest-bg) 42%, var(--surface-strong))); }
+.gardener-journal-card::after { content: ''; position: absolute; width: 9px; height: 18px; top: -1px; right: 27px; background: color-mix(in srgb, var(--tone-harvest) 38%, var(--surface-strong)); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 75%, 0 100%); pointer-events: none; }
+.gardener-journal-card h3 { margin: 16px 0 10px; font-size: 21px; font-weight: 600; letter-spacing: -.03em; }
+.journal-card-excerpt { color: var(--text-muted); font-family: Georgia, serif; font-size: 17px; line-height: 1.65; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
+.journal-card-date { margin-top: 12px; color: var(--text-muted); font-size: 12px; }
+.journal-card-actions { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 20px; }
+.journal-overlay { position: fixed; inset: 0; z-index: 78; color: var(--earth); }
+.journal-backdrop { position: absolute; inset: 0; background: #17251f55; }
+.journal-sheet { position: absolute; top: calc(var(--journal-top) + (var(--journal-height) - min(86vh, 760px)) / 2); left: 50%; transform: translateX(-50%); height: min(86vh, 760px); max-height: calc(var(--journal-height) - 24px); width: min(680px, calc(100% - 32px)); display: flex; flex-direction: column; background: var(--surface-strong); border: 1px solid var(--border); border-radius: 28px; box-shadow: 0 28px 90px #14261d44; overflow: hidden; }
+.journal-header { display: flex; flex: none; align-items: center; gap: 10px; padding: 17px 20px; border-bottom: 1px solid var(--border); }
+.journal-header h2 { flex: 1; font-size: 17px; font-weight: 600; letter-spacing: -.025em; }
+.journal-icon-button { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%; color: var(--text-muted); background: var(--surface-soft); }
+.journal-save { display: flex; gap: 6px; align-items: center; justify-content: center; min-height: 44px; padding: 0 15px; border-radius: 24px; background: var(--sage); color: var(--on-sage); font-size: 13px; font-weight: 600; }
+.journal-save:disabled { opacity: .4; }
+.journal-content { overflow-y: auto; overscroll-behavior: contain; flex: 1; min-height: 0; padding: 27px; padding-bottom: max(27px, env(safe-area-inset-bottom)); }
+.journal-content h3 { font-size: 26px; line-height: 1.2; font-weight: 600; letter-spacing: -.04em; margin: 12px 0; }
+.journal-hint, .journal-footnote { font-size: 13px; line-height: 1.65; color: var(--text-muted); }
+.journal-writing { display: block; width: 100%; min-height: 240px; resize: vertical; padding: 18px 0; margin-top: 12px; background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.8em - 1px), color-mix(in srgb, var(--border) 38%, transparent) calc(1.8em - 1px), color-mix(in srgb, var(--border) 38%, transparent) 1.8em); background-position: 0 18px; border: 0; border-bottom: 1px solid var(--border); color: var(--earth); font-family: Georgia, serif; font-size: 19px; line-height: 1.8; }
+.journal-writing:focus { outline: none; border-bottom-color: var(--sage); }
+.journal-writing::placeholder { color: var(--text-muted); opacity: .6; }
+.journal-moods { margin-top: 23px; border: 0; }
+.journal-moods legend, .journal-link-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.journal-moods legend span { font-weight: 400; }
+.journal-moods > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.journal-moods button { display: flex; align-items: center; gap: 7px; min-height: 44px; padding: 9px 13px; border-radius: 20px; background: var(--surface-soft); border: 1px solid var(--border); font-size: 12px; }
+.journal-moods button[aria-pressed=true] { background: var(--tone-sprout-bg); border-color: var(--sage); color: var(--sage); }
+.journal-link-label { display: block; margin: 24px 0 16px; }
+.journal-link-label select { width: 100%; margin-top: 10px; min-height: 46px; font-size: 16px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-soft); color: var(--earth); }
+.journal-history { display: grid; gap: 18px; margin-top: 25px; }
+.journal-history-entry { padding: 17px 20px 20px; border: 1px solid var(--border); border-radius: 21px; background: color-mix(in srgb, var(--tone-harvest-bg) 25%, var(--surface-strong)); }
+.journal-entry-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12px; color: var(--text-muted); }
+.journal-entry-mood { margin: 7px 0 13px; font-size: 12px; color: var(--text-muted); }
+.journal-entry-text { white-space: pre-wrap; overflow-wrap: anywhere; font-family: Georgia, serif; font-size: 17px; line-height: 1.8; }
+.journal-entry-link { margin-top: 14px; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+.journal-entry-closed { font-size: 10px; color: var(--text-muted); margin-top: 14px; }
+.journal-empty { display: grid; justify-items: center; text-align: center; gap: 16px; padding: 40px 12px; color: var(--text-muted); }
+.journal-empty h3 { font-size: 23px; color: var(--earth); margin: 0; }
+.journal-empty p { font-size: 14px; line-height: 1.6; }
+.journal-saved { display: flex; align-items: center; gap: 8px; padding: 12px; border-radius: 14px; margin-bottom: 20px; background: var(--surface-soft); color: var(--sage); font-size: 13px; }
+.journal-discard { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 30px; background: var(--surface-strong); text-align: center; }
+.journal-discard h3 { font-size: 24px; font-weight: 600; }
+.journal-discard p { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+.journal-overlay button:focus-visible { outline: 2px solid var(--sage); outline-offset: 3px; }
+.journal-handle { display: none; }
+@media (max-width: 639px) {
+  .gardener-journal-card { padding: 21px; border-radius: 22px; }
+  .journal-sheet { top: auto; bottom: calc(100% - var(--journal-top) - var(--journal-height)); width: 100%; height: calc(var(--journal-height) - max(14px, env(safe-area-inset-top))); max-height: none; border-radius: 28px 28px 0 0; border-bottom: 0; }
+  .journal-handle { display: block; width: 36px; height: 4px; border-radius: 4px; margin: 10px auto 0; background: var(--border); flex-shrink: 0; }
+  .journal-header { padding: 10px 12px 14px; gap: 7px; }
+  .journal-header h2 { font-size: 15px; }
+  .journal-save { font-size: 12px; padding-inline: 12px; }
+  .journal-content { padding: 22px; padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
+  .journal-content h3 { font-size: 25px; }
+  .journal-writing { min-height: 210px; font-size: 18px; }
+}
