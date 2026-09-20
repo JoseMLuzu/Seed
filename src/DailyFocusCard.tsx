@@ -20,26 +20,39 @@ export function DailyFocusCard({ entry, intention, notes, previousEntry, languag
   const [selected, setSelected] = useState<[string, string] | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const projects = notes.filter(note => note.isGrowth && !note.inbox && !note.paused && note.growthStage !== 'withered' && note.tasks.some(task => !task.completed));
+  const selectedProject = selected
+    ? projects.find(note => note.id === selected[0])
+    : undefined;
   const suggestion = projects.flatMap(note => note.tasks.filter(task => !task.completed).slice(0, 1).map(task => ({ note, task })))[0];
   const yesterday = previousEntry?.dailyEntry;
   const resumeYesterday = Boolean(previousEntry && yesterday?.intention && !yesterday.dismissedAt && !yesterday.continuedAt && yesterday.nextStep === 'tomorrow' && !focus.closed);
-  const edit = () => { setDraft(saved); setSelected(focus.task && focus.linkedNote ? [focus.linkedNote.id, focus.task.id] : null); setConfirmClear(false); setEditing(true); };
+  const edit = () => {
+    setDraft(saved);
+    setSelected(
+      focus.task && !focus.task.completed && focus.linkedNote
+        ? [focus.linkedNote.id, focus.task.id]
+        : null,
+    );
+    setConfirmClear(false);
+    setEditing(true);
+  };
 
   return <section className="dashboard-today-grid" aria-label={gardenName('dailyFocus', language)}>
     <article className="dashboard-focus dashboard-focus-v2" data-garden-stage={focus.complete ? 'bloom' : saved ? 'sprout' : 'seed'}>
       <GardenMotif stage={focus.complete ? 'bloom' : saved ? 'sprout' : 'seed'} className="dashboard-focus-motif" />
-      <div className="dashboard-card-heading"><span className="dashboard-eyebrow"><Sprout size={16} aria-hidden="true" />{gardenName('dailyFocus', language)}</span>{focus.closed ? <CheckCircle2 size={19} aria-label={copy('Día cerrado', 'Day closed')} /> : saved && !editing && <button type="button" className="dashboard-icon-button" onClick={edit} aria-label={copy('Editar mi labor de hoy', 'Edit today’s task')}><Pencil size={16} /></button>}</div>
+      <div className="dashboard-card-heading"><span className="dashboard-eyebrow"><Sprout size={16} aria-hidden="true" />{gardenName('dailyFocus', language)}</span>{focus.closed ? <CheckCircle2 size={19} aria-label={copy('Día cerrado', 'Day closed')} /> : saved && !editing && !focus.complete && <button type="button" className="dashboard-icon-button" onClick={edit} aria-label={copy('Editar mi labor de hoy', 'Edit today’s task')}><Pencil size={16} /></button>}</div>
       {editing && !focus.closed ? <form className="dashboard-focus-editor" onSubmit={event => { event.preventDefault(); if (!draft.trim()) return; onSave(draft.trim(), selected?.[0], selected?.[1]); setEditing(false); }}>
-        <label htmlFor="daily-focus-intention">{copy('Una labor pequeña para hoy.', 'One small task for today.')}</label>
+        <p className="dashboard-focus-editor-title">{copy('Una labor pequeña para hoy.', 'One small task for today.')}</p>
         <p className="dashboard-focus-editor-hint">{copy('Escribe tu objetivo o elige una tarea pendiente. Lo demás puede esperar.', 'Write your goal or pick a pending task. Everything else can wait.')}</p>
-        <label className="dashboard-focus-choice-label" htmlFor="daily-focus-task">{copy('¿De dónde viene esta labor?', 'Where does this task come from?')}</label>
+        <label className="dashboard-focus-choice-label" htmlFor="daily-focus-task">{copy('Elige una tarea pendiente o escribe una propia', 'Pick a pending task or write your own')}</label>
         <select id="daily-focus-task" value={selected ? JSON.stringify(selected) : ''} onChange={event => {
           if (!event.target.value) { setSelected(null); return; }
           const choice = JSON.parse(event.target.value) as [string, string];
           const task = notes.find(note => note.id === choice[0])?.tasks.find(task => task.id === choice[1]);
           setSelected(choice); if (task) setDraft(task.text);
-        }}><option value="">{copy('Mi propia labor · sin brote', 'My own task · no sprout')}</option>{projects.map(note => <optgroup key={note.id} label={note.title}>{note.tasks.filter(task => !task.completed || (selected?.[0] === note.id && selected?.[1] === task.id)).map(task => <option key={task.id} value={JSON.stringify([note.id, task.id])}>{task.text}</option>)}</optgroup>)}{focus.task?.completed && focus.linkedNote && !projects.some(note => note.id === focus.linkedNote!.id) && <optgroup label={focus.linkedNote.title}><option value={JSON.stringify([focus.linkedNote.id, focus.task.id])}>{focus.task.text}</option></optgroup>}</select>
-        <input id="daily-focus-intention" aria-label={copy('Mi labor de hoy', 'Today’s task')} value={draft} onChange={event => setDraft(event.target.value)} placeholder={copy('Por ejemplo: preparar el primer boceto…', 'For example: prepare the first sketch…')} maxLength={280} />
+        }}><option value="">{copy('Escribir una labor propia', 'Write my own task')}</option>{projects.map(note => <optgroup key={note.id} label={note.title}>{note.tasks.filter(task => !task.completed).map(task => <option key={task.id} value={JSON.stringify([note.id, task.id])}>{task.text}</option>)}</optgroup>)}</select>
+        {selectedProject && <p className="dashboard-focus-selected-source"><Sprout size={14} aria-hidden="true" />{copy('Labor de', 'Task from')} <strong>{selectedProject.title}</strong><span>·</span>{copy('Pendiente', 'Pending')}</p>}
+        {!selected && <input id="daily-focus-intention" aria-label={copy('Mi labor de hoy', 'Today’s task')} value={draft} onChange={event => setDraft(event.target.value)} placeholder={copy('Por ejemplo: preparar el primer boceto…', 'For example: prepare the first sketch…')} maxLength={280} />}
         <div className="dashboard-focus-actions"><button type="submit" className="dashboard-primary-button" disabled={!draft.trim()}><Check size={16} />{copy('Guardar labor', 'Save task')}</button><button type="button" className="dashboard-text-button" onClick={() => setEditing(false)}>{copy('Cancelar', 'Cancel')}</button></div>
       </form> : <>
         {saved && <span className={'dashboard-focus-status' + (focus.complete ? ' is-done' : '')}>{focus.complete ? <Sun size={15} /> : <Circle size={14} />}{focus.complete ? copy('LABOR LOGRADA', 'TASK ACHIEVED') : copy('TU ÚNICA LABOR DE HOY', 'YOUR ONE TASK TODAY')}</span>}
