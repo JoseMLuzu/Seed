@@ -28,6 +28,7 @@ import type { Theme, SeedNote } from "../../types";
 import { daysSince, wateringDue } from "../../seedLogic";
 import type { SeedSoundKind } from "../../sound";
 import { AppSelect } from "../../components/ui/AppSelect";
+import { FocusNotesTray } from "./FocusNotesTray";
 
 export function FocusView({
   notes,
@@ -42,6 +43,7 @@ export function FocusView({
   onLogFocus,
   onPickFocus,
   onUpdateFocusMemo,
+  onQuickCapture,
   onFocusFeedback,
   onExit,
 }: {
@@ -57,6 +59,7 @@ export function FocusView({
   onLogFocus: (id: string, minutes: number) => void;
   onPickFocus: (id: string) => void;
   onUpdateFocusMemo: (noteId: string, value: string) => void;
+  onQuickCapture: (value: string) => void;
   onFocusFeedback?: (kind: "open" | SeedSoundKind, force?: boolean) => void;
   onExit: () => void;
 }) {
@@ -270,6 +273,14 @@ export function FocusView({
         className="pb-2 md:pb-8"
       >
         <div className="rounded-[2rem] bg-[var(--card-bg)] border border-[var(--border)] p-8 text-center">
+          <button
+            type="button"
+            onClick={onExit}
+            className="mb-5 inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-semibold text-[var(--sage)] transition-colors hover:bg-[var(--surface-soft)]"
+          >
+            <ChevronLeft size={18} />
+            Volver a Hoy
+          </button>
           <Target
             className="mx-auto text-[var(--sage)] opacity-40 mb-4"
             size={44}
@@ -291,9 +302,9 @@ export function FocusView({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className={`fixed inset-0 z-40 overflow-y-auto app-scrollbar transition-colors duration-700 ${deepFocus ? "bg-[#06100c]" : isDay ? "bg-[#f4f7f2]" : "bg-[#07110d]"} text-[var(--text-main)]`}
+      className={`fixed inset-0 z-[70] overflow-y-auto app-scrollbar transition-colors duration-700 ${deepFocus ? "bg-[#06100c]" : isDay ? "bg-[#f4f7f2]" : "bg-[#07110d]"} text-[var(--text-main)]`}
     >
-      <div className="relative min-h-screen overflow-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-[calc(env(safe-area-inset-top)+0.85rem)] sm:px-6">
+      <div className="relative min-h-screen overflow-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+5rem)] pt-[calc(env(safe-area-inset-top)+0.85rem)] sm:px-6">
         <div
           className={`absolute inset-0 transition-all duration-700 ${deepFocus ? "bg-[radial-gradient(circle_at_48%_42%,rgba(99,129,89,0.22),transparent_42%),linear-gradient(180deg,#06100c_0%,#0d1a13_58%,#07100c_100%)]" : isDay ? "bg-[linear-gradient(180deg,#f7faf5_0%,#edf4ed_100%)]" : "bg-[linear-gradient(180deg,#07110d_0%,#122019_100%)]"}`}
         />
@@ -488,7 +499,9 @@ export function FocusView({
               </div>
             </section>
 
-            <section className="order-2 mt-4 overflow-hidden rounded-[1.65rem] border border-[var(--border)] bg-[var(--surface-strong)]/78 shadow-sm backdrop-blur-xl md:mt-0 md:rounded-[2.2rem] md:bg-[var(--surface-strong)]/84 md:shadow-[0_24px_80px_rgba(22,31,25,0.10)]">
+            <section
+              className={`order-2 mt-4 overflow-hidden rounded-[1.65rem] border border-[var(--border)] bg-[var(--surface-strong)]/78 shadow-sm backdrop-blur-xl md:mt-0 md:rounded-[2.2rem] md:bg-[var(--surface-strong)]/84 md:shadow-[0_24px_80px_rgba(22,31,25,0.10)] ${deepFocus ? "hidden" : ""}`}
+            >
               <div className="border-b border-[var(--border)] px-4 py-4 md:px-6 md:py-5">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)]">
                   {gardenName("task", appLanguage)}
@@ -648,7 +661,9 @@ export function FocusView({
             </AnimatePresence>
           </main>
 
-          <main className="hidden flex-1 py-8 md:grid md:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.74fr)] md:items-stretch md:gap-5 lg:grid-cols-[minmax(0,1.12fr)_minmax(24rem,0.72fr)] lg:gap-7">
+          <main
+            className={`hidden flex-1 py-8 md:grid md:items-stretch ${deepFocus ? "md:grid-cols-1" : "md:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.74fr)] md:gap-5 lg:grid-cols-[minmax(0,1.12fr)_minmax(24rem,0.72fr)] lg:gap-7"}`}
+          >
             <section
               className={`relative min-h-[38rem] overflow-hidden rounded-[2.8rem] border p-6 ring-1 ring-black/[0.03] backdrop-blur-2xl transition-all duration-700 lg:p-8 ${deepFocus ? "border-white/12 bg-[linear-gradient(145deg,#101d16_0%,#0a1510_54%,#050b08_100%)] shadow-[0_40px_130px_rgba(0,0,0,0.42)]" : "border-white/55 bg-[linear-gradient(145deg,var(--surface-strong)_0%,var(--surface-soft)_52%,var(--bg-app)_100%)] shadow-[0_32px_110px_rgba(18,31,23,0.16)]"}`}
             >
@@ -901,7 +916,7 @@ export function FocusView({
                 </div>
 
                 <div
-                  className={`mt-5 grid grid-cols-3 gap-3 transition-opacity duration-700 ${deepFocus ? "opacity-42" : "opacity-100"}`}
+                  className={`transition-all duration-700 ${deepFocus ? "pointer-events-none mt-0 h-0 overflow-hidden opacity-0" : "mt-5 grid grid-cols-3 gap-3 opacity-100"}`}
                 >
                   {[
                     {
@@ -932,7 +947,13 @@ export function FocusView({
               </div>
             </section>
 
-            <aside className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-3">
+            <aside
+              className={
+                deepFocus
+                  ? "hidden"
+                  : "grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-3"
+              }
+            >
               <section
                 className={`overflow-hidden rounded-[2rem] border p-4 shadow-[0_24px_80px_rgba(18,31,23,0.10)] backdrop-blur-2xl transition-all duration-700 ${deepFocus ? "border-[var(--sage)]/24 bg-[var(--sage)]/10 shadow-[0_28px_90px_rgba(0,0,0,0.24)]" : "border-[var(--border)] bg-[var(--surface-strong)]/84"}`}
               >
@@ -1187,6 +1208,16 @@ export function FocusView({
           </main>
         </div>
       </div>
+
+      <FocusNotesTray
+        language={appLanguage}
+        projectName={focusNote.title}
+        projectMemo={focusNoteMemo}
+        onProjectMemoChange={(value) =>
+          onUpdateFocusMemo(focusNote.id, value)
+        }
+        onQuickCapture={onQuickCapture}
+      />
 
       <AnimatePresence>
         {confirmExit && (

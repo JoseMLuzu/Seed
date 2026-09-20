@@ -18,6 +18,7 @@ import {
 } from "react";
 import { appLanguage, t, type AppLanguage } from "./app/i18n";
 import { MobileAppHeader } from "./app/components/MobileAppHeader";
+import { navigationLabel } from "./app/navigationLabels";
 import {
   dateInputToEndOfDay,
   formatShortDate,
@@ -1752,8 +1753,8 @@ function AccountWorkspace({
     );
   };
 
-  const addQuickNote = () => {
-    const content = quickNote.trim();
+  const captureQuickSeed = (value: string, keepCurrentView = false) => {
+    const content = value.trim();
     if (!content) return;
 
     const note: SeedNote = {
@@ -1780,7 +1781,6 @@ function AccountWorkspace({
       updatedAt: savedNote.updatedAt,
     };
     setNotes((current) => [savedNote, ...current]);
-    setQuickNote("");
     feel("plant");
     setCelebration(
       isFirstUserSeed
@@ -1788,8 +1788,15 @@ function AccountWorkspace({
         : "Semilla plantada",
     );
     window.setTimeout(() => setCelebration(null), 1500);
-    if (view !== "today") setView(isFirstUserSeed ? "3D" : "inbox");
+    if (!keepCurrentView && view !== "today")
+      setView(isFirstUserSeed ? "3D" : "inbox");
     return note.id;
+  };
+
+  const addQuickNote = () => {
+    const id = captureQuickSeed(quickNote);
+    if (id) setQuickNote("");
+    return id;
   };
 
   const undoQuickCapture = (id: string) => {
@@ -3571,6 +3578,7 @@ function AccountWorkspace({
   const openFocusMode = (id: string) => {
     setDailyFocusEntryId(null);
     setSelectedNoteId(null);
+    setShowMobileMenu(false);
     setShowGardenFullscreen(false);
     setFocusNoteId(id);
     setView("focus");
@@ -3583,6 +3591,7 @@ function AccountWorkspace({
     )
       return;
     setSelectedNoteId(null);
+    setShowMobileMenu(false);
     setShowGardenFullscreen(false);
     setDailyFocusEntryId(currentDailyEntry.id);
     setFocusNoteId(null);
@@ -4220,21 +4229,23 @@ function AccountWorkspace({
         }}
         onOpenSettings={() => setShowSettings(true)}
       />
-      <AnimatePresence>
-        {showMobileMenu && (
-          <motion.button
-            type="button"
-            aria-label="Cerrar menú"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setShowMobileMenu(false)}
-            className="mobile-modal-overlay fixed inset-0 z-40 bg-black/20 md:hidden md:backdrop-blur-md"
-          />
-        )}
-      </AnimatePresence>
-      {/* Sidebar Navigation */}
-      <aside
+      {view !== "focus" && (
+        <>
+          <AnimatePresence>
+            {showMobileMenu && (
+              <motion.button
+                type="button"
+                aria-label="Cerrar menú"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowMobileMenu(false)}
+                className="mobile-modal-overlay fixed inset-0 z-40 bg-black/20 md:hidden md:backdrop-blur-md"
+              />
+            )}
+          </AnimatePresence>
+          {/* Sidebar Navigation */}
+          <aside
         ref={mobileMenuRef}
         className={`app-sidebar mobile-modal-sheet fixed left-3 right-3 top-[calc(var(--safe-top-control)+3.25rem)] z-50 flex max-h-[calc(100vh-var(--safe-top-control)-env(safe-area-inset-bottom)-8.25rem)] shrink-0 origin-top flex-col overflow-y-auto rounded-[2rem] border border-white/60 bg-[var(--sidebar-bg)]/94 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] transition-all duration-300 app-scrollbar md:static md:z-20 md:h-screen md:max-h-none md:w-72 md:max-w-none md:origin-center md:translate-y-0 md:scale-100 md:rounded-none md:border-r md:border-[var(--border)] md:bg-[var(--sidebar-bg)] md:p-6 md:opacity-100 md:shadow-none md:backdrop-blur-2xl ${showMobileMenu ? "translate-y-0 scale-100 opacity-100" : "pointer-events-none -translate-y-3 scale-[0.97] opacity-0 md:pointer-events-auto"}`}
       >
@@ -4516,7 +4527,7 @@ function AccountWorkspace({
           {[
             {
               id: "today",
-              label: t("today"),
+              label: navigationLabel("today", appLanguage),
               detail:
                 appLanguage === "en"
                   ? "Dashboard · today’s priority"
@@ -4525,7 +4536,7 @@ function AccountWorkspace({
             },
             {
               id: "inbox",
-              label: t("seeds"),
+              label: navigationLabel("inbox", appLanguage),
               detail:
                 appLanguage === "en"
                   ? "Inbox · captures to organize"
@@ -4534,7 +4545,7 @@ function AccountWorkspace({
             },
             {
               id: "projects",
-              label: t("sprouts"),
+              label: navigationLabel("projects", appLanguage),
               detail:
                 appLanguage === "en"
                   ? "Projects · your next task"
@@ -4543,7 +4554,7 @@ function AccountWorkspace({
             },
             {
               id: "board",
-              label: gardenName("board", appLanguage),
+              label: navigationLabel("board", appLanguage),
               detail:
                 appLanguage === "en"
                   ? "Board · connect ideas"
@@ -4552,7 +4563,7 @@ function AccountWorkspace({
             },
             {
               id: "shed",
-              label: gardenName("shed", appLanguage),
+              label: navigationLabel("shed", appLanguage),
               detail:
                 appLanguage === "en"
                   ? "For later · resting"
@@ -4561,7 +4572,7 @@ function AccountWorkspace({
             },
             {
               id: "garden",
-              label: t("garden"),
+              label: navigationLabel("garden", appLanguage),
               detail:
                 appLanguage === "en"
                   ? "Visualize your progress"
@@ -4570,7 +4581,7 @@ function AccountWorkspace({
             },
             {
               id: "3D",
-              label: t("planet"),
+              label: navigationLabel("3D", appLanguage),
               detail:
                 appLanguage === "en"
                   ? "3D planet view"
@@ -4579,21 +4590,12 @@ function AccountWorkspace({
             },
             {
               id: "calendar",
-              label: t("path"),
+              label: navigationLabel("calendar", appLanguage),
               detail:
                 appLanguage === "en"
                   ? "Dates and activity"
                   : "Fechas e historial",
               icon: CalendarIcon,
-            },
-            {
-              id: "profile",
-              label: t("profile"),
-              detail:
-                appLanguage === "en"
-                  ? "Gardener’s profile"
-                  : "Perfil del jardinero",
-              icon: User,
             },
           ].map((item) => (
             <button
@@ -4650,53 +4652,81 @@ function AccountWorkspace({
             </span>
             {gardenName("plant", appLanguage)}
           </button>
-          <div className="flex items-center gap-4 px-2 py-4 border-t border-[var(--border)]">
-            <AccountAvatar
-              photo={account.photo}
-              initials={accountInitials}
-              className="h-10 w-10 rounded-full ring-2 ring-[var(--surface-strong)]"
-              textClassName="text-sm"
-            />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-black text-[var(--earth)] truncate">
-                {account.name || "Jardinero Digital"}
-              </p>
-              <p className="text-[10px] font-medium text-[var(--text-muted)] truncate">
-                {account.email || "Sin correo"}
-              </p>
-            </div>
+          <div className="flex items-center gap-1 border-t border-[var(--border)] px-1 py-3">
             <button
+              type="button"
+              onClick={() => {
+                setSelectedNoteId(null);
+                navigateToView("profile");
+                setShowMobileMenu(false);
+              }}
+              className={`group flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-2 py-2 text-left transition-colors ${
+                view === "profile"
+                  ? "bg-[var(--surface-strong)] ring-1 ring-[var(--border)]"
+                  : "hover:bg-[var(--surface-soft)]"
+              }`}
+              aria-label={
+                appLanguage === "en" ? "Open profile" : "Abrir perfil"
+              }
+            >
+              <AccountAvatar
+                photo={account.photo}
+                initials={accountInitials}
+                className="h-10 w-10 shrink-0 rounded-full ring-2 ring-[var(--surface-strong)]"
+                textClassName="text-sm"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-black text-[var(--earth)]">
+                  {account.name || "Jardinero Digital"}
+                </span>
+                <span className="block truncate text-[10px] font-medium text-[var(--text-muted)]">
+                  {account.email || "Sin correo"}
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 setShowSettings(true);
                 setShowMobileMenu(false);
               }}
-              className="p-2 text-[var(--text-muted)] hover:text-[var(--sage)] transition-colors"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--sage)]"
               title="Ajustes"
               aria-label="Abrir ajustes"
             >
               <Settings size={18} />
             </button>
             <button
+              type="button"
               onClick={exportGarden}
-              className="p-2 text-[var(--text-muted)] hover:text-[var(--sage)] transition-colors"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--sage)]"
               title="Exportar jardín"
+              aria-label="Exportar jardín"
             >
               <Download size={18} />
             </button>
           </div>
         </div>
-      </aside>
+          </aside>
+        </>
+      )}
 
       {/* Main Content Area */}
-      <main className="app-main flex-1 flex flex-col md:flex-row overflow-hidden relative">
+      <main
+        className={`app-main flex flex-1 flex-col overflow-hidden md:flex-row ${
+          view === "focus"
+            ? "fixed inset-0 z-[60] h-dvh w-screen bg-[radial-gradient(circle_at_50%_8%,color-mix(in_srgb,var(--sage)_12%,transparent),transparent_48%),var(--bg-app)] backdrop-blur-3xl"
+            : "relative"
+        }`}
+      >
         <section
-          className={`app-content ${selectedNoteId ? "app-content-has-detail" : ""} flex-1 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${view === "calendar" ? "px-3 pb-3 pt-[var(--safe-top-space)] sm:px-5 sm:pb-5 md:p-6" : "px-4 pb-[var(--safe-bottom-space)] pt-[var(--safe-top-space)] sm:px-6 md:p-10"} ${selectedNoteId ? "md:mr-[400px]" : ""}`}
+          className={`app-content ${selectedNoteId ? "app-content-has-detail" : ""} flex-1 overflow-y-auto app-scrollbar bg-transparent transition-all duration-300 ${view === "focus" ? "h-dvh w-full px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-[calc(env(safe-area-inset-top)+1rem)] sm:px-6" : view === "calendar" ? "px-3 pb-3 pt-[var(--safe-top-space)] sm:px-5 sm:pb-5 md:p-6" : "px-4 pb-[var(--safe-bottom-space)] pt-[var(--safe-top-space)] sm:px-6 md:p-10"} ${selectedNoteId ? "md:mr-[400px]" : ""}`}
         >
           <div
-            className={`app-content-inner ${view === "calendar" ? "mx-auto max-w-[100rem]" : "max-w-4xl mx-auto"}`}
+            className={`app-content-inner ${view === "focus" ? "relative mx-auto flex min-h-full w-full max-w-[108rem] items-center justify-center" : view === "calendar" ? "mx-auto max-w-[100rem]" : "mx-auto max-w-4xl"}`}
           >
             <header
-              className={`app-page-header mb-6 flex-col md:mb-10 md:flex-row justify-between items-start gap-4 md:gap-6 ${view === "today" || view === "board" ? "hidden" : "flex"}`}
+              className={`app-page-header mb-6 flex-col md:mb-10 md:flex-row justify-between items-start gap-4 md:gap-6 ${view === "today" || view === "board" || view === "focus" ? "hidden" : "flex"}`}
             >
               <div className="w-full">
                 <motion.div
@@ -4938,6 +4968,7 @@ function AccountWorkspace({
                           ),
                         );
                     }}
+                    onToggleProjectTask={toggleTask}
                     onLogMinutes={(minutes) => {
                       if (lease.isActive())
                         setNotes((current) =>
@@ -4948,6 +4979,8 @@ function AccountWorkspace({
                           ),
                         );
                     }}
+                    onUpdateProjectMemo={updateFocusMemo}
+                    onQuickCapture={(value) => captureQuickSeed(value, true)}
                     onExit={() => setView("today")}
                   />
                 ) : (
@@ -4964,6 +4997,7 @@ function AccountWorkspace({
                     onLogFocus={logFocusMinutes}
                     onPickFocus={setFocusNoteId}
                     onUpdateFocusMemo={updateFocusMemo}
+                    onQuickCapture={(value) => captureQuickSeed(value, true)}
                     onFocusFeedback={feel}
                     onExit={() => setView("today")}
                   />

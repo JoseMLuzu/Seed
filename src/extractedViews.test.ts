@@ -121,6 +121,7 @@ function renderFocus(overrides: Partial<ComponentProps<typeof FocusView>> = {}) 
     onLogFocus: noop,
     onPickFocus: noop,
     onUpdateFocusMemo: noop,
+    onQuickCapture: noop,
     onExit: noop,
     ...overrides,
   }));
@@ -468,6 +469,7 @@ test("extracted project focus retains its empty state without logging a session"
   const markup = renderFocus({ onLogFocus: (...args) => { logged.push(args); } });
   assert.match(markup, /Nada urgente ahora/);
   assert.match(markup, /Tu jardín no tiene ideas activas pendientes\./);
+  assert.match(markup, /Volver a Hoy/);
   assert.deepEqual(logged, []);
 });
 
