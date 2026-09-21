@@ -4,7 +4,6 @@
  */
 
 import {
-  Fragment,
   useState,
   useEffect,
   type CSSProperties,
@@ -1101,7 +1100,9 @@ export function TodayView({
 
       <div className="dashboard-modules">
         {dashboardOrder.filter(enabled).map((id) => (
-          <Fragment key={id}>{moduleCards[id]}</Fragment>
+          <div className="dashboard-module-frame" data-dashboard-module={id} key={id}>
+            {moduleCards[id]}
+          </div>
         ))}
       </div>
       {todayWidgets.length === 0 && (

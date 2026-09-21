@@ -119,7 +119,7 @@ import {
   readDashboardOrder,
   type DashboardModuleId as TodayWidgetId,
 } from "./dashboardModules";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, MotionConfig } from "motion/react";
 import {
   DndContext,
   PointerSensor,
@@ -4216,6 +4216,7 @@ function AccountWorkspace({
   }
 
   return (
+    <MotionConfig reducedMotion={quickEntryIsMobile ? "always" : "user"}>
     <div className="safe-app-shell app-shell flex h-screen flex-col overflow-hidden bg-transparent font-sans text-[var(--text-main)] md:flex-row">
       <MobileAppHeader
         hidden={view === "focus" || showGardenFullscreen || isAdding}
@@ -4247,6 +4248,7 @@ function AccountWorkspace({
           {/* Sidebar Navigation */}
           <aside
         ref={mobileMenuRef}
+        data-open={showMobileMenu}
         className={`app-sidebar mobile-modal-sheet fixed left-3 right-3 top-[calc(var(--safe-top-control)+3.25rem)] z-50 flex max-h-[calc(100vh-var(--safe-top-control)-env(safe-area-inset-bottom)-8.25rem)] shrink-0 origin-top flex-col overflow-y-auto rounded-[2rem] border border-white/60 bg-[var(--sidebar-bg)]/94 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] transition-all duration-300 app-scrollbar md:static md:z-20 md:h-screen md:max-h-none md:w-72 md:max-w-none md:origin-center md:translate-y-0 md:scale-100 md:rounded-none md:border-r md:border-[var(--border)] md:bg-[var(--sidebar-bg)] md:p-6 md:opacity-100 md:shadow-none md:backdrop-blur-2xl ${showMobileMenu ? "translate-y-0 scale-100 opacity-100" : "pointer-events-none -translate-y-3 scale-[0.97] opacity-0 md:pointer-events-auto"}`}
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--border)] md:hidden" />
@@ -4715,7 +4717,7 @@ function AccountWorkspace({
       <main
         className={`app-main flex flex-1 flex-col overflow-hidden md:flex-row ${
           view === "focus"
-            ? "fixed inset-0 z-[60] h-dvh w-screen bg-[radial-gradient(circle_at_50%_8%,color-mix(in_srgb,var(--sage)_12%,transparent),transparent_48%),var(--bg-app)] backdrop-blur-3xl"
+            ? "fixed inset-0 z-[60] h-dvh w-screen bg-[radial-gradient(circle_at_50%_8%,color-mix(in_srgb,var(--sage)_12%,transparent),transparent_48%),var(--bg-app)]"
             : "relative"
         }`}
       >
@@ -8351,5 +8353,6 @@ function AccountWorkspace({
           )}
       </main>
     </div>
+    </MotionConfig>
   );
 }

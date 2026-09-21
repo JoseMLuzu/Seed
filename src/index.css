@@ -2,6 +2,12 @@
 @import "./styles/dashboard.css";
 @import "./styles/composer.css";
 
+.dashboard-module-frame {
+  content-visibility: auto;
+  contain: layout paint style;
+  contain-intrinsic-size: auto 360px;
+}
+
 /* App surfaces share the theme tokens below. */
 
 @theme {
@@ -109,6 +115,31 @@
   will-change: transform, opacity;
 }
 @media (max-width: 767px) {
+  .safe-app-shell *,
+  .safe-app-shell *::before,
+  .safe-app-shell *::after {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  .seed-card,
+  .mobile-modal-overlay,
+  .mobile-modal-sheet,
+  .mobile-detail-panel {
+    will-change: auto;
+  }
+  .mobile-modal-overlay {
+    transform: none;
+    backface-visibility: visible;
+  }
+  .app-sidebar[data-open="false"] {
+    visibility: hidden;
+    content-visibility: hidden;
+  }
+  .app-sidebar[data-open="true"] {
+    visibility: visible;
+    content-visibility: visible;
+  }
+  .sway { animation: none; }
   .mobile-modal-overlay {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
