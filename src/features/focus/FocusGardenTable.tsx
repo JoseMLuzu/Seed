@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   CalendarDays,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Circle,
   Leaf,
   Lightbulb,
@@ -15,9 +17,11 @@ import {
 import type { AppLanguage } from "../../app/i18n";
 import type { Task } from "../../types";
 
-export function FocusGardenTable({
+export const FocusGardenTable = memo(function FocusGardenTable({
   language,
   compact = false,
+  mobileCollapsed = false,
+  onMobileToggle,
   sourceName,
   note,
   tasks,
@@ -27,6 +31,8 @@ export function FocusGardenTable({
 }: {
   language: AppLanguage;
   compact?: boolean;
+  mobileCollapsed?: boolean;
+  onMobileToggle?: () => void;
   sourceName: string;
   note: string;
   tasks: Task[];
@@ -39,11 +45,11 @@ export function FocusGardenTable({
   const [captureOpen, setCaptureOpen] = useState(false);
   const [capture, setCapture] = useState("");
   const [saved, setSaved] = useState(false);
-  const date = new Intl.DateTimeFormat(language === "en" ? "en-US" : "es-EC", {
+  const date = useMemo(() => new Intl.DateTimeFormat(language === "en" ? "en-US" : "es-EC", {
     weekday: "short",
     month: "short",
     day: "numeric",
-  }).format(new Date());
+  }).format(new Date()), [language]);
 
   const saveCapture = () => {
     const value = capture.trim();
@@ -57,7 +63,7 @@ export function FocusGardenTable({
     <motion.section
       layout={!reduceMotion}
       transition={{ layout: { duration: reduceMotion ? 0 : 0.52, ease: [0.22, 1, 0.36, 1] } }}
-      className={`focus-garden-table${compact ? " is-compact" : ""}`}
+      className={`focus-garden-table${compact ? " is-compact" : ""}${mobileCollapsed ? " is-mobile-collapsed" : ""}`}
       aria-label={copy("Mesa del jardinero", "Gardener's table")}
     >
       <div className="focus-garden-table-header">
@@ -67,6 +73,17 @@ export function FocusGardenTable({
           <strong>{sourceName}</strong>
         </div>
         <time><CalendarDays size={14} />{date}</time>
+        {!compact && onMobileToggle && (
+          <button
+            type="button"
+            className="focus-garden-mobile-toggle"
+            onClick={onMobileToggle}
+            aria-expanded={!mobileCollapsed}
+            aria-label={mobileCollapsed ? copy("Abrir mesa", "Open table") : copy("Cerrar mesa", "Close table")}
+          >
+            {mobileCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+          </button>
+        )}
       </div>
 
       <AnimatePresence initial={false} mode="popLayout">
@@ -172,4 +189,4 @@ export function FocusGardenTable({
       </AnimatePresence>
     </motion.section>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, CheckCircle2, Circle, Clock, Pause, Play, RotateCcw, Square, Sun } from 'lucide-react';
 import { gardenName } from './gardenVocabulary';
 import { GardenMotif } from './GardenMotif';
@@ -16,12 +16,13 @@ export function DailyFocusSession({ entry, notes, language, onToggleComplete, on
   onQuickCapture: (value: string) => void;
 }) {
   const copy = (es: string, en: string) => language === 'en' ? en : es;
-  const focus = getDailyFocusState(entry, notes);
+  const focus = useMemo(() => getDailyFocusState(entry, notes), [entry, notes]);
   const [duration, setDuration] = useState(10);
   const [remaining, setRemaining] = useState(600);
   const [active, setActive] = useState(false);
   const [paused, setPaused] = useState(false);
   const [savedMinutes, setSavedMinutes] = useState<number | null>(null);
+  const [mobileTableOpen, setMobileTableOpen] = useState(false);
   const session = useRef<{ startedAt: number; endsAt: number; minutes: number; pausedAt?: number } | null>(null);
   const logRef = useRef(onLogMinutes);
   logRef.current = onLogMinutes;
@@ -47,7 +48,7 @@ export function DailyFocusSession({ entry, notes, language, onToggleComplete, on
       setRemaining(seconds);
       if (!seconds) saveSession();
     };
-    const timer = window.setInterval(tick, 500);
+    const timer = window.setInterval(tick, 1000);
     document.addEventListener('visibilitychange', tick);
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', tick); };
   }, [active, saveSession]);
@@ -108,18 +109,24 @@ export function DailyFocusSession({ entry, notes, language, onToggleComplete, on
           ? 'finished'
           : 'ready';
   const notebookEntry = focus.linkedNote || entry;
-  const tableTasks: Task[] = focus.linkedNote
+  const tableTasks: Task[] = useMemo(() => focus.linkedNote
     ? [...focus.linkedNote.tasks].sort((a, b) => Number(a.completed) - Number(b.completed)).slice(0, 3)
     : focus.intention
       ? [{ id: focus.task?.id || 'daily-focus-task', text: focus.intention, completed: focus.complete }]
-      : [];
-  const toggleTableTask = (taskId: string) => {
+      : [], [focus.complete, focus.intention, focus.linkedNote, focus.task?.id]);
+  const toggleTableTask = useCallback((taskId: string) => {
     if (focus.linkedNote && onToggleProjectTask) {
       onToggleProjectTask(focus.linkedNote.id, taskId);
       return;
     }
     onToggleComplete();
-  };
+  }, [focus.linkedNote, onToggleComplete, onToggleProjectTask]);
+  const updateTableNote = useCallback((value: string) => {
+    if (notebookEntry) onUpdateProjectMemo(notebookEntry.id, value);
+  }, [notebookEntry, onUpdateProjectMemo]);
+  const toggleMobileTable = useCallback(() => {
+    setMobileTableOpen(open => !open);
+  }, []);
 
   return <section className="daily-focus-session" data-active={active} aria-labelledby="daily-focus-heading">
     <div className="daily-focus-topbar">
@@ -130,10 +137,12 @@ export function DailyFocusSession({ entry, notes, language, onToggleComplete, on
       <FocusGardenTable
         language={language}
         compact={sessionState === 'ready'}
+        mobileCollapsed={!mobileTableOpen}
+        onMobileToggle={toggleMobileTable}
         sourceName={focus.linkedNote?.title || copy('Mi labor de hoy', 'My task today')}
         note={notebookEntry?.focusNote || ''}
         tasks={tableTasks}
-        onNoteChange={value => { if (notebookEntry) onUpdateProjectMemo(notebookEntry.id, value); }}
+        onNoteChange={updateTableNote}
         onToggleTask={toggleTableTask}
         onQuickCapture={onQuickCapture}
       />
